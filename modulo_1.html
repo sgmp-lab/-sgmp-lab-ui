@@ -3122,6 +3122,44 @@ async function sgmpCallAI(stageCode, prompt){
     stage_code: stageCode,
     prompt: prompt
   };
+
+  try{
+    const response = await fetch(SGMP_API + '?action=call_ai', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'text/plain;charset=utf-8'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const text = await response.text();
+    const parsed = text ? JSON.parse(text) : {};
+
+    if(!response.ok){
+      throw new Error(parsed.error || parsed.message || ('HTTP ' + response.status));
+    }
+
+    if(parsed.fallback_manual === true){
+      throw new Error(parsed.error || parsed.message || 'El backend solicitó fallback manual.');
+    }
+
+    return { 
+      text: sgmpExtractAIText(parsed), 
+      raw: parsed 
+    };
+
+  }catch(error){
+    console.error('[sgmpCallAI] Error:', error);
+    throw new Error(error.message || 'No fue posible conectar con la API.');
+  }
+}
+  const payload = {
+    session_id: sgmpSessionId(),
+    user_id: sgmpUserId() || 'u_admin',
+    module_code: 'LMP',
+    stage_code: stageCode,
+    prompt: prompt
+  };
   let lastError = null;
   try{
     const response = await fetch(SGMP_API + '?action=call_ai', {
