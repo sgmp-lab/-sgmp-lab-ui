@@ -1352,7 +1352,7 @@
 <section class="hero synapse-hero">
   <div class="hero-agent">
     <div class="agent-avatar-shell">
-      <img class="agent-avatar" src="./assets/avatars/a_lmp.jpg" alt="SYNAPSE">
+      <img class="agent-avatar" src="./assets/avatars/a_lmp.jpg" alt="SYNAPSE" onerror="this.style.display='none';">
     </div>
     <div class="agent-meta">
       <div class="agent-name-row">
@@ -2721,33 +2721,38 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 <section class="section" id="asis">
 <div class="section-head">
 <div>
-<h2>AS IS</h2>
-<p>Revisa y valida la estructura AS IS propuesta por la IA. Puedes ajustarla manualmente si es necesario, pero no parte vacía.</p>
+<h2>AS IS · Constructor editable</h2>
+<p>Revisa y ajusta la secuencia AS IS interpretada por la IA. Puedes mover actividades hacia arriba o abajo, editar actores, tipos, tiempos, AVA, problemas, desperdicios y notas antes del análisis.</p>
 </div>
 <div class="step-pill">Paso 4</div>
 </div>
 <div class="cards">
-<article class="card two-third">
-<h3>Proceso estructurado editable</h3>
-<div class="list" id="asisActivities"></div>
-<div class="actions">
+<article class="card">
+<h3>Constructor visual de actividades</h3>
+<p>La IA propone una estructura inicial desde el Brief, entrevista o análisis. El usuario valida, corrige y ordena antes de continuar.</p>
+<div class="actions" style="border-top:none;padding-top:0;margin-top:12px">
 <div class="actions-left">
-<button class="btn" onclick="addAsisActivity()" type="button">Agregar actividad</button>
+<button class="btn" onclick="seedAsIsBuilderFromBrief(true)" type="button">Cargar desde Brief</button>
+<button class="btn" onclick="hydrateAsIsFromMaster()" type="button">Cargar desde análisis/master</button>
+<button class="btn-ghost" onclick="addAsisActivity()" type="button">Agregar actividad</button>
+<button class="btn-warn" onclick="renumberAsIsSequence(); renderAsIsActivities();" type="button">Recalcular secuencia</button>
 </div>
 </div>
+<div class="note">Recomendación: usa ↑ y ↓ para ordenar. Deja drag & drop para una versión posterior; esta opción es más estable en GitHub Pages, móvil y HTML vanilla.</div>
+<div class="list" id="asisActivities"></div>
+<div class="msg" id="asisBuilderMsg"></div>
 </article>
 <article class="card third">
-<h3>Guía rápida</h3>
-<div class="box">Para cada actividad registra:
-- nombre
-- actor / rol
-- tipo
-- tiempo estimado
-- clasificación AVA
-- problemas observados
-- desperdicios
-- quick win
-- restricción</div>
+<h3>Control rápido</h3>
+<div class="kpi-wrap" style="grid-template-columns:1fr;">
+<div class="kpi-card"><h4>Actividades</h4><div class="big" id="asisCountKpi">0</div><small>en secuencia</small></div>
+</div>
+<div class="box" id="asisValidationBox" style="margin-top:14px">Sin actividades cargadas.</div>
+</article>
+<article class="card two-third">
+<h3>JSON AS IS validado</h3>
+<p>Vista técnica del AS IS que alimentará análisis y contrato hacia SB.</p>
+<div class="pre" id="asisJsonPreview" style="min-height:240px"></div>
 </article>
 </div>
 <div class="actions">
@@ -3123,12 +3128,13 @@ async function sgmpCallAI(stageCode, prompt){
     prompt: prompt
   };
 
+  let postError = null;
+
+  // Apps Script + GitHub Pages: usar text/plain evita preflight CORS por application/json.
   try{
     const response = await fetch(SGMP_API + '?action=call_ai', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'text/plain;charset=utf-8'
-      },
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
     });
 
@@ -3143,48 +3149,31 @@ async function sgmpCallAI(stageCode, prompt){
       throw new Error(parsed.error || parsed.message || 'El backend solicitó fallback manual.');
     }
 
-    return { 
-      text: sgmpExtractAIText(parsed), 
-      raw: parsed 
-    };
-
-  }catch(error){
-    console.error('[sgmpCallAI] Error:', error);
-    throw new Error(error.message || 'No fue posible conectar con la API.');
-  }
-}
-  const payload = {
-    session_id: sgmpSessionId(),
-    user_id: sgmpUserId() || 'u_admin',
-    module_code: 'LMP',
-    stage_code: stageCode,
-    prompt: prompt
-  };
-  let lastError = null;
-  try{
-    const response = await fetch(SGMP_API + '?action=call_ai', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const text = await response.text();
-    const parsed = text ? JSON.parse(text) : {};
-    if(!response.ok) throw new Error(parsed.error || parsed.message || ('HTTP ' + response.status));
-    if(parsed.fallback_manual === true) throw new Error(parsed.error || parsed.message || 'El backend solicitó fallback manual.');
     return { text: sgmpExtractAIText(parsed), raw: parsed };
   }catch(error){
-    lastError = error;
+    postError = error;
+    console.warn('[sgmpCallAI] POST text/plain falló. Se intentará GET payload.', error);
   }
+
+  // Respaldo técnico: GET con payload codificado, útil cuando Apps Script/WebApp bloquea POST.
   try{
     const url = SGMP_API + '?action=call_ai&payload=' + encodeURIComponent(JSON.stringify(payload));
     const response = await fetch(url);
     const text = await response.text();
     const parsed = text ? JSON.parse(text) : {};
-    if(!response.ok) throw new Error(parsed.error || parsed.message || ('HTTP ' + response.status));
-    if(parsed.fallback_manual === true) throw new Error(parsed.error || parsed.message || 'El backend solicitó fallback manual.');
+
+    if(!response.ok){
+      throw new Error(parsed.error || parsed.message || ('HTTP ' + response.status));
+    }
+
+    if(parsed.fallback_manual === true){
+      throw new Error(parsed.error || parsed.message || 'El backend solicitó fallback manual.');
+    }
+
     return { text: sgmpExtractAIText(parsed), raw: parsed };
   }catch(error){
-    throw new Error((lastError && lastError.message ? lastError.message + ' | ' : '') + error.message);
+    console.error('[sgmpCallAI] Error final:', error);
+    throw new Error((postError && postError.message ? postError.message + ' | ' : '') + (error.message || 'No fue posible conectar con la API.'));
   }
 }
 
@@ -3346,8 +3335,12 @@ function showSection(id){
   if(id === 'preparacion' && typeof window.hydratePreparationFromState === 'function'){
     window.hydratePreparationFromState();
   }
-  if(id === 'asis' && typeof hydrateAsIsFromMaster === 'function'){
-    hydrateAsIsFromMaster();
+  if(id === 'asis'){
+    if((!state.asis.activities || !state.asis.activities.length) && typeof hydrateAsIsFromMaster === 'function'){
+      hydrateAsIsFromMaster();
+    }else if(typeof renderAsIsActivities === 'function'){
+      renderAsIsActivities();
+    }
   }
   if(id === 'analisis' && typeof renderAnalysisFromState === 'function'){
     renderAnalysisFromState();
@@ -4124,81 +4117,239 @@ function saveMasterAndContinue(){
 
 
 /* =========================
-   AS IS
+   AS IS · BUILDER EDITABLE
 ========================= */
-function asisActivityTemplate(data = {}){
+function asisActivityTemplate(data = {}, index = 0){
+  const safe = normalizeActivity(data || {});
+  const id = safe.id || data.id || ('A' + (index + 1));
   return `
-    <div class="activity-item">
+    <div class="activity-item asis-row" data-index="${index}">
       <div class="activity-top">
-        <strong>Actividad</strong>
-        <button class="btn-danger" type="button" onclick="this.closest('.activity-item').remove()">Eliminar</button>
+        <strong>${index + 1}. ${escapeHtml(safe.name || 'Actividad sin nombre')}</strong>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+          <button class="btn-ghost" type="button" onclick="moveAsisActivity(${index}, -1)">↑</button>
+          <button class="btn-ghost" type="button" onclick="moveAsisActivity(${index}, 1)">↓</button>
+          <button class="btn-danger" type="button" onclick="deleteAsisActivity(${index})">Eliminar</button>
+        </div>
       </div>
       <div class="field-grid">
-        <div class="field w-6"><label>Nombre</label><input class="a_name" value="${escapeHtml(data.name || '')}" /></div>
-        <div class="field w-3"><label>Actor</label><input class="a_actor" value="${escapeHtml(data.actor || '')}" /></div>
+        <div class="field w-3"><label>ID</label><input class="a_id" value="${escapeHtml(id)}" /></div>
+        <div class="field w-5"><label>Nombre de la actividad</label><input class="a_name" value="${escapeHtml(safe.name || '')}" oninput="syncAsisRow(${index})" /></div>
+        <div class="field w-4"><label>Actor / rol</label><input class="a_actor" value="${escapeHtml(safe.actor || '')}" oninput="syncAsisRow(${index})" /></div>
         <div class="field w-3"><label>Tipo</label>
-          <select class="a_type">
-            <option value="operation" ${data.type==='operation'?'selected':''}>Operación</option>
-            <option value="decision" ${data.type==='decision'?'selected':''}>Decisión</option>
-            <option value="control" ${data.type==='control'?'selected':''}>Control</option>
-            <option value="document" ${data.type==='document'?'selected':''}>Documento</option>
+          <select class="a_type" onchange="syncAsisRow(${index})">
+            <option value="operation" ${safe.type==='operation'?'selected':''}>Operación</option>
+            <option value="decision" ${safe.type==='decision'?'selected':''}>Decisión</option>
+            <option value="control" ${safe.type==='control'?'selected':''}>Control</option>
+            <option value="document" ${safe.type==='document'?'selected':''}>Documento</option>
+            <option value="end" ${safe.type==='end'?'selected':''}>Fin</option>
           </select>
         </div>
-        <div class="field w-3"><label>Tiempo estimado</label><input class="a_time" value="${escapeHtml(data.time || '')}" /></div>
+        <div class="field w-3"><label>Tiempo estimado</label><input class="a_time" value="${escapeHtml(safe.time || '')}" oninput="syncAsisRow(${index})" /></div>
         <div class="field w-3"><label>AVA</label>
-          <select class="a_ava">
-            <option value="VA" ${data.ava==='VA'?'selected':''}>VA</option>
-            <option value="NNVA" ${data.ava==='NNVA'?'selected':''}>NNVA</option>
-            <option value="NVA" ${data.ava==='NVA'?'selected':''}>NVA</option>
+          <select class="a_ava" onchange="syncAsisRow(${index})">
+            <option value="VA" ${safe.ava==='VA'?'selected':''}>VA</option>
+            <option value="NNVA" ${safe.ava==='NNVA'?'selected':''}>NNVA</option>
+            <option value="NVA" ${safe.ava==='NVA'?'selected':''}>NVA</option>
           </select>
         </div>
         <div class="field w-3"><label>Quick win</label>
-          <select class="a_qw">
-            <option value="No" ${data.quickWin==='No'?'selected':''}>No</option>
-            <option value="Sí" ${data.quickWin==='Sí'?'selected':''}>Sí</option>
+          <select class="a_qw" onchange="syncAsisRow(${index})">
+            <option value="No" ${safe.quickWin==='No'?'selected':''}>No</option>
+            <option value="Sí" ${safe.quickWin==='Sí'?'selected':''}>Sí</option>
           </select>
         </div>
         <div class="field w-3"><label>Restricción</label>
-          <select class="a_res">
-            <option value="No" ${data.constraint==='No'?'selected':''}>No</option>
-            <option value="Sí" ${data.constraint==='Sí'?'selected':''}>Sí</option>
+          <select class="a_res" onchange="syncAsisRow(${index})">
+            <option value="No" ${safe.constraint==='No'?'selected':''}>No</option>
+            <option value="Sí" ${safe.constraint==='Sí'?'selected':''}>Sí</option>
           </select>
         </div>
-        <div class="field w-6"><label>Problemas</label><textarea class="a_problems">${escapeHtml(data.problems || '')}</textarea></div>
-        <div class="field w-6"><label>Desperdicios</label><textarea class="a_wastes">${escapeHtml(data.wastes || '')}</textarea></div>
-        <div class="field w-12"><label>Nota</label><textarea class="a_note">${escapeHtml(data.note || '')}</textarea></div>
+        <div class="field w-6"><label>Documento / sistema</label><input class="a_document" value="${escapeHtml(safe.document || '')}" oninput="syncAsisRow(${index})" /></div>
+        <div class="field w-3"><label>Anterior</label><input class="a_previous" value="${escapeHtml((safe.previous || []).join(', '))}" oninput="syncAsisRow(${index})" /></div>
+        <div class="field w-3"><label>Siguiente</label><input class="a_next" value="${escapeHtml((safe.next || []).join(', '))}" oninput="syncAsisRow(${index})" /></div>
+        <div class="field w-6"><label>Problemas</label><textarea class="a_problems" oninput="syncAsisRow(${index})">${escapeHtml(safe.problems || '')}</textarea></div>
+        <div class="field w-6"><label>Desperdicios</label><textarea class="a_wastes" oninput="syncAsisRow(${index})">${escapeHtml(safe.wastes || '')}</textarea></div>
+        <div class="field w-12"><label>Nota / evidencia / regla operativa</label><textarea class="a_note" oninput="syncAsisRow(${index})">${escapeHtml(safe.note || '')}</textarea></div>
       </div>
     </div>
   `;
 }
 
-function renderAsIsActivities(){
-  qs('asisActivities').innerHTML = '';
-  state.asis.activities.forEach(a => qs('asisActivities').insertAdjacentHTML('beforeend', asisActivityTemplate(a)));
-}
-
-function addAsisActivity(data = {}){
-  qs('asisActivities').insertAdjacentHTML('beforeend', asisActivityTemplate(data));
+function readAsisRow(item){
+  if(!item) return null;
+  const get = (sel) => item.querySelector(sel)?.value?.trim() || '';
+  const activity = {
+    id: get('.a_id'),
+    name: get('.a_name'),
+    actor: get('.a_actor'),
+    type: get('.a_type') || 'operation',
+    document: get('.a_document'),
+    previous: splitItems(get('.a_previous')),
+    next: splitItems(get('.a_next')),
+    time: get('.a_time'),
+    ava: get('.a_ava') || 'NNVA',
+    problems: get('.a_problems'),
+    wastes: get('.a_wastes'),
+    quickWin: get('.a_qw') || 'No',
+    constraint: get('.a_res') || 'No',
+    note: get('.a_note')
+  };
+  return activity.name ? activity : null;
 }
 
 function collectAsisActivities(){
-  state.asis.activities = qsa('#asisActivities .activity-item').map(item => ({
-    name:item.querySelector('.a_name').value.trim(),
-    actor:item.querySelector('.a_actor').value.trim(),
-    type:item.querySelector('.a_type').value,
-    time:item.querySelector('.a_time').value.trim(),
-    ava:item.querySelector('.a_ava').value,
-    problems:item.querySelector('.a_problems').value.trim(),
-    wastes:item.querySelector('.a_wastes').value.trim(),
-    quickWin:item.querySelector('.a_qw').value,
-    constraint:item.querySelector('.a_res').value,
-    note:item.querySelector('.a_note').value.trim()
-  })).filter(x => x.name);
+  state.asis.activities = qsa('#asisActivities .activity-item').map(readAsisRow).filter(Boolean);
+  renumberAsIsSequence(false);
+  updateAsIsPreview();
   updateTopStatus();
+  return state.asis.activities;
+}
+
+function renderAsIsActivities(){
+  const container = qs('asisActivities');
+  if(!container) return;
+  container.innerHTML = '';
+  const activities = state.asis.activities || [];
+  if(!activities.length){
+    container.innerHTML = '<div class="note">No hay actividades cargadas. Usa “Cargar desde Brief”, “Cargar desde análisis/master” o “Agregar actividad”.</div>';
+    updateAsIsPreview();
+    return;
+  }
+  activities.forEach((a, index) => container.insertAdjacentHTML('beforeend', asisActivityTemplate(a, index)));
+  updateAsIsPreview();
+}
+
+function addAsisActivity(data = {}){
+  collectAsisActivities();
+  state.asis.activities.push(Object.assign({
+    id: 'A' + (state.asis.activities.length + 1),
+    name: '',
+    actor: '',
+    type: 'operation',
+    ava: 'NNVA',
+    quickWin: 'No',
+    constraint: 'No'
+  }, data || {}));
+  renumberAsIsSequence(false);
+  renderAsIsActivities();
+}
+
+function deleteAsisActivity(index){
+  collectAsisActivities();
+  state.asis.activities.splice(index, 1);
+  renumberAsIsSequence(false);
+  renderAsIsActivities();
+}
+
+function moveAsisActivity(index, direction){
+  collectAsisActivities();
+  const target = index + direction;
+  if(target < 0 || target >= state.asis.activities.length) return;
+  const tmp = state.asis.activities[index];
+  state.asis.activities[index] = state.asis.activities[target];
+  state.asis.activities[target] = tmp;
+  renumberAsIsSequence(false);
+  renderAsIsActivities();
+}
+
+function syncAsisRow(index){
+  const item = qs('asisActivities')?.querySelector(`.activity-item[data-index="${index}"]`);
+  const data = readAsisRow(item);
+  if(data){
+    state.asis.activities[index] = data;
+    updateAsIsPreview();
+    updateTopStatus();
+  }
+}
+
+function renumberAsIsSequence(showMessage = true){
+  const acts = state.asis.activities || [];
+  acts.forEach((a, idx) => {
+    a.id = 'A' + (idx + 1);
+    a.previous = idx === 0 ? [] : [acts[idx - 1].name || ('A' + idx)];
+    a.next = idx === acts.length - 1 ? [] : [acts[idx + 1].name || ('A' + (idx + 2))];
+    a.is_start = idx === 0;
+    a.is_end = idx === acts.length - 1;
+  });
+  if(showMessage) showMsg('asisBuilderMsg','ok','Secuencia AS IS recalculada.');
+}
+
+function updateAsIsPreview(){
+  const acts = state.asis.activities || [];
+  const issues = [];
+  acts.forEach((a, idx) => {
+    if(!a.name) issues.push(`Fila ${idx + 1}: falta nombre de actividad.`);
+    if(!a.actor) issues.push(`Fila ${idx + 1}: falta actor o rol.`);
+    if(!a.type) issues.push(`Fila ${idx + 1}: falta tipo.`);
+  });
+  if(qs('asisCountKpi')) qs('asisCountKpi').textContent = acts.length;
+  if(qs('asisValidationBox')) qs('asisValidationBox').textContent = issues.length ? issues.join('\n') : (acts.length ? 'AS IS listo para análisis.' : 'Sin actividades cargadas.');
+  if(qs('asisJsonPreview')) qs('asisJsonPreview').textContent = JSON.stringify({ activities: acts }, null, 2);
+}
+
+function extractAsIsFromBriefPayload(briefPayload){
+  const b = briefPayload?.brief || briefPayload || {};
+  const candidates = [
+    b.as_is?.activities,
+    b.asIs?.activities,
+    b.activities,
+    b.flowSummary,
+    b.flow_summary,
+    b.sipoc_preliminary?.process,
+    b.sipocPreliminary?.process,
+    b.sipoc?.process
+  ];
+  for(const candidate of candidates){
+    const arr = safeArray(candidate).map((item, idx) => {
+      if(typeof item === 'string'){
+        return normalizeActivity({ name: item, type: 'operation', actor: 'Responsable pendiente de validación', note: 'Derivado del Brief' });
+      }
+      return normalizeActivity(Object.assign({ actor: 'Responsable pendiente de validación' }, item || {}));
+    }).filter(a => a.name);
+    if(arr.length){
+      return arr.map((a, idx, all) => ({
+        ...a,
+        id: 'A' + (idx + 1),
+        previous: idx === 0 ? [] : [all[idx - 1].name],
+        next: idx === all.length - 1 ? [] : [all[idx + 1].name],
+        is_start: idx === 0,
+        is_end: idx === all.length - 1
+      }));
+    }
+  }
+  return [];
+}
+
+function seedAsIsBuilderFromBrief(force = false){
+  if(!force && state.asis.activities && state.asis.activities.length) return false;
+  const brief = state.briefReview?.raw || state.brief || state.master?.brief || null;
+  const acts = extractAsIsFromBriefPayload(brief);
+  if(!acts.length){
+    if(force) showMsg('asisBuilderMsg','warn','El Brief no contiene actividades claras para precargar el AS IS.');
+    updateAsIsPreview();
+    return false;
+  }
+  state.asis.activities = acts;
+  renumberAsIsSequence(false);
+  renderAsIsActivities();
+  if(force) showMsg('asisBuilderMsg','ok','AS IS cargado desde el Brief. Revisa actores y secuencia antes de continuar.');
+  updateTopStatus();
+  return true;
 }
 
 function saveAsIsAndContinue(){
-  collectAsisActivities();
+  const acts = collectAsisActivities();
+  if(!acts.length){
+    showMsg('asisBuilderMsg','warn','Agrega o carga al menos una actividad AS IS antes de continuar.');
+    return;
+  }
+  const missing = acts.filter(a => !a.name || !a.actor);
+  if(missing.length){
+    showMsg('asisBuilderMsg','warn','Hay actividades sin nombre o sin actor. Corrige antes de continuar.');
+    return;
+  }
+  showMsg('asisBuilderMsg','ok','AS IS guardado correctamente.');
   goToNext('asis');
 }
 
@@ -6042,6 +6193,7 @@ function processBriefResponse(){
     state.briefReview = { raw: brief, approved:false };
     renderBriefDraft();
     renderBriefValidation();
+    seedAsIsBuilderFromBrief(false);
     refreshCargaFlowState();
     showMsg('briefIaMsg','ok','Brief procesado correctamente. Revisa el contenido y apruébalo para habilitar el análisis.');
   }catch(error){
