@@ -3486,6 +3486,24 @@ function cryptoRandom(){
   return 'id-' + Math.random().toString(36).slice(2, 11);
 }
 
+function showLoader(message, detail){
+  const overlay = qs('sgmpLoaderOverlay');
+  if(!overlay) return;
+  const msg = qs('sgmpLoaderMessage');
+  const det = qs('sgmpLoaderDetail');
+  if(msg) msg.textContent = message || 'Procesando con IA...';
+  if(det) det.textContent = detail || 'Esto puede tomar unos segundos. No cierres esta ventana.';
+  overlay.style.display = 'flex';
+  overlay.setAttribute('aria-busy', 'true');
+}
+
+function hideLoader(){
+  const overlay = qs('sgmpLoaderOverlay');
+  if(!overlay) return;
+  overlay.style.display = 'none';
+  overlay.setAttribute('aria-busy', 'false');
+}
+
 /* =========================
    NAVEGACIÓN
 ========================= */
@@ -6132,6 +6150,8 @@ async function generateBriefPromptFromMaster(){
   try{
     if(btn) btn.disabled = true;
 
+    showLoader('Generando Brief con IA...', 'Etapa A · Conectando con el backend SGMP y procesando la respuesta.');
+
     if(typeof sgmpLoadRuntimeConfig === 'function'){
       await sgmpLoadRuntimeConfig();
     }
@@ -6180,6 +6200,7 @@ async function generateBriefPromptFromMaster(){
       'No se ejecutó el flujo automático del Brief. Detalle: ' + error.message
     );
   }finally{
+    hideLoader();
     if(btn) btn.disabled = false;
   }
 }
@@ -6299,13 +6320,16 @@ ${hardening}`;
   try{ state.results = state.results || {}; state.results.sbNormalizationPrompt = buildSbNormalizationPrompt(); }catch(e){}
   if(sgmpGlobalApiEnabled() && sgmpStageUseApi('lmp_analysis')){
     showMsg('cargaMsg','ok','Ejecutando IA para análisis...');
+    showLoader('Generando análisis con IA...', 'Etapa B · Construyendo AS IS, AVA, desperdicios, quick wins y restricciones.');
     try{
       const result = await sgmpCallAI('lmp_analysis', prompt);
       if(qs('iaResponseEditor')) qs('iaResponseEditor').value = sgmpAIResultText(result);
       processIAResponse();
       refreshCargaFlowState();
+      hideLoader();
       return;
     }catch(error){
+      hideLoader();
       if(qs('analysisPromptEditor')) qs('analysisPromptEditor').value = prompt;
       refreshCargaFlowState();
       showMsg('cargaMsg','warn','Modo manual activado. No fue posible ejecutar la IA automáticamente. Detalle: ' + error.message);
@@ -6446,13 +6470,16 @@ async function generateSbContractBuilderPrompt(){
   const prompt = buildSbContractBuilderPrompt();
   if(sgmpGlobalApiEnabled() && sgmpStageUseApi('lmp_sb_contract')){
     showMsg('sbContractMsg','ok','Ejecutando IA para contrato SB...');
+    showLoader('Generando contrato SB con IA...', 'Etapa C · Normalizando el contrato LMP → SIPOC Builder.');
     try{
       const result = await sgmpCallAI('lmp_sb_contract', prompt);
       if(qs('sbContractResponseEditor')) qs('sbContractResponseEditor').value = sgmpAIResultText(result);
       validateSbContractBuilderResponse();
       refreshCargaFlowState();
+      hideLoader();
       return;
     }catch(error){
+      hideLoader();
       if(qs('sbContractPromptEditor')) qs('sbContractPromptEditor').value = prompt;
       refreshCargaFlowState();
       showMsg('sbContractMsg','warn','Modo manual activado. No fue posible ejecutar la IA automáticamente. Detalle: ' + error.message);
@@ -7831,5 +7858,16 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
   document.readyState==="loading"?document.addEventListener("DOMContentLoaded",load):load();
 })();
 </script>
+
+<div id="sgmpLoaderOverlay" aria-live="polite" aria-busy="false" style="display:none;position:fixed;inset:0;background:rgba(7,28,54,.58);z-index:99999;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);">
+  <div style="width:min(420px, calc(100vw - 32px));background:linear-gradient(135deg,#071C36,#0B2E59);color:#FFFFFF;border:1px solid rgba(0,194,255,.28);border-radius:22px;padding:24px 26px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.32),0 0 32px rgba(0,194,255,.16);">
+    <div style="width:54px;height:54px;margin:0 auto 14px;border-radius:50%;border:4px solid rgba(255,255,255,.20);border-top-color:#00C2FF;animation:sgmpSpin .9s linear infinite;"></div>
+    <div id="sgmpLoaderMessage" style="font-size:1.05rem;font-weight:900;letter-spacing:.01em;margin-bottom:8px;">Procesando con IA...</div>
+    <div id="sgmpLoaderDetail" style="font-size:.9rem;line-height:1.45;color:rgba(255,255,255,.78);">Esto puede tomar unos segundos. No cierres esta ventana.</div>
+  </div>
+</div>
+<style>
+@keyframes sgmpSpin{to{transform:rotate(360deg)}}
+</style>
 </body>
 </html>
