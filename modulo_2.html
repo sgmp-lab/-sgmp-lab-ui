@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>modulo_2 · SIPOC Builder v3 · Fase 0</title>
+<title>modulo_2 · SIPOC Builder v3 · Fase 4</title>
 <style>
 :root{
   --bg:#EEF2F8;--panel:#fff;--line:#DDE6F4;--text:#0A1F44;--muted:#5B6F8A;
@@ -1008,8 +1008,8 @@ body{font-size:14px !important}
 
 
 /* ==========================================================================
-   SGMP v3 · FASE 0 · Loader, timer y control de ejecución
-   No altera lógica base de SB v2.
+   SGMP v3 · FASE 0-4 · Loader, timer, control, contrato único, handoff endurecido y execution mode
+   No altera lógica base de SB v2. Fase 2: sipoc_input como contrato oficial.
    ========================================================================== */
 #sgmp_v3_loader{
   position:fixed; inset:0; z-index:99999; display:none;
@@ -1049,6 +1049,21 @@ body.sgmp-v3-processing select{
   pointer-events:none; opacity:.72;
 }
 
+
+
+/* SGMP v3 · FASE 4 · Execution mode Admin */
+.sgmp-exec-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  border-radius:999px;padding:6px 10px;margin-left:8px;
+  font-size:11px;font-weight:900;letter-spacing:.02em;
+  background:#F0F9FF;border:1px solid #BAE6FD;color:#075985;
+}
+.sgmp-exec-chip.manual{background:#F8FAFC;border-color:#CBD5E1;color:#475569;}
+.sgmp-exec-chip.hybrid{background:#FFFBEB;border-color:#FDE68A;color:#92400E;}
+.sgmp-exec-chip.api{background:#F0FDF4;border-color:#BBF7D0;color:#166534;}
+.sgmp-api-btn{background:#0284C7!important;color:#fff!important;border-color:#0284C7!important;}
+.sgmp-api-btn[disabled]{display:none!important;}
+.sgmp-mode-note{font-size:11px;color:#5B6F8A;margin-top:6px;}
 </style>
   <script>
 // ── SGMP Session Guard ─────────────────────────────────────
@@ -1256,7 +1271,7 @@ body.sgmp-v3-processing select{
       <div>
         <label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">Prompt F1</label>
         <div id="pf1_box" class="codebox" style="margin-top:5px"></div>
-        <div class="btn-row"><button id="btn_copy_f1">Copiar Prompt F1</button></div>
+        <div class="btn-row"><button id="btn_copy_f1">Copiar Prompt F1</button><button id="btn_api_f1" class="sgmp-api-btn" type="button">Ejecutar con API</button><span id="mode_f1" class="sgmp-exec-chip manual">MANUAL</span></div><div id="note_f1" class="sgmp-mode-note">Modo de ejecución pendiente de Admin.</div>
       </div>
       <div>
         <label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">XML resultado F1</label>
@@ -1278,7 +1293,7 @@ body.sgmp-v3-processing select{
       <div>
         <label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">Prompt F2</label>
         <div id="pf2_box" class="codebox" style="margin-top:5px"></div>
-        <div class="btn-row"><button id="btn_copy_f2">Copiar Prompt F2</button></div>
+        <div class="btn-row"><button id="btn_copy_f2">Copiar Prompt F2</button><button id="btn_api_f2" class="sgmp-api-btn" type="button">Ejecutar con API</button><span id="mode_f2" class="sgmp-exec-chip manual">MANUAL</span></div><div id="note_f2" class="sgmp-mode-note">Modo de ejecución pendiente de Admin.</div>
       </div>
       <div>
         <label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">XML resultado F2</label>
@@ -1300,7 +1315,7 @@ body.sgmp-v3-processing select{
       <div>
         <label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">Prompt F3</label>
         <div id="pf3_box" class="codebox" style="margin-top:5px"></div>
-        <div class="btn-row"><button id="btn_copy_f3">Copiar Prompt F3</button></div>
+        <div class="btn-row"><button id="btn_copy_f3">Copiar Prompt F3</button><button id="btn_api_f3" class="sgmp-api-btn" type="button">Ejecutar con API</button><span id="mode_f3" class="sgmp-exec-chip manual">MANUAL</span></div><div id="note_f3" class="sgmp-mode-note">Modo de ejecución pendiente de Admin.</div>
       </div>
       <div>
         <label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">XML resultado F3</label>
@@ -1322,7 +1337,7 @@ body.sgmp-v3-processing select{
       <div>
         <label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">Prompt de optimizaci&oacute;n</label>
         <div id="pf4_box" class="codebox" style="margin-top:5px"></div>
-        <div class="btn-row"><button id="btn_copy_f4">Copiar prompt de optimizaci&oacute;n</button></div>
+        <div class="btn-row"><button id="btn_copy_f4">Copiar prompt de optimizaci&oacute;n</button><button id="btn_api_f4" class="sgmp-api-btn" type="button">Ejecutar con API</button><span id="mode_f4" class="sgmp-exec-chip manual">MANUAL</span></div><div id="note_f4" class="sgmp-mode-note">Modo de ejecución pendiente de Admin.</div>
       </div>
       <div>
         <label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">XML optimizado</label>
@@ -1509,10 +1524,12 @@ function sgmpGetExecutionMode(moduleCode, stageCode, onReady) {
         mode = String(res.data.execution_mode || res.data.mode || 'MANUAL').toUpperCase();
       }
       SGMP_EXECUTION_MODES[key] = mode;
+      if (typeof sgmpApplyExecutionModeUI === 'function') sgmpApplyExecutionModeUI(stageCode, mode);
       if (typeof onReady === 'function') onReady(mode);
     })
     .catch(function() {
       SGMP_EXECUTION_MODES[key] = 'MANUAL';
+      if (typeof sgmpApplyExecutionModeUI === 'function') sgmpApplyExecutionModeUI(stageCode, 'MANUAL');
       if (typeof onReady === 'function') onReady('MANUAL');
     });
 }
@@ -1548,6 +1565,9 @@ const S = {
   manualLocked: false,
   editActIndex: null,
   loadTrace: { source:'', loadedAt:'', processName:'', activityCount:0, warningsCount:0, blockingCount:0 },
+  contractCode: 'LMP_TO_SB',
+  inputContract: null,
+  inputSourceBlock: '',
   cats: { suppliers:[], inputs:[], outputs:[], customers:[], actors:[], documents:[] },
   acts: [],
   cfg: {
@@ -2021,13 +2041,14 @@ function buildSP() {
 }
 
 function exportJSON() {
-  dlText(JSON.stringify({ sipoc_input: buildSP() }, null, 2), 'sipoc_export.json');
+  const contract = getCurrentSipocContract() || { sipoc_input: buildSP() };
+  dlText(JSON.stringify(contract, null, 2), 'sipoc_export.json');
 }
 
 function goToTemplate() {
   if (!$('g_name').value.trim()) { gMsg('warn', 'Completa el nombre del proceso.'); return; }
   if (!S.acts.length) { gMsg('warn', 'Agrega al menos una actividad.'); return; }
-  S.sp = buildSP();
+  setSipocInput(buildSP(), 'guided_capture');
   genTemplate();
 }
 
@@ -2133,8 +2154,44 @@ function looksLikeSerializedJson(text) {
 }
 
 function normalizeIncomingPayload(parsed) {
+  const warnings = [];
+  const errors = [];
   const sourceBlock = parsed?.sipoc_input ? 'sipoc_input' : (parsed?.structured_process ? 'structured_process' : 'root');
-  const sp = parsed?.sipoc_input || parsed?.structured_process || parsed || {};
+
+  if (sourceBlock === 'structured_process') {
+    warnings.push('Entrada legacy structured_process detectada. Se normalizó una sola vez a sipoc_input.');
+  }
+  if (sourceBlock === 'root') {
+    warnings.push('Entrada sin bloque sipoc_input. Se interpretó como raíz SIPOC y se normalizó a sipoc_input.');
+  }
+
+  const rawSp = parsed?.sipoc_input || parsed?.structured_process || parsed || {};
+  const normalized = normalizeSipocInput(rawSp, parsed);
+
+  return {
+    ok: errors.length === 0,
+    contract_code: 'LMP_TO_SB',
+    officialBlock: 'sipoc_input',
+    sourceBlock,
+    normalized,
+    contract: { sipoc_input: normalized },
+    warnings,
+    errors
+  };
+}
+
+function normalizeSipocInput(sp, root) {
+  sp = sp || {};
+  root = root || {};
+  const activities = normActs(sp.activities || []);
+
+  if (activities.length) {
+    const hasStart = activities.some(a => a.is_start);
+    const hasEnd = activities.some(a => a.is_end);
+    if (!hasStart) activities[0].is_start = true;
+    if (!hasEnd) activities[activities.length - 1].is_end = true;
+  }
+
   const normalized = {
     process_code: normalizeText(sp.process_code || sp.processCode || ''),
     process_name: normalizeText(sp.process_name || sp.processName || ''),
@@ -2148,12 +2205,43 @@ function normalizeIncomingPayload(parsed) {
     customers: normalizeCatalogItems(sp.catalogs?.customers || sp.customers || []),
     actors: normalizeCatalogItems(sp.catalogs?.actors || sp.actors || []),
     documents: normalizeCatalogItems(sp.catalogs?.documents || sp.documents || []),
-    layout_hints: sp.layout_hints || sp.layoutHints || parsed?.layout_hints || parsed?.layoutHints || {},
-    activities: normActs(sp.activities || [])
+    layout_hints: sp.layout_hints || sp.layoutHints || root?.layout_hints || root?.layoutHints || {},
+    activities
   };
-  return { ok:true, sourceBlock, normalized, warnings:[], errors:[] };
+
+  // Enriquecimiento mínimo desde actividades, sin inventar negocio.
+  if (!normalized.actors.length) {
+    normalized.actors = normalizeCatalogItems(activities.map(a => a.actor || a.lane));
+  }
+  if (!normalized.documents.length) {
+    normalized.documents = normalizeCatalogItems(activities.map(a => a.document));
+  }
+  if (!normalized.inputs.length) {
+    normalized.inputs = normalizeCatalogItems(activities.flatMap(a => a.ext_inputs || []));
+  }
+  if (!normalized.outputs.length) {
+    normalized.outputs = normalizeCatalogItems(activities.flatMap(a => a.ext_outputs || []));
+  }
+  if (!normalized.suppliers.length) {
+    normalized.suppliers = normalizeCatalogItems(activities.flatMap(a => a.ext_suppliers || []));
+  }
+  if (!normalized.customers.length) {
+    normalized.customers = normalizeCatalogItems(activities.flatMap(a => a.ext_customers || []));
+  }
+
+  return normalized;
 }
 
+function setSipocInput(sp, sourceBlock) {
+  S.sp = sp;
+  S.inputContract = { sipoc_input: sp };
+  S.inputSourceBlock = sourceBlock || 'sipoc_input';
+  return S.inputContract;
+}
+
+function getCurrentSipocContract() {
+  return S.inputContract || (S.sp ? { sipoc_input: S.sp } : null);
+}
 
 function sourceLabel(sourceKey) {
   const map = {
@@ -2248,7 +2336,7 @@ function renderLoadDiagnostics(payload) {
     <div class="diag-head">
       <div>
         <div class="diag-title">Diagnóstico de carga</div>
-        <div class="diag-meta">Fuente: ${ex(sourceText)} · Cargado: ${ex(loadedAt)}</div>
+        <div class="diag-meta">Fuente: ${ex(sourceText)} · Contrato: ${ex(payload.contract_code || S.contractCode || 'LMP_TO_SB')} · Cargado: ${ex(loadedAt)}</div>
       </div>
       <div class="diag-sem ${sev.cls}">${sev.text}</div>
     </div>
@@ -2281,13 +2369,18 @@ function processIncomingJson(raw, source = 'unknown') {
     const payload = normalizeIncomingPayload(parsed);
     const sp = payload.normalized || payload.sp || payload;
 
+    if (!payload.ok) {
+      gMsg('err', 'El JSON cargado no pudo normalizarse al contrato LMP_TO_SB.');
+      return;
+    }
+
     if (!sp || typeof sp !== 'object') {
       gMsg('err', 'El JSON cargado no contiene una estructura SIPOC válida.');
       return;
     }
 
     const blocking = [];
-    const warnings = [];
+    const warnings = [...(payload.warnings || [])];
 
     if (!sp.process_name) blocking.push('Falta process_name.');
     if (!sp.purpose) blocking.push('Falta purpose.');
@@ -2301,7 +2394,7 @@ function processIncomingJson(raw, source = 'unknown') {
     blocking.push(...(contractCheck.blockingErrors || []), ...(semanticCheck.blockingErrors || []));
     warnings.push(...(contractCheck.warnings || []), ...(semanticCheck.warnings || []));
 
-    S.sp = sp;
+    setSipocInput(sp, payload.sourceBlock);
 
     S.cats.suppliers = (sp.suppliers || []).map(x => ({ name: x }));
     S.cats.inputs = (sp.inputs || []).map(x => ({ name: x }));
@@ -2328,7 +2421,9 @@ function processIncomingJson(raw, source = 'unknown') {
       processName: sp.process_name || '',
       activityCount: Array.isArray(sp.activities) ? sp.activities.length : 0,
       warningsCount: warnings.length,
-      blockingCount: blocking.length
+      blockingCount: blocking.length,
+      sourceBlock: payload.sourceBlock || 'sipoc_input',
+      contractCode: payload.contract_code || 'LMP_TO_SB'
     };
 
     if (typeof renderLoadDiagnostics === 'function') {
@@ -2336,7 +2431,8 @@ function processIncomingJson(raw, source = 'unknown') {
         normalized: sp,
         warnings,
         blockingErrors: blocking,
-        sourceBlock: payload.sourceBlock || source
+        sourceBlock: payload.sourceBlock || source,
+        contract_code: payload.contract_code || 'LMP_TO_SB'
       });
     }
 
@@ -2858,6 +2954,112 @@ function buildF2Prompt() { $('pf2_box').textContent = getPrompt('f2', S.xmlF1, S
 function buildF3Prompt() { $('pf3_box').textContent = getPrompt('f3', S.xmlF2, S.sp, S.idRef); }
 function buildF4Prompt() { $('pf4_box').textContent = getPrompt('f4', S.xmlF3, S.sp, S.idRef); }
 
+
+// ═══════════════════════════════════════════════════════════════
+// SGMP v3 · FASE 4 · EXECUTION MODE + API OPCIONAL
+// ═══════════════════════════════════════════════════════════════
+const SGMP_STAGE_MAP = {
+  sb_f1: { short:'f1', promptId:'pf1_box', outputId:'xml_f1', validatorId:'vld_f1', label:'F1 · Verificación' },
+  sb_f2: { short:'f2', promptId:'pf2_box', outputId:'xml_f2', validatorId:'vld_f2', label:'F2 · Flujo interno' },
+  sb_f3: { short:'f3', promptId:'pf3_box', outputId:'xml_f3', validatorId:'vld_f3', label:'F3 · Entradas y salidas' },
+  sb_f4: { short:'f4', promptId:'pf4_box', outputId:'xml_f4', validatorId:'vld_f4', label:'F4 · Optimización' }
+};
+
+function sgmpNormalizeMode(mode) {
+  mode = String(mode || 'MANUAL').trim().toUpperCase();
+  return ['MANUAL','HYBRID','API'].includes(mode) ? mode : 'MANUAL';
+}
+
+function sgmpStageUseApi(stageCode) {
+  const mode = sgmpNormalizeMode(sgmpExecutionMode(stageCode));
+  return mode === 'HYBRID' || mode === 'API';
+}
+
+function sgmpApplyExecutionModeUI(stageCode, mode) {
+  mode = sgmpNormalizeMode(mode);
+  const meta = SGMP_STAGE_MAP[stageCode];
+  if (!meta) return;
+  const chip = $('mode_' + meta.short);
+  const note = $('note_' + meta.short);
+  const btn = $('btn_api_' + meta.short);
+  if (chip) {
+    chip.className = 'sgmp-exec-chip ' + mode.toLowerCase();
+    chip.textContent = mode;
+  }
+  if (btn) {
+    btn.disabled = (mode === 'MANUAL');
+    btn.title = mode === 'MANUAL' ? 'Modo MANUAL definido desde Admin. Usa copiar prompt y pegar respuesta.' : 'Ejecutar con API según Admin.';
+  }
+  if (note) {
+    if (mode === 'MANUAL') note.textContent = 'Modo MANUAL: copia el prompt, ejecútalo fuera del módulo, pega la respuesta y valida.';
+    if (mode === 'HYBRID') note.textContent = 'Modo HYBRID: puedes ejecutar API o continuar con modo manual como respaldo.';
+    if (mode === 'API') note.textContent = 'Modo API: ejecuta con backend GPT; si falla, conserva fallback manual.';
+  }
+}
+
+function sbAIResultText(result) {
+  if (!result) return '';
+  if (typeof result === 'string') return result;
+  return result.text || result.output || result.content || result.response || result.data?.text || '';
+}
+
+async function sbCallAI(stageCode, prompt) {
+  const res = await fetch(SGMP_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({
+      action: 'call_ai',
+      module_code: 'SB',
+      stage_code: stageCode,
+      prompt: prompt
+    })
+  });
+  const json = await res.json();
+  if (!json || json.ok === false) {
+    throw new Error((json && (json.error || json.message)) || 'Respuesta inválida del backend');
+  }
+  return json;
+}
+
+async function runStageWithAPI(stageCode) {
+  const meta = SGMP_STAGE_MAP[stageCode];
+  if (!meta) return;
+  const mode = sgmpNormalizeMode(sgmpExecutionMode(stageCode));
+  if (mode === 'MANUAL') {
+    gMsg('warn', 'Esta etapa está en modo MANUAL desde Admin. Usa copiar prompt y pegar respuesta.');
+    return;
+  }
+  const promptEl = $(meta.promptId);
+  const outEl = $(meta.outputId);
+  if (!promptEl || !outEl) return;
+  const prompt = String(promptEl.textContent || promptEl.value || '').trim();
+  if (!prompt) {
+    gMsg('warn', 'Primero genera el prompt de la etapa.');
+    return;
+  }
+  await sgmpV3Execute(stageCode, async function(){
+    sgmpLogEvent('SB_API_STAGE_START', { stage_code: stageCode, mode: mode });
+    const result = await sbCallAI(stageCode, prompt);
+    const text = sbAIResultText(result).trim();
+    if (!text) throw new Error('La IA no devolvió contenido utilizable.');
+    outEl.value = text;
+    const valid = validateXML(meta.outputId, meta.validatorId);
+    if (!valid) {
+      sgmpLogEvent('SB_API_STAGE_INVALID_XML', { stage_code: stageCode, mode: mode });
+      throw new Error('La respuesta de IA no pasó validación XML. Usa modo manual.');
+    }
+    sgmpLogEvent('SB_API_STAGE_OK', { stage_code: stageCode, mode: mode });
+    gMsg('ok', meta.label + ' ejecutada con API y validada correctamente.');
+  }, 'Conectando con la IA... ' + meta.label);
+}
+
+function sgmpWireApiButtons() {
+  [['btn_api_f1','sb_f1'],['btn_api_f2','sb_f2'],['btn_api_f3','sb_f3'],['btn_api_f4','sb_f4']].forEach(function(pair){
+    const btn = $(pair[0]);
+    if (btn) btn.addEventListener('click', function(){ runStageWithAPI(pair[1]); });
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════
 // ADMIN GOVERNANCE
 // ═══════════════════════════════════════════════════════════════
@@ -2876,9 +3078,11 @@ document.addEventListener('DOMContentLoaded', () => {
   sgmpGetContract('LMP_TO_SB', function(contract) { sgmpLogEvent('SB_CONTRACT_READY', { contract_code: 'LMP_TO_SB', loaded: !!contract }); });
   ['sb_f1','sb_f2','sb_f3','sb_f4'].forEach(function(stageCode){
     sgmpGetExecutionMode('SB', stageCode, function(mode){
+      sgmpApplyExecutionModeUI(stageCode, mode);
       sgmpLogEvent('SB_EXECUTION_MODE_READY', { stage_code: stageCode, mode: mode });
     });
   });
+  sgmpWireApiButtons();
 
   // Configuración local eliminada. SB consume gobierno desde SGMP Admin.
 
@@ -2983,7 +3187,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <script>
 
 // ═══════════════════════════════════════════════════════════════
-// SGMP v3 · FASE 0 · Capa no destructiva sobre SB v2
+// SGMP v3 · FASE 0-2 · Capa no destructiva + contrato único sipoc_input
 // ═══════════════════════════════════════════════════════════════
 (function(){
   if (window.SGMP_SB3_FASE0_LOADED) return;
@@ -2992,7 +3196,8 @@ document.addEventListener('DOMContentLoaded', () => {
   window.SGMP_SB3 = {
     moduleCode: 'SB',
     moduleLabel: 'modulo_2',
-    inputKeys: ['SGMP_SB_INPUT', 'SGMP_LMP_TO_SB', 'sgmp_sb_payload'],
+    inputKeys: ['SGMP_SB_INPUT', 'SGMP_LMP_TO_SB', 'SGMP_LMP_TO_SB_CONTRACT', 'sgmp_sb_payload'],
+    handoffQueryParam: 'handoff_key',
     isProcessing: false,
     timers: { globalStart:null, globalInterval:null, stageStarts:{}, stageElapsed:{} },
     currentStage: '—'
@@ -3081,6 +3286,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.sgmpV3NormalizeInput = function(data){
     if (!data || typeof data !== 'object') throw new Error('Input vacío o inválido.');
+    if (typeof normalizeIncomingPayload === 'function') {
+      const payload = normalizeIncomingPayload(data);
+      if (!payload.ok) throw new Error('No se pudo normalizar al contrato LMP_TO_SB.');
+      return payload.normalized;
+    }
     if (data.sipoc_input) return data.sipoc_input;
     if (data.structured_process) return window.sgmpV3TransformStructuredToSipoc(data.structured_process);
     if (data.process_name || data.activities) return data;
@@ -3089,6 +3299,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.sgmpV3TransformStructuredToSipoc = function(old){
     old = old || {};
+    if (typeof normalizeSipocInput === 'function') return normalizeSipocInput(old, old);
     return {
       process_code: old.process_code || '',
       process_name: old.process_name || old.processName || 'pendiente_validacion',
@@ -3103,27 +3314,7 @@ document.addEventListener('DOMContentLoaded', () => {
       actors: Array.isArray(old.actors) ? old.actors : [],
       documents: Array.isArray(old.documents) ? old.documents : [],
       layout_hints: old.layout_hints || old.layoutHints || {},
-      activities: (Array.isArray(old.activities) ? old.activities : []).map(function(a, idx){
-        a = a || {};
-        return {
-          order: a.order || idx + 1,
-          name: a.name || 'pendiente_validacion',
-          type: a.type || 'operation',
-          actor: a.actor || 'pendiente_validacion',
-          lane: a.lane || a.actor || 'pendiente_validacion',
-          document: a.document || '',
-          previous: Array.isArray(a.previous) ? a.previous : [],
-          next: Array.isArray(a.next) ? a.next : [],
-          ext_suppliers: Array.isArray(a.ext_suppliers) ? a.ext_suppliers : [],
-          ext_inputs: Array.isArray(a.ext_inputs) ? a.ext_inputs : [],
-          ext_outputs: Array.isArray(a.ext_outputs) ? a.ext_outputs : [],
-          ext_customers: Array.isArray(a.ext_customers) ? a.ext_customers : [],
-          is_start: !!a.is_start,
-          is_end: !!a.is_end,
-          note: a.note || '',
-          observations: a.observations || ''
-        };
-      })
+      activities: Array.isArray(old.activities) ? old.activities : []
     };
   };
 
@@ -3147,24 +3338,108 @@ document.addEventListener('DOMContentLoaded', () => {
     return { ok: errors.length === 0, errors: errors };
   };
 
-  window.sgmpV3LoadFromLMPStorage = function(){
-    var keys = window.SGMP_SB3.inputKeys;
+  window.sgmpV3GetQueryParam = function(name){
+    try { return new URLSearchParams(window.location.search).get(name); }
+    catch(e){ return null; }
+  };
+
+  window.sgmpV3ReadHandoffRaw = function(){
+    var queryKey = window.sgmpV3GetQueryParam(window.SGMP_SB3.handoffQueryParam);
+    var keys = queryKey ? [queryKey].concat(window.SGMP_SB3.inputKeys) : window.SGMP_SB3.inputKeys;
     for (var i=0; i<keys.length; i++) {
-      var raw = localStorage.getItem(keys[i]);
-      if (!raw) continue;
-      try {
-        var parsed = JSON.parse(raw);
-        var normalized = window.sgmpV3NormalizeInput(parsed);
-        if (typeof processIncomingJson === 'function') {
-          processIncomingJson(JSON.stringify({ sipoc_input: normalized }), 'lmp_json');
-          if (typeof gMsg === 'function') gMsg('ok', 'Datos LMP precargados automáticamente en SB.');
-          return true;
-        }
-      } catch(e) {
-        console.warn('[SGMP SB3] No se pudo precargar desde ' + keys[i], e);
+      var key = keys[i];
+      var raw = null;
+      try { raw = localStorage.getItem(key); } catch(e) {}
+      if (!raw) { try { raw = sessionStorage.getItem(key); } catch(e) {} }
+      if (raw) return { key:key, raw:raw };
+    }
+    return null;
+  };
+
+  window.sgmpV3ApplyHandoff = function(parsed, sourceKey){
+    var normalized = window.sgmpV3NormalizeInput(parsed);
+    if (typeof processIncomingJson !== 'function') throw new Error('processIncomingJson no está disponible.');
+
+    // Hardening Fase 3: validar antes de aplicar para no cargar basura desde LMP.
+    if (typeof validateSipocContract === 'function') {
+      var contractCheck = validateSipocContract(normalized);
+      if (contractCheck && contractCheck.blockingErrors && contractCheck.blockingErrors.length) {
+        throw new Error('Contrato LMP_TO_SB inválido: ' + contractCheck.blockingErrors.join(' | '));
       }
     }
-    return false;
+
+    var fingerprint = JSON.stringify({
+      process_name: normalized.process_name || '',
+      process_code: normalized.process_code || '',
+      activities: Array.isArray(normalized.activities) ? normalized.activities.map(function(a){ return a.name || ''; }) : []
+    });
+    if (window.SGMP_SB3.lastHandoffFingerprint === fingerprint) {
+      if (typeof gMsg === 'function') gMsg('info', 'El handoff LMP → SB ya fue cargado en esta sesión.');
+      return false;
+    }
+
+    processIncomingJson(JSON.stringify({ sipoc_input: normalized }), 'lmp_json');
+
+    window.SGMP_SB3.lastHandoffFingerprint = fingerprint;
+    window.SGMP_SB3.handoffSource = 'LMP';
+    window.SGMP_SB3.handoffTime = new Date().toISOString();
+    window.SGMP_SB3.lastHandoff = {
+      source: 'LMP',
+      key: sourceKey || 'desconocido',
+      process_name: normalized.process_name || '',
+      process_code: normalized.process_code || '',
+      activity_count: Array.isArray(normalized.activities) ? normalized.activities.length : 0,
+      loaded_at: window.SGMP_SB3.handoffTime
+    };
+    if (window.S) {
+      window.S.handoffSource = window.SGMP_SB3.lastHandoff.source;
+      window.S.handoffTime = window.SGMP_SB3.lastHandoff.loaded_at;
+      window.S.handoffKey = window.SGMP_SB3.lastHandoff.key;
+    }
+
+    // Hardening Fase 3: limpiar payload para evitar reproceso al refrescar.
+    if (typeof window.sgmpV3ClearHandoff === 'function') {
+      window.sgmpV3ClearHandoff(true);
+      window.SGMP_SB3.handoffLoaded = true;
+    }
+
+    if (typeof sgmpLogEvent === 'function') {
+      sgmpLogEvent('SB_HANDOFF_RECEIVED', window.SGMP_SB3.lastHandoff);
+    }
+    if (typeof gMsg === 'function') {
+      gMsg('ok', 'Datos LMP precargados automáticamente en SB: ' + (normalized.process_name || 'proceso sin nombre') + '.');
+    }
+    return true;
+  };
+
+  window.sgmpV3LoadFromLMPStorage = function(){
+    if (window.SGMP_SB3.handoffLoaded || (window.S && window.S.sp)) return false;
+    var pack = window.sgmpV3ReadHandoffRaw();
+    if (!pack) return false;
+    try {
+      var parsed = JSON.parse(pack.raw);
+      window.SGMP_SB3.handoffLoaded = true;
+      var applied = window.sgmpV3ApplyHandoff(parsed, pack.key);
+      if (!applied) window.SGMP_SB3.handoffLoaded = false;
+      return applied;
+    } catch(e) {
+      window.SGMP_SB3.handoffLoaded = false;
+      console.warn('[SGMP SB3] No se pudo precargar handoff LMP desde ' + pack.key, e);
+      if (typeof sgmpLogEvent === 'function') sgmpLogEvent('SB_HANDOFF_ERROR', { key: pack.key, error: e.message });
+      if (typeof gMsg === 'function') gMsg('warn', 'No se pudo precargar la información enviada desde LMP. Puedes cargar el JSON manualmente.');
+      return false;
+    }
+  };
+
+  window.sgmpV3ClearHandoff = function(silent){
+    window.SGMP_SB3.inputKeys.forEach(function(key){
+      try { localStorage.removeItem(key); } catch(e) {}
+      try { sessionStorage.removeItem(key); } catch(e) {}
+    });
+    if (!silent) {
+      window.SGMP_SB3.handoffLoaded = false;
+      if (typeof gMsg === 'function') gMsg('info', 'Handoff LMP → SB limpiado de este navegador.');
+    }
   };
 
   document.addEventListener('DOMContentLoaded', function(){
