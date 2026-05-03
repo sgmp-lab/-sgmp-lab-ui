@@ -5968,16 +5968,40 @@ function normalizeBriefPayload(parsed){
 function evaluateBriefCompleteness(brief){
   const issues = [];
   if(!brief) return ['No existe brief cargado.'];
-  const summary = brief.summary || {};
-  const sipoc = brief.sipoc || {};
-  const actors = String(sipoc.actors || '').trim();
-  if(!String(summary.executiveSummary || '').trim()) issues.push('Falta resumen ejecutivo del brief.');
-  if(!String(summary.purposeSummary || '').trim()) issues.push('Falta finalidad del proceso en el brief.');
-  if(!String(sipoc.suppliers || '').trim()) issues.push('Faltan suppliers preliminares en el brief.');
-  if(!String(sipoc.inputs || '').trim()) issues.push('Faltan inputs preliminares en el brief.');
-  if(!String(sipoc.outputs || '').trim()) issues.push('Faltan outputs preliminares en el brief.');
-  if(!String(sipoc.customers || '').trim()) issues.push('Faltan customers preliminares en el brief.');
-  if(!actors) issues.push('Faltan actores clave en el brief.');
+
+  const b = brief.brief || brief;
+  const summary = b.summary || {};
+  const sipoc = b.sipoc || {};
+  const sipocPre = b.sipoc_preliminary || {};
+
+  const executiveSummary =
+    summary.executiveSummary ||
+    b.executiveSummary ||
+    brief.executiveSummary ||
+    '';
+
+  const purpose =
+    summary.purposeSummary ||
+    b.processPurpose ||
+    b.purpose ||
+    b.context?.purpose ||
+    brief.processPurpose ||
+    '';
+
+  const suppliers = safeArray(sipocPre.suppliers || sipoc.suppliers || b.suppliers).join('\n');
+  const inputs = safeArray(sipocPre.inputs || sipoc.inputs || b.inputs).join('\n');
+  const outputs = safeArray(sipocPre.outputs || sipoc.outputs || b.outputs).join('\n');
+  const customers = safeArray(sipocPre.customers || sipoc.customers || b.customers).join('\n');
+  const actors = safeArray(b.actors || sipoc.actors || brief.actors).join('\n');
+
+  if(!String(executiveSummary || '').trim()) issues.push('Falta resumen ejecutivo del brief.');
+  if(!String(purpose || '').trim()) issues.push('Falta finalidad del proceso en el brief.');
+  if(!String(suppliers || '').trim()) issues.push('Faltan suppliers preliminares en el brief.');
+  if(!String(inputs || '').trim()) issues.push('Faltan inputs preliminares en el brief.');
+  if(!String(outputs || '').trim()) issues.push('Faltan outputs preliminares en el brief.');
+  if(!String(customers || '').trim()) issues.push('Faltan customers preliminares en el brief.');
+  if(!String(actors || '').trim()) issues.push('Faltan actores clave en el brief.');
+
   return issues;
 }
 
