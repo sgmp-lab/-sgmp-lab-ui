@@ -5894,113 +5894,146 @@ function copyTextFromId(id,msgId,okMsg){
 }
 
 function normalizeBriefPayload(parsed){
-  const b = parsed.brief || parsed;
-  const ctx = b.context || parsed.context || {};
+  const source = (parsed && typeof parsed === 'object') ? parsed : {};
+  const b = (source.brief && typeof source.brief === 'object') ? source.brief : source;
+  const summarySource = Object.assign({}, source.summary || {}, b.summary || {});
+  const sipocPre = Object.assign({}, source.sipoc_preliminary || {}, source.sipocPreliminary || {}, b.sipoc_preliminary || {}, b.sipocPreliminary || {});
+  const sipocSource = Object.assign({}, source.sipoc || {}, b.sipoc || {});
+  const context = Object.assign({}, state.context || {}, source.context || {}, b.context || {});
+
+  const firstFilled = (...values) => values.find(value => {
+    if(value === undefined || value === null) return false;
+    if(Array.isArray(value)) return value.length > 0;
+    if(typeof value === 'object') return Object.keys(value).length > 0;
+    return String(value).trim() !== '';
+  });
+
+  const itemText = (value) => {
+    if(value === undefined || value === null) return '';
+    if(Array.isArray(value)) return value.map(itemText).filter(Boolean).join('\n');
+    if(typeof value === 'object'){
+      const preferred = value.name || value.title || value.value || value.label || value.description || value.summary || value.actor || value.role || value.document || value.system;
+      if(preferred !== undefined && preferred !== null && String(preferred).trim()) return itemText(preferred);
+      try{ return JSON.stringify(value); }catch(_){ return ''; }
+    }
+    return normalizeContractString(String(value));
+  };
+
+  const asString = (value) => itemText(value).trim();
+  const asArray = (value) => {
+    if(value === undefined || value === null || value === '') return [];
+    if(Array.isArray(value)) return value.filter(item => item !== undefined && item !== null && item !== '');
+    if(typeof value === 'string') return splitItems(value);
+    return [value];
+  };
+  const mergeText = (...values) => values.map(asString).filter(Boolean).join('\n');
+  const mergeArray = (...values) => values.flatMap(asArray).filter(item => item !== undefined && item !== null && item !== '');
+
+  const executiveSummary = firstFilled(
+    summarySource.executiveSummary,
+    b.executiveSummary,
+    source.executiveSummary
+  );
+  const purposeSummary = firstFilled(
+    summarySource.purposeSummary,
+    b.processPurpose,
+    source.processPurpose,
+    b.purposeSummary,
+    source.purposeSummary,
+    context.purpose
+  );
+
+  const activitiesPreliminary = mergeArray(
+    b.activities_preliminary,
+    b.activitiesPreliminary,
+    source.activities_preliminary,
+    source.activitiesPreliminary
+  );
+  const asIsActivities = mergeArray(
+    b.as_is?.activities,
+    b.asIs?.activities,
+    source.as_is?.activities,
+    source.asIs?.activities
+  );
 
   return {
-    instrument:'brief',
-    version:'2.1',
-    generatedAt:new Date().toISOString(),
-
-    context: {
-      company: normalizeContractString(ctx.company || ''),
-      processName: normalizeContractString(ctx.processName || ''),
-      processCode: normalizeContractString(ctx.processCode || ''),
-      owner: normalizeContractString(ctx.owner || ''),
-      analyst: normalizeContractString(ctx.analyst || ''),
-      industry: normalizeContractString(ctx.industry || ''),
-      processType: normalizeContractString(ctx.processType || ''),
-      activity: normalizeContractString(ctx.activity || ''),
-      purpose: normalizeContractString(ctx.purpose || b.processPurpose || '')
+    summary: {
+      executiveSummary: asString(executiveSummary),
+      purposeSummary: asString(purposeSummary),
+      expectedResult: asString(firstFilled(summarySource.expectedResult, b.expectedResult, source.expectedResult, summarySource.expected_result, b.expected_result, source.expected_result)),
+      trigger: asString(firstFilled(summarySource.trigger, b.trigger, source.trigger, summarySource.startEvent, b.startEvent, source.startEvent)),
+      closure: asString(firstFilled(summarySource.closure, b.closure, source.closure, summarySource.endEvent, b.endEvent, source.endEvent)),
+      flowSummary: asString(firstFilled(summarySource.flowSummary, b.flowSummary, source.flowSummary, sipocPre.process, sipocSource.process))
     },
-
-    summary:{
-      executiveSummary: b.executiveSummary || b.summary?.executiveSummary || '',
-      purposeSummary: b.processPurpose || b.summary?.purposeSummary || ctx.purpose || '',
-      scope: b.scope || b.summary?.scope || '',
-      startEvent: b.startEvent || b.summary?.startEvent || '',
-      endEvent: b.endEvent || b.summary?.endEvent || '',
-      flowSummary: safeArray(b.flowSummary || b.summary?.flowSummary || b.sipoc_preliminary?.process).join('\n')
+    sipoc: {
+      suppliers: asString(firstFilled(sipocPre.suppliers, sipocSource.suppliers, b.suppliers, source.suppliers)),
+      inputs: asString(firstFilled(sipocPre.inputs, sipocSource.inputs, b.inputs, source.inputs)),
+      process: asString(firstFilled(sipocPre.process, sipocSource.process, b.process, source.process)),
+      outputs: asString(firstFilled(sipocPre.outputs, sipocSource.outputs, b.outputs, source.outputs)),
+      customers: asString(firstFilled(sipocPre.customers, sipocSource.customers, b.customers, source.customers)),
+      actors: asString(firstFilled(b.actors, source.actors, sipocSource.actors, sipocPre.actors)),
+      documentsSystems: mergeText(b.documents, source.documents, b.systems, source.systems, sipocSource.documents, sipocSource.systems, sipocSource.documentsSystems)
     },
-
-    sipoc:{
-      suppliers: safeArray(b.sipoc_preliminary?.suppliers || b.sipoc?.suppliers).join('\n'),
-      inputs: safeArray(b.sipoc_preliminary?.inputs || b.sipoc?.inputs).join('\n'),
-      outputs: safeArray(b.sipoc_preliminary?.outputs || b.sipoc?.outputs).join('\n'),
-      customers: safeArray(b.sipoc_preliminary?.customers || b.sipoc?.customers).join('\n'),
-      actors: safeArray(b.actors || b.sipoc?.actors).join('\n'),
-      documentsSystems: safeArray([
-        ...safeArray(b.documents || b.sipoc?.documents),
-        ...safeArray(b.systems || b.sipoc?.systems)
-      ]).join('\n')
+    activities_preliminary: activitiesPreliminary,
+    as_is: {
+      activities: asIsActivities
     },
-
-    activities_preliminary: safeArray(b.activities_preliminary || b.activities || []),
-
-    insights:{
-      keyIssues: safeArray(b.mainPainPoints || b.keyIssues).join('\n'),
-      quickWins: safeArray(b.preliminaryQuickWins || b.quickWins).join('\n'),
-      constraints: safeArray(b.preliminaryRestrictions || b.constraints).join('\n')
+    insights: {
+      keyIssues: asString(firstFilled(b.mainPainPoints, source.mainPainPoints, b.keyIssues, source.keyIssues, b.insights?.keyIssues, source.insights?.keyIssues)),
+      quickWins: asString(firstFilled(b.preliminaryQuickWins, source.preliminaryQuickWins, b.quickWins, source.quickWins, b.insights?.quickWins, source.insights?.quickWins)),
+      constraints: asString(firstFilled(b.preliminaryRestrictions, source.preliminaryRestrictions, b.constraints, source.constraints, b.insights?.constraints, source.insights?.constraints))
     },
-
-    futureState:{
-      futureVision: safeArray(b.informationGaps).length
-        ? 'Existen vacíos de información por resolver antes de formalizar el análisis.'
-        : ''
+    futureState: {
+      futureVision: asString(firstFilled(b.futureState?.futureVision, source.futureState?.futureVision, b.futureVision, source.futureVision))
     },
-
-    indicators: safeArray(b.mentionedIndicators || b.indicators).join('\n'),
-
-    operationalRules: safeArray(b.operationalRules || []),
-    hiddenControls: safeArray(b.hiddenControls || []),
-    manualDependencies: safeArray(b.manualDependencies || []),
-    visibleRisks: safeArray(b.visibleRisks || []),
-    suspectedConstraints: safeArray(b.suspectedConstraints || []),
-    assumptions: safeArray(b.assumptions || []),
-    informationGaps: safeArray(b.informationGaps || []),
-    contradictionsDetected: safeArray(b.contradictionsDetected || []),
-    openQuestions: safeArray(b.openQuestions || []),
-    evidenceHighlights: safeArray(b.evidenceHighlights || []),
-    validation: b.validation || {}
+    indicators: asString(firstFilled(b.mentionedIndicators, source.mentionedIndicators, b.indicators, source.indicators)),
+    informationGaps: mergeArray(b.informationGaps, source.informationGaps, b.infoGaps, source.infoGaps),
+    openQuestions: mergeArray(b.openQuestions, source.openQuestions),
+    validation: (b.validation && typeof b.validation === 'object' && !Array.isArray(b.validation))
+      ? Object.assign({}, b.validation)
+      : ((source.validation && typeof source.validation === 'object' && !Array.isArray(source.validation)) ? Object.assign({}, source.validation) : {})
   };
 }
 
-function evaluateBriefCompleteness(brief){
+function evaluateBriefCompleteness(normalizedBrief){
   const issues = [];
-  if(!brief) return ['No existe brief cargado.'];
+  if(!normalizedBrief) return ['No existe brief cargado.'];
 
-  const b = brief.brief || brief;
-  const summary = b.summary || {};
-  const sipoc = b.sipoc || {};
-  const sipocPre = b.sipoc_preliminary || {};
+  const brief = normalizedBrief;
+  const summary = brief.summary || {};
+  const sipoc = brief.sipoc || {};
+  const asIsActivities = safeArray(brief.as_is?.activities);
+  const preliminaryActivities = safeArray(brief.activities_preliminary);
+  const activities = [...asIsActivities, ...preliminaryActivities].filter(Boolean);
+  const activityHasActors = activities.some(item => String((item && typeof item === 'object') ? (item.actor || item.role || item.responsable || item.owner || '') : '').trim());
 
-  const executiveSummary =
-    summary.executiveSummary ||
-    b.executiveSummary ||
-    brief.executiveSummary ||
-    '';
+  const hasExecutiveSummary = !!String(summary.executiveSummary || '').trim();
+  const hasPurposeSummary = !!String(summary.purposeSummary || '').trim();
+  const hasSuppliers = !!String(sipoc.suppliers || '').trim();
+  const hasInputs = !!String(sipoc.inputs || '').trim();
+  const hasProcess = !!String(sipoc.process || '').trim();
+  const hasOutputs = !!String(sipoc.outputs || '').trim();
+  const hasCustomers = !!String(sipoc.customers || '').trim();
+  const hasActors = !!String(sipoc.actors || '').trim() || activityHasActors;
+  const hasActivities = activities.length > 0 || hasProcess;
+  const hasSipocAny = hasSuppliers || hasInputs || hasProcess || hasOutputs || hasCustomers || hasActors;
 
-  const purpose =
-    summary.purposeSummary ||
-    b.processPurpose ||
-    b.purpose ||
-    b.context?.purpose ||
-    brief.processPurpose ||
-    '';
+  const warnings = [];
+  if(!hasSuppliers) warnings.push('Faltan suppliers preliminares en el brief.');
+  if(!hasInputs) warnings.push('Faltan inputs preliminares en el brief.');
+  if(!hasOutputs) warnings.push('Faltan outputs preliminares en el brief.');
+  if(!hasCustomers) warnings.push('Faltan customers preliminares en el brief.');
+  if(!hasActors) warnings.push('Faltan actores clave en el brief.');
 
-  const suppliers = safeArray(sipocPre.suppliers || sipoc.suppliers || b.suppliers).join('\n');
-  const inputs = safeArray(sipocPre.inputs || sipoc.inputs || b.inputs).join('\n');
-  const outputs = safeArray(sipocPre.outputs || sipoc.outputs || b.outputs).join('\n');
-  const customers = safeArray(sipocPre.customers || sipoc.customers || b.customers).join('\n');
-  const actors = safeArray(b.actors || sipoc.actors || brief.actors).join('\n');
+  if(!hasExecutiveSummary) issues.push('Falta resumen ejecutivo del brief.');
+  if(!hasPurposeSummary) issues.push('Falta finalidad del proceso en el brief.');
+  if(!hasActivities && !hasSipocAny) issues.push('Faltan actividades preliminares o información SIPOC mínima del brief.');
 
-  if(!String(executiveSummary || '').trim()) issues.push('Falta resumen ejecutivo del brief.');
-  if(!String(purpose || '').trim()) issues.push('Falta finalidad del proceso en el brief.');
-  if(!String(suppliers || '').trim()) issues.push('Faltan suppliers preliminares en el brief.');
-  if(!String(inputs || '').trim()) issues.push('Faltan inputs preliminares en el brief.');
-  if(!String(outputs || '').trim()) issues.push('Faltan outputs preliminares en el brief.');
-  if(!String(customers || '').trim()) issues.push('Faltan customers preliminares en el brief.');
-  if(!String(actors || '').trim()) issues.push('Faltan actores clave en el brief.');
+  brief.validation = Object.assign({}, brief.validation || {}, {
+    warnings,
+    blockingIssues: issues,
+    canProceedToAnalysis: issues.length === 0
+  });
 
   return issues;
 }
@@ -6008,16 +6041,19 @@ function evaluateBriefCompleteness(brief){
 function renderBriefValidation(){
   const brief = getBriefPayload();
   const issues = evaluateBriefCompleteness(brief);
+  const warnings = safeArray(brief?.validation?.warnings || []);
   const detectedGaps = safeArray(brief?.informationGaps || brief?.infoGaps || []);
-  const gapList = [...detectedGaps, ...issues];
+  const gapList = [...issues, ...warnings, ...detectedGaps];
   const msgId = 'briefValidationMsg';
   if(qs('briefGapsList')){
     qs('briefGapsList').innerHTML = gapList.length
       ? '<ul style="margin:0;padding-left:18px">' + gapList.map(item => '<li>' + escapeHtml(typeof item === 'string' ? item : JSON.stringify(item)) + '</li>').join('') + '</ul>'
       : 'Sin vacíos detectados.';
   }
+  if(qs('briefGapsKpi')) qs('briefGapsKpi').textContent = gapList.length;
   if(!brief){ showMsg(msgId,'warn','Estado: brief incompleto. Aún no existe un brief utilizable.'); refreshCargaFlowState(); return issues; }
   if(issues.length){ showMsg(msgId,'warn','Estado: brief incompleto. Revisa antes de aprobar:\n- ' + issues.join('\n- ')); }
+  else if(warnings.length){ showMsg(msgId,'warn','Estado: brief aprobable con advertencias:\n- ' + warnings.join('\n- ')); }
   else { showMsg(msgId,'ok','Estado: brief completo. Puede aprobarse para habilitar el análisis.'); }
   refreshCargaFlowState();
   return issues;
@@ -6057,15 +6093,27 @@ function useLatestExternalBrief(){
 }
 
 function renderBriefDraft(){
-  const brief = getBriefPayload();
-  if(!brief){ if(qs('briefEditor')) qs('briefEditor').value=''; if(qs('briefDetectedPreview')) qs('briefDetectedPreview').textContent='Sin brief generado.'; if(qs('briefApprovedKpi')) qs('briefApprovedKpi').textContent='No'; return; }
+  let brief = getBriefPayload();
+  if(!brief){
+    if(qs('briefEditor')) qs('briefEditor').value='';
+    if(qs('briefDetectedPreview')) qs('briefDetectedPreview').textContent='Sin brief generado.';
+    if(qs('briefApprovedKpi')) qs('briefApprovedKpi').textContent='No';
+    if(qs('briefGapsKpi')) qs('briefGapsKpi').textContent='0';
+    return;
+  }
+  if(!brief.summary || !brief.sipoc){
+    brief = normalizeBriefPayload(brief);
+    state.briefReview = state.briefReview || { raw:null, approved:false };
+    state.briefReview.raw = brief;
+    state.brief = brief;
+  }
+  const issues = evaluateBriefCompleteness(brief);
+  const warnings = safeArray(brief.validation?.warnings || []);
   const editorValue = JSON.stringify(brief, null, 2);
   if(qs('briefEditor')) qs('briefEditor').value = editorValue;
   if(qs('briefDetectedPreview')) qs('briefDetectedPreview').textContent = editorValue;
   if(qs('briefApprovedKpi')) qs('briefApprovedKpi').textContent = state.briefReview?.approved ? 'Sí' : 'No';
-  const gaps = safeArray(brief.informationGaps || brief.infoGaps || []);
-  if(qs('briefGapsKpi')) qs('briefGapsKpi').textContent = gaps.length;
-  renderBriefValidation();
+  if(qs('briefGapsKpi')) qs('briefGapsKpi').textContent = issues.length + warnings.length + safeArray(brief.informationGaps || []).length;
 }
 
 function buildBriefPrompt(master){
@@ -6223,48 +6271,62 @@ async function generateBriefPromptFromMaster(){
 }
 
 function processBriefResponse(){
-  const raw = qs('briefResponseEditor')?.value.trim() || '';
-  if(!raw){ showMsg('briefIaMsg','warn','Pega primero el JSON de Brief generado por la IA.'); return; }
+  const rawText = qs('briefResponseEditor')?.value.trim() || '';
+  if(!rawText){ showMsg('briefIaMsg','warn','Pega primero el JSON de Brief generado por la IA.'); return; }
   try{
-    const parsed = extractJsonFromText(raw);
-    const brief = normalizeBriefPayload(parsed);
-    state.briefReview = { raw: brief, approved:false };
+    const parsed = extractJsonFromText(rawText);
+    const normalized = normalizeBriefPayload(parsed);
+    const issues = evaluateBriefCompleteness(normalized);
+    console.log('[SGMP][BRIEF] parsed', parsed);
+    console.log('[SGMP][BRIEF] normalized', normalized);
+    console.log('[SGMP][BRIEF] issues', issues);
+    state.briefReview = { raw: normalized, approved: issues.length === 0 };
+    state.brief = normalized;
     renderBriefDraft();
     renderBriefValidation();
     seedAsIsBuilderFromBrief(false);
     refreshCargaFlowState();
-    showMsg('briefIaMsg','ok','Brief procesado correctamente. Revisa el contenido y apruébalo para habilitar el análisis.');
+    showMsg('briefIaMsg', issues.length ? 'warn' : 'ok', issues.length
+      ? 'Brief procesado con vacíos bloqueantes. Revisa el contenido antes de aprobar.'
+      : 'Brief procesado correctamente. Revisa el contenido y apruébalo para habilitar el análisis.');
   }catch(error){
-    showMsg('briefIaMsg','err', `No fue posible procesar el Brief. Detalle: ${error.message}`);
+    showMsg('briefIaMsg','err','No fue posible procesar el Brief. Detalle: ' + error.message);
   }
 }
 
 function approveBriefAndUnlockAnalysis(){
-  const txt = qs('briefEditor')?.value.trim() || '';
-  if(!txt){ showMsg('briefIaMsg','warn','No hay Brief para aprobar.'); return; }
+  const rawText = qs('briefEditor')?.value.trim() || '';
+  if(!rawText){ showMsg('briefIaMsg','warn','No hay Brief para aprobar.'); return; }
   try{
-    const parsed = JSON.parse(txt);
-    const issues = evaluateBriefCompleteness(parsed);
+    const parsed = JSON.parse(rawText);
+    const normalized = normalizeBriefPayload(parsed);
+    const issues = evaluateBriefCompleteness(normalized);
+    console.log('[SGMP][BRIEF] parsed', parsed);
+    console.log('[SGMP][BRIEF] normalized', normalized);
+    console.log('[SGMP][BRIEF] issues', issues);
+    state.briefReview = { raw: normalized, approved: issues.length === 0 };
+    state.brief = normalized;
+    renderBriefDraft();
+    renderBriefValidation();
+    refreshCargaFlowState();
     if(issues.length){
-      state.briefReview = { raw: parsed, approved:false };
-      renderBriefDraft();
-      refreshCargaFlowState();
       showMsg('briefIaMsg','warn','No se puede aprobar el Brief porque está incompleto.');
       return;
     }
-    state.briefReview = { raw: parsed, approved:true };
-    state.brief = parsed;
-    renderBriefDraft();
-    refreshCargaFlowState();
     showMsg('briefIaMsg','ok','Brief aprobado correctamente. Ya puedes generar el análisis completo.');
   }catch(error){
-    showMsg('briefIaMsg','err', `El Brief editable no contiene un JSON válido. Detalle: ${error.message}`);
+    showMsg('briefIaMsg','err','El Brief editable no contiene un JSON válido. Detalle: ' + error.message);
   }
 }
 
 async function generateAnalysisPromptFromApprovedBrief(){
-  if(!(state.briefReview && state.briefReview.approved && state.briefReview.raw)){ showMsg('cargaMsg','warn','Debes procesar y aprobar primero el Brief.'); return; }
-  const brief = state.briefReview.raw;
+  if(!(state.briefReview && state.briefReview.raw)){ showMsg('cargaMsg','warn','Debes procesar y aprobar primero el Brief.'); return; }
+  const brief = normalizeBriefPayload(state.briefReview.raw);
+  const issues = evaluateBriefCompleteness(brief);
+  state.briefReview.raw = brief;
+  state.brief = brief;
+  state.briefReview.approved = issues.length === 0;
+  if(issues.length || !state.briefReview.approved){ renderBriefDraft(); renderBriefValidation(); refreshCargaFlowState(); showMsg('cargaMsg','warn','Debes procesar y aprobar primero el Brief.'); return; }
   const master = state.master || mergeMaster();
   const c = master.context || state.context || {};
   const evidencePack = {
@@ -6749,7 +6811,7 @@ function refreshCargaFlowState(){
   const hasBriefPrompt = !!(qs('briefPromptEditor')?.value || '').trim();
   const hasBriefResponse = !!(qs('briefResponseEditor')?.value || '').trim();
   const hasBrief = !!(qs('briefEditor')?.value || '').trim();
-  const briefApproved = !!(state.briefReview && state.briefReview.approved);
+  const briefApproved = !!(state.briefReview && state.briefReview.approved && state.briefReview.raw);
   const hasAnalysisPrompt = !!(qs('analysisPromptEditor')?.value || '').trim();
   const hasAnalysisResponse = !!(qs('iaResponseEditor')?.value || '').trim();
   const hasSbContractPrompt = !!(qs('sbContractPromptEditor')?.value || '').trim();
