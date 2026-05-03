@@ -4392,14 +4392,21 @@ function saveAnalysisAndContinue(){
 /* =========================
    DECISIÓN
 ========================= */
-function setDecisionRoute(route){
+function setDecisionRoute(route, navigate = true){
   state.decision.route = route;
-  qs('decision_asis').classList.toggle('active', route === 'asis');
-  qs('decision_tobe').classList.toggle('active', route === 'tobe');
+  qs('decision_asis')?.classList.toggle('active', route === 'asis');
+  qs('decision_tobe')?.classList.toggle('active', route === 'tobe');
   showMsg('decisionMsg','ok', route === 'asis'
     ? 'Se eligió cerrar con AS IS. El flujo puede pasar directo a resultados.'
     : 'Se eligió continuar a TO BE. La siguiente etapa habilita las mejoras.'
   );
+  if(route === 'tobe' && navigate){
+    state.decision.finalMode = 'tobe';
+    seedImprovementsFromAnalysis();
+    renderImprovements();
+    renderToBeSummary();
+    showSection('tobe');
+  }
 }
 
 
@@ -4468,86 +4475,27 @@ function improvementTemplate(data = {}){
 }
 
 function addImprovement(data = {}){
-  const relatedActivities = Array.isArray(data.relatedActivities)
-    ? data.relatedActivities.join(', ')
-    : (data.relatedActivities || '');
+  const relatedSource = data.relatedActivities || data.related_activities || '';
+  const relatedActivities = Array.isArray(relatedSource) ? relatedSource.join(', ') : relatedSource;
 
   const improvement = {
     id: data.id || cryptoRandom(),
-
-    title:
-      data.title ||
-      data.name ||
-      data.improvementTitle ||
-      'Mejora propuesta',
-
-    summary:
-      data.summary ||
-      data.description ||
-      data.technicalRationale ||
-      '',
-
-    problem:
-      data.problem ||
-      data.problemSolved ||
-      data.relatedProblem ||
-      data.summary ||
-      '',
-
-    currentState:
-      data.currentState ||
-      data.asIsState ||
-      data.problemSolved ||
-      data.rootCauseAddressed ||
-      '',
-
-    proposedState:
-      data.proposedState ||
-      data.toBeState ||
-      data.action ||
-      data.title ||
-      data.description ||
-      '',
-
-    support:
-      data.support ||
-      data.justification ||
-      data.technicalRationale ||
-      data.rootCauseAddressed ||
-      data.requiredDependency ||
-      '',
-
-    impact:
-      data.impact ||
-      data.expectedImpact ||
-      data.benefit ||
-      '',
-
-    justification:
-      data.justification ||
-      data.technicalRationale ||
-      data.rootCauseAddressed ||
-      '',
-
-    mode:
-      data.mode || '',
-
-    improvementType:
-      data.improvementType || '',
-
-    priority:
-      data.priority || '',
-
-    effort:
-      data.effort || '',
-
-    timeHorizon:
-      data.timeHorizon || '',
-
+    title: data.title || data.name || data.improvementTitle || data.improvement_title || 'Mejora propuesta',
+    summary: data.summary || data.description || data.technicalRationale || data.technical_rationale || data.expected_benefit || data.expectedBenefit || '',
+    problem: data.problem || data.problemSolved || data.problem_solved || data.problem_to_solve || data.relatedProblem || data.related_problem || data.restriction || data.description || data.summary || '',
+    currentState: data.currentState || data.current_state || data.asIsState || data.as_is_state || data.problemSolved || data.problem_to_solve || data.rootCauseAddressed || data.root_cause_addressed || '',
+    proposedState: data.proposedState || data.proposed_state || data.toBeState || data.to_be_state || data.action || data.recommendation || data.title || data.description || '',
+    support: data.support || data.justification || data.technicalRationale || data.technical_rationale || data.evidence || data.rootCauseAddressed || data.root_cause_addressed || data.requiredDependency || data.required_dependency || '',
+    impact: data.impact || data.expectedImpact || data.expected_impact || data.expectedBenefit || data.expected_benefit || data.benefit || '',
+    justification: data.justification || data.technicalRationale || data.technical_rationale || data.rootCauseAddressed || data.root_cause_addressed || data.evidence || '',
+    mode: data.mode || '',
+    improvementType: data.improvementType || data.improvement_type || data.type || '',
+    priority: data.priority || '',
+    effort: data.effort || '',
+    timeHorizon: data.timeHorizon || data.time_horizon || '',
     relatedActivities,
-
     status: data.status || 'pending',
-    customText: data.customText || data.adjustedState || ''
+    customText: data.customText || data.custom_text || data.adjustedState || data.adjusted_state || ''
   };
 
   state.tobe.improvements.push(improvement);
@@ -7690,19 +7638,10 @@ function continueFromDecision(){
 }
 
 function seedImprovementsFromAnalysis(){
-  if(!state.analysis){
-    showMsg('tobeMsg','warn','Genera o carga primero el análisis.');
-    return;
-  }
-
-  if(state.tobe.improvements.length){
-    renderImprovements();
-    showMsg('tobeMsg','ok','Se mostraron las mejoras ya registradas.');
-    return;
-  }
-
-  const data = state.analysis.raw || state.analysis;
-  const findings = data.findings || {};
+  const analysis = state.analysis || {};
+  const data = analysis.raw || analysis;
+  const masterIssues = state.master?.issues || {};
+  const findings = data.findings || analysis.findings || {};
 
   const toArray = (value) => {
     if(Array.isArray(value)) return value;
@@ -7710,47 +7649,102 @@ function seedImprovementsFromAnalysis(){
     return [value];
   };
 
-  const sourceImprovements = toArray(data.improvements);
+  if(state.tobe.improvements.length){
+    const hasUsefulImprovements = state.tobe.improvements.some(item => [
+      item.title,
+      item.summary,
+      item.problem,
+      item.currentState,
+      item.proposedState,
+      item.support,
+      item.impact,
+      item.justification,
+      item.customText
+    ].some(value => {
+      const text = String(value || '').trim();
+      return text && text !== 'Mejora propuesta';
+    }));
+    if(hasUsefulImprovements){
+      renderImprovements();
+      showMsg('tobeMsg','ok','Se mostraron las mejoras ya registradas.');
+      return;
+    }
+    state.tobe.improvements = [];
+  }
+
+  const sourceImprovements = [
+    ...toArray(data.improvements),
+    ...toArray(analysis.improvements),
+    ...toArray(data.to_be?.improvements),
+    ...toArray(data.toBe?.improvements),
+    ...toArray(data.to_be?.improvement_candidates),
+    ...toArray(data.improvement_candidates)
+  ];
 
   if(sourceImprovements.length){
     sourceImprovements.forEach(item => addImprovement(item));
+    renderImprovements();
     showMsg('tobeMsg','ok','Se cargaron mejoras detectadas por la IA.');
     return;
   }
 
-  const quickWins = toArray(findings.quickWins || data.quickWins || []);
-  const restrictions = toArray(findings.restrictions || findings.constraints || data.restrictions || data.constraints || []);
-  const problems = toArray(findings.problems || data.problems || []);
+  const quickWins = [
+    ...toArray(findings.quickWins),
+    ...toArray(findings.quick_wins),
+    ...toArray(data.quickWins),
+    ...toArray(analysis.quickWins),
+    ...toArray(masterIssues.quickWins)
+  ];
+  const restrictions = [
+    ...toArray(findings.restrictions),
+    ...toArray(findings.constraints),
+    ...toArray(data.restrictions),
+    ...toArray(data.constraints),
+    ...toArray(analysis.constraints),
+    ...toArray(masterIssues.constraints),
+    ...toArray(masterIssues.restrictions)
+  ];
+  const problems = [
+    ...toArray(findings.problems),
+    ...toArray(data.problems),
+    ...toArray(analysis.problems),
+    ...toArray(masterIssues.keyIssues),
+    ...toArray(masterIssues.problems)
+  ];
 
   quickWins.forEach((q, i) => addImprovement({
-    title: `Quick win ${i + 1}`,
+    title: (typeof q === 'object' && (q.title || q.name)) ? (q.title || q.name) : 'Quick win ' + (i + 1),
     summary: 'Oportunidad rápida derivada del análisis.',
-    problemSolved: typeof q === 'string' ? q : (q.problem || q.description || q.title || JSON.stringify(q)),
-    proposedState: typeof q === 'string' ? `Aplicar una mejora puntual para resolver: ${q}` : (q.action || q.description || q.title || ''),
-    technicalRationale: 'Derivada del análisis del proceso.',
-    expectedImpact: typeof q === 'string' ? 'Mejora rápida de control, trazabilidad o reducción de reproceso.' : (q.expectedImpact || q.impact || '')
+    problemSolved: typeof q === 'string' ? q : (q.problem || q.description || q.summary || q.title || JSON.stringify(q)),
+    proposedState: typeof q === 'string' ? 'Aplicar una mejora puntual para resolver: ' + q : (q.action || q.proposedState || q.description || q.title || ''),
+    technicalRationale: typeof q === 'object' ? (q.evidence || q.justification || q.technicalRationale || '') : 'Derivada del análisis del proceso.',
+    expectedImpact: typeof q === 'string' ? 'Mejora rápida de control, trazabilidad o reducción de reproceso.' : (q.expectedImpact || q.impact || q.benefit || '')
   }));
 
   restrictions.forEach((r, i) => addImprovement({
-    title: `Restricción ${i + 1}`,
+    title: (typeof r === 'object' && (r.title || r.name)) ? (r.title || r.name) : 'Restricción ' + (i + 1),
     summary: 'Mejora orientada a mitigar una restricción.',
-    problemSolved: typeof r === 'string' ? r : (r.restriction || r.description || r.title || JSON.stringify(r)),
-    proposedState: typeof r === 'string' ? `Reducir o eliminar la restricción detectada: ${r}` : (r.action || r.description || r.title || ''),
-    technicalRationale: typeof r === 'string' ? 'La restricción afecta el flujo, el tiempo de ciclo o la capacidad del proceso.' : (r.evidence || r.impact || ''),
-    expectedImpact: typeof r === 'string' ? 'Reducción de bloqueo operativo o dependencia crítica.' : (r.impact || r.expectedImpact || '')
+    problemSolved: typeof r === 'string' ? r : (r.restriction || r.problem || r.description || r.summary || r.title || JSON.stringify(r)),
+    proposedState: typeof r === 'string' ? 'Reducir o eliminar la restricción detectada: ' + r : (r.action || r.proposedState || r.description || r.title || ''),
+    technicalRationale: typeof r === 'string' ? 'La restricción afecta el flujo, el tiempo de ciclo o la capacidad del proceso.' : (r.evidence || r.impact || r.justification || ''),
+    expectedImpact: typeof r === 'string' ? 'Reducción de bloqueo operativo o dependencia crítica.' : (r.impact || r.expectedImpact || r.benefit || '')
   }));
 
   problems.slice(0,5).forEach((p, i) => addImprovement({
-    title: `Mejora derivada de problema ${i + 1}`,
+    title: (typeof p === 'object' && (p.title || p.name)) ? (p.title || p.name) : 'Mejora derivada de problema ' + (i + 1),
     summary: 'Propuesta construida a partir de un problema relevante.',
-    problemSolved: typeof p === 'string' ? p : (p.problem || p.description || p.title || JSON.stringify(p)),
-    proposedState: typeof p === 'string' ? `Replantear la actividad o el control relacionado con: ${p}` : (p.action || p.description || p.title || ''),
+    problemSolved: typeof p === 'string' ? p : (p.problem || p.description || p.summary || p.title || JSON.stringify(p)),
+    proposedState: typeof p === 'string' ? 'Replantear la actividad o el control relacionado con: ' + p : (p.action || p.proposedState || p.description || p.title || ''),
     technicalRationale: 'Resolver este problema reduce fricción, retrabajo o demoras.',
-    expectedImpact: typeof p === 'string' ? 'Mejora del desempeño operativo del proceso.' : (p.impact || p.expectedImpact || '')
+    expectedImpact: typeof p === 'string' ? 'Mejora del desempeño operativo del proceso.' : (p.impact || p.expectedImpact || p.benefit || '')
   }));
 
   renderImprovements();
-  showMsg('tobeMsg','ok','Se generaron mejoras a partir del análisis.');
+  if(state.tobe.improvements.length){
+    showMsg('tobeMsg','ok','Se generaron propuestas desde quick wins, restricciones y problemas del análisis.');
+  }else{
+    showMsg('tobeMsg','warn','No se detectaron quick wins, restricciones, problemas ni mejoras en el análisis procesado.');
+  }
 }
 
 function saveToBeAndContinue(){
@@ -7770,7 +7764,7 @@ function renderAllFromState(){
   if(state.master){ qs('masterEditor').value = JSON.stringify(state.master, null, 2); qs('masterPreview').textContent = JSON.stringify(state.master, null, 2); }
   renderAsIsActivities();
   renderAnalysisFromState();
-  if(state.decision.route) setDecisionRoute(state.decision.route);
+  if(state.decision.route) setDecisionRoute(state.decision.route, false);
   renderImprovements();
   if(state.results.sbJson){
     qs('sbJsonView').textContent = JSON.stringify(state.results.sbJson, null, 2);
