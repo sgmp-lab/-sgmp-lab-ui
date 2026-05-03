@@ -6006,8 +6006,14 @@ function evaluateAnalysisCompleteness(data){
   const acts = safeArray(
     data.as_is?.activities ||
     data.asIs?.activities ||
+    data.as_is_activities ||
+    data.required_ai_output?.as_is_activities ||
     data.activities ||
+    data.sipoc?.activities ||
+    data.sipoc?.process ||
+    data.sipoc_input?.activities ||
     data.sb_contract?.sipoc_input?.activities ||
+    data.integration_input?.activities ||
     []
   );
 
@@ -6017,7 +6023,6 @@ function evaluateAnalysisCompleteness(data){
 
   return issues;
 }
-
 function renderAnalysisValidation(){
   const raw = state.analysisRun?.raw || state.analysis?.raw || null;
   const issues = evaluateAnalysisCompleteness(raw);
