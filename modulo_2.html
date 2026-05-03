@@ -1031,7 +1031,23 @@ body{font-size:14px !important}
 }
 @keyframes sgmpSpin{to{transform:rotate(360deg)}}
 .sgmp-v3-loader-title{font-weight:900;font-size:16px;margin-bottom:4px;color:#073B5A;}
-.sgmp-v3-loader-msg{font-size:13px;color:#28799A;}
+.sgmp-v3-loader-msg{font-size:13px;color:#28799A;line-height:1.45;}
+.sgmp-v3-loader-detail{
+  margin-top:10px; padding:9px 11px; border-radius:12px;
+  background:#F0F9FF; border:1px solid #BAE6FD; color:#075985;
+  font-size:12px; line-height:1.4; text-align:left;
+}
+.sgmp-v3-loader-progress{
+  margin-top:12px; height:8px; border-radius:999px; overflow:hidden;
+  background:#E0F2FE; border:1px solid #BAE6FD;
+}
+.sgmp-v3-loader-progress span{
+  display:block; width:38%; height:100%; border-radius:999px;
+  background:linear-gradient(90deg,#0EA5E9,#7DD3FC);
+  animation:sgmpProgress 1.15s ease-in-out infinite alternate;
+}
+@keyframes sgmpProgress{from{transform:translateX(-35%)}to{transform:translateX(185%)}}
+body.sgmp-v3-processing .sgmp-v3-no-lock{pointer-events:auto!important;opacity:1!important;}
 #sgmp_v3_timer{
   position:fixed; right:18px; bottom:18px; z-index:9998;
   min-width:220px; border-radius:18px; padding:12px 14px;
@@ -1042,6 +1058,17 @@ body{font-size:14px !important}
 #sgmp_v3_timer strong{display:block;font-size:12px;color:#073B5A;margin-bottom:4px;}
 #sgmp_v3_timer .sgmp-time-main{font-size:19px;font-weight:900;letter-spacing:.04em;color:#0284C7;line-height:1.1;}
 #sgmp_v3_timer .sgmp-time-stage{margin-top:5px;color:#5B6F8A;font-size:11px;}
+#sgmp_v3_timer .sgmp-time-grid{margin-top:9px;display:grid;grid-template-columns:1fr;gap:5px;}
+#sgmp_v3_timer .sgmp-time-row{display:flex;justify-content:space-between;gap:8px;border-top:1px solid rgba(14,165,233,.16);padding-top:5px;font-size:11px;}
+#sgmp_v3_timer .sgmp-time-row span:first-child{font-weight:800;color:#075985;}
+#sgmp_v3_timer .sgmp-time-row span:last-child{font-family:Consolas,monospace;color:#0A1F44;}
+.sgmp-timing-report{margin-top:12px;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:12px;padding:12px 14px;color:#075985;font-size:12px;}
+.sgmp-timing-report h3{font-size:13px;margin:0 0 8px;color:#0369A1;}
+.sgmp-timing-report table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;}
+.sgmp-timing-report th,.sgmp-timing-report td{padding:7px 8px;border-bottom:1px solid #E0F2FE;font-size:12px;text-align:left;}
+.sgmp-timing-report th{background:#E0F2FE;color:#075985;font-size:11px;text-transform:uppercase;letter-spacing:.03em;}
+.sgmp-timing-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+
 body.sgmp-v3-processing button:not(.sgmp-v3-allow),
 body.sgmp-v3-processing input,
 body.sgmp-v3-processing textarea,
@@ -2736,7 +2763,8 @@ function renderOutReport() {
     </div>
     <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 13px;font-size:12px;color:#166534">
       <strong>Importar en draw.io:</strong> Extras &rarr; Edit Diagram &rarr; pega el XML &rarr; Cerrar. Usa Ctrl+Shift+H para ajustar la vista.
-    </div>`;
+    </div>
+    ${window.sgmpV3TimingReportHTML ? window.sgmpV3TimingReportHTML() : ''}`;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3039,15 +3067,21 @@ async function runStageWithAPI(stageCode) {
   }
   await sgmpV3Execute(stageCode, async function(){
     sgmpLogEvent('SB_API_STAGE_START', { stage_code: stageCode, mode: mode });
+    sgmpV3UpdateLoader('Conectando con la IA...', 'Etapa: ' + meta.label + ' · Modo: ' + mode + '. Preparando prompt.');
+    await sgmpV3TinyPause();
+    sgmpV3UpdateLoader('Procesando ' + meta.label + '...', 'Enviando prompt al backend SGMP. No cierres esta ventana.');
     const result = await sbCallAI(stageCode, prompt);
+    sgmpV3UpdateLoader('Validando respuesta de IA...', 'Revisando XML antes de permitir continuar.');
     const text = sbAIResultText(result).trim();
     if (!text) throw new Error('La IA no devolvió contenido utilizable.');
     outEl.value = text;
     const valid = validateXML(meta.outputId, meta.validatorId);
     if (!valid) {
       sgmpLogEvent('SB_API_STAGE_INVALID_XML', { stage_code: stageCode, mode: mode });
+      sgmpV3UpdateLoader('Respuesta inválida', 'La respuesta no pasó validación. Se conserva modo manual.');
       throw new Error('La respuesta de IA no pasó validación XML. Usa modo manual.');
     }
+    sgmpV3UpdateLoader('Procesamiento completado', meta.label + ' ejecutada y validada correctamente.');
     sgmpLogEvent('SB_API_STAGE_OK', { stage_code: stageCode, mode: mode });
     gMsg('ok', meta.label + ' ejecutada con API y validada correctamente.');
   }, 'Conectando con la IA... ' + meta.label);
@@ -3170,24 +3204,32 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 
 
-<!-- SGMP v3 · FASE 0 · Loader y timer -->
+<!-- SGMP v3 · FASE 0-6 · Loader, timer por etapa y reporte -->
 <div id="sgmp_v3_loader" aria-live="polite" aria-busy="true">
   <div class="sgmp-v3-loader-card">
     <div class="sgmp-v3-spinner"></div>
-    <div class="sgmp-v3-loader-title">Procesando</div>
-    <div id="sgmp_v3_loader_msg" class="sgmp-v3-loader-msg">Conectando con la IA...</div>
+    <div id="sgmp_v3_loader_title" class="sgmp-v3-loader-title">Conectando con la IA</div>
+    <div id="sgmp_v3_loader_msg" class="sgmp-v3-loader-msg">Preparando ejecución API...</div>
+    <div id="sgmp_v3_loader_detail" class="sgmp-v3-loader-detail">No cierres esta ventana. Si la API falla, podrás continuar en modo manual.</div>
+    <div class="sgmp-v3-loader-progress"><span></span></div>
   </div>
 </div>
 <div id="sgmp_v3_timer">
   <strong>Tiempo de ejecución</strong>
   <div id="sgmp_v3_global_time" class="sgmp-time-main">00:00:00</div>
   <div id="sgmp_v3_stage_time" class="sgmp-time-stage">Etapa actual: —</div>
+  <div id="sgmp_v3_stage_grid" class="sgmp-time-grid">
+    <div class="sgmp-time-row"><span>F1</span><span id="sgmp_v3_time_sb_f1">00:00:00</span></div>
+    <div class="sgmp-time-row"><span>F2</span><span id="sgmp_v3_time_sb_f2">00:00:00</span></div>
+    <div class="sgmp-time-row"><span>F3</span><span id="sgmp_v3_time_sb_f3">00:00:00</span></div>
+    <div class="sgmp-time-row"><span>F4</span><span id="sgmp_v3_time_sb_f4">00:00:00</span></div>
+  </div>
 </div>
 
 <script>
 
 // ═══════════════════════════════════════════════════════════════
-// SGMP v3 · FASE 0-2 · Capa no destructiva + contrato único sipoc_input
+// SGMP v3 · FASE 0-6 · Capa no destructiva + loader/control/timer/reporte
 // ═══════════════════════════════════════════════════════════════
 (function(){
   if (window.SGMP_SB3_FASE0_LOADED) return;
@@ -3199,7 +3241,7 @@ document.addEventListener('DOMContentLoaded', () => {
     inputKeys: ['SGMP_SB_INPUT', 'SGMP_LMP_TO_SB', 'SGMP_LMP_TO_SB_CONTRACT', 'sgmp_sb_payload'],
     handoffQueryParam: 'handoff_key',
     isProcessing: false,
-    timers: { globalStart:null, globalInterval:null, stageStarts:{}, stageElapsed:{} },
+    timers: { globalStart:null, globalInterval:null, stageStarts:{}, stageElapsed:{}, stageStatus:{}, stageLastError:{}, stageLabels:{ sb_f1:'F1', sb_f2:'F2', sb_f3:'F3', sb_f4:'F4' } },
     currentStage: '—'
   };
 
@@ -3212,10 +3254,27 @@ document.addEventListener('DOMContentLoaded', () => {
     return pad(h)+':'+pad(m)+':'+pad(s);
   }
 
+  window.sgmpV3TinyPause = function(){
+    return new Promise(function(resolve){ setTimeout(resolve, 120); });
+  };
+
+  window.sgmpV3StageLabel = function(stageCode){
+    var map = { sb_f1:'F1 · Verificación', sb_f2:'F2 · Flujo interno', sb_f3:'F3 · Entradas y salidas', sb_f4:'F4 · Optimización' };
+    return map[stageCode] || stageCode || '—';
+  };
+
+  window.sgmpV3UpdateLoader = function(message, detail, title){
+    var titleEl = document.getElementById('sgmp_v3_loader_title');
+    var msgEl = document.getElementById('sgmp_v3_loader_msg');
+    var detailEl = document.getElementById('sgmp_v3_loader_detail');
+    if (titleEl && title) titleEl.textContent = title;
+    if (msgEl) msgEl.textContent = message || 'Procesando...';
+    if (detailEl) detailEl.textContent = detail || 'No cierres esta ventana. Si la API falla, podrás continuar en modo manual.';
+  };
+
   window.sgmpV3ShowLoader = function(message){
     var loader = document.getElementById('sgmp_v3_loader');
-    var msg = document.getElementById('sgmp_v3_loader_msg');
-    if (msg) msg.textContent = message || 'Procesando...';
+    window.sgmpV3UpdateLoader(message || 'Conectando con la IA...', 'Bloqueando interacción mientras se ejecuta la llamada API.');
     if (loader) loader.classList.add('show');
     document.body.classList.add('sgmp-v3-processing');
   };
@@ -3226,63 +3285,179 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.remove('sgmp-v3-processing');
   };
 
+
+  window.sgmpV3UpdateStageTimerUI = function(stageCode){
+    var t = window.SGMP_SB3.timers;
+    var codes = ['sb_f1','sb_f2','sb_f3','sb_f4'];
+    codes.forEach(function(code){
+      var el = document.getElementById('sgmp_v3_time_' + code);
+      if (!el) return;
+      var ms = 0;
+      if (t.stageStarts[code]) ms = Date.now() - t.stageStarts[code];
+      else if (t.stageElapsed[code]) ms = t.stageElapsed[code];
+      el.textContent = fmt(ms);
+      var row = el.closest ? el.closest('.sgmp-time-row') : null;
+      if (row) row.title = (t.stageStatus[code] || 'pending') + (t.stageLastError[code] ? ' · ' + t.stageLastError[code] : '');
+    });
+    var stageEl = document.getElementById('sgmp_v3_stage_time');
+    if (stageEl && stageCode) {
+      var ms = t.stageStarts[stageCode] ? Date.now() - t.stageStarts[stageCode] : (t.stageElapsed[stageCode] || 0);
+      stageEl.textContent = 'Etapa actual: ' + window.sgmpV3StageLabel(stageCode) + ' · ' + fmt(ms);
+    }
+  };
+
+  window.sgmpV3RefreshTimersUI = function(){
+    var t = window.SGMP_SB3.timers;
+    var main = document.getElementById('sgmp_v3_global_time');
+    if (main) main.textContent = fmt(t.globalStart ? Date.now() - t.globalStart : 0);
+    window.sgmpV3UpdateStageTimerUI(window.SGMP_SB3.currentStage);
+  };
+
   window.sgmpV3StartGlobalTimer = function(){
     var t = window.SGMP_SB3.timers;
     if (!t.globalStart) t.globalStart = Date.now();
     if (t.globalInterval) return;
     t.globalInterval = setInterval(function(){
-      var main = document.getElementById('sgmp_v3_global_time');
-      if (main) main.textContent = fmt(Date.now() - t.globalStart);
+      window.sgmpV3RefreshTimersUI();
     }, 1000);
+    window.sgmpV3RefreshTimersUI();
   };
 
   window.sgmpV3StartStage = function(stageCode){
     window.sgmpV3StartGlobalTimer();
+    var t = window.SGMP_SB3.timers;
     window.SGMP_SB3.currentStage = stageCode || '—';
-    window.SGMP_SB3.timers.stageStarts[stageCode] = Date.now();
-    var el = document.getElementById('sgmp_v3_stage_time');
-    if (el) el.textContent = 'Etapa actual: ' + (stageCode || '—');
+    if (stageCode) {
+      t.stageStarts[stageCode] = Date.now();
+      t.stageStatus[stageCode] = 'running';
+      delete t.stageLastError[stageCode];
+    }
+    window.sgmpV3UpdateStageTimerUI(stageCode);
   };
 
-  window.sgmpV3StopStage = function(stageCode){
+  window.sgmpV3StopStage = function(stageCode, status, errorMessage){
     var t = window.SGMP_SB3.timers;
     if (stageCode && t.stageStarts[stageCode]) {
       t.stageElapsed[stageCode] = Date.now() - t.stageStarts[stageCode];
       delete t.stageStarts[stageCode];
     }
+    if (stageCode) {
+      t.stageStatus[stageCode] = status || t.stageStatus[stageCode] || 'completed';
+      if (errorMessage) t.stageLastError[stageCode] = String(errorMessage);
+    }
     var el = document.getElementById('sgmp_v3_stage_time');
-    if (el) el.textContent = 'Etapa finalizada: ' + (stageCode || '—');
+    if (el) el.textContent = 'Etapa finalizada: ' + window.sgmpV3StageLabel(stageCode || '—') + ' · ' + fmt(t.stageElapsed[stageCode] || 0);
+    window.sgmpV3UpdateStageTimerUI(stageCode);
   };
 
   window.sgmpV3TimingReport = function(){
     var t = window.SGMP_SB3.timers;
+    var codes = ['sb_f1','sb_f2','sb_f3','sb_f4'];
+    var totalMs = t.globalStart ? Date.now() - t.globalStart : 0;
+    var stagesMs = {};
+    var stages = {};
+    var detail = {};
+    codes.forEach(function(code){
+      var ms = t.stageStarts[code] ? Date.now() - t.stageStarts[code] : (t.stageElapsed[code] || 0);
+      stagesMs[code] = ms;
+      stages[code] = fmt(ms);
+      detail[code] = {
+        label: window.sgmpV3StageLabel(code),
+        time_ms: ms,
+        time: fmt(ms),
+        status: t.stageStatus[code] || 'pending',
+        error: t.stageLastError[code] || ''
+      };
+    });
     return {
-      total_time_ms: t.globalStart ? Date.now() - t.globalStart : 0,
-      total_time: t.globalStart ? fmt(Date.now() - t.globalStart) : '00:00:00',
-      stages_ms: Object.assign({}, t.stageElapsed),
-      stages: Object.keys(t.stageElapsed).reduce(function(acc,k){ acc[k]=fmt(t.stageElapsed[k]); return acc; }, {})
+      module_code: 'SB',
+      module_label: window.SGMP_SB3.moduleLabel || 'modulo_2',
+      generated_at: new Date().toISOString(),
+      total_time_ms: totalMs,
+      total_time: fmt(totalMs),
+      stages_ms: stagesMs,
+      stages: stages,
+      detail: detail
     };
+  };
+
+  window.sgmpV3TimingReportHTML = function(){
+    var report = window.sgmpV3TimingReport();
+    var rows = ['sb_f1','sb_f2','sb_f3','sb_f4'].map(function(code){
+      var d = report.detail[code];
+      return '<tr><td>'+ex(d.label)+'</td><td>'+ex(d.time)+'</td><td>'+ex(d.status)+'</td></tr>';
+    }).join('');
+    return '<div class="sgmp-timing-report">'+
+      '<h3>Reporte de tiempos SGMP v3</h3>'+
+      '<div class="sum-row"><strong>Total</strong><span>'+ex(report.total_time)+'</span></div>'+
+      '<table><thead><tr><th>Etapa</th><th>Tiempo</th><th>Estado</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+      '<div class="sgmp-timing-actions"><button type="button" class="sgmp-v3-allow" onclick="sgmpV3CopyTimingReport()">Copiar reporte</button><button type="button" class="sgmp-v3-allow" onclick="sgmpV3DownloadTimingReport()">Descargar reporte JSON</button></div>'+
+      '</div>';
+  };
+
+  window.sgmpV3CopyTimingReport = function(){
+    var text = JSON.stringify(window.sgmpV3TimingReport(), null, 2);
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(function(){ if(typeof gMsg==='function') gMsg('ok','Reporte de tiempos copiado.'); });
+    else if(typeof copyText==='function') copyText(text);
+  };
+
+  window.sgmpV3DownloadTimingReport = function(){
+    var text = JSON.stringify(window.sgmpV3TimingReport(), null, 2);
+    if (typeof dlText === 'function') dlText(text, 'sb_timing_report.json');
+  };
+
+
+  window.sgmpV3SetApiBusy = function(isBusy){
+    document.querySelectorAll('.sgmp-api-btn').forEach(function(btn){
+      if (!btn) return;
+      if (isBusy) {
+        btn.dataset.sgmpBusyPrevDisabled = btn.disabled ? '1' : '0';
+        btn.disabled = true;
+      } else {
+        var wasDisabled = btn.dataset.sgmpBusyPrevDisabled === '1';
+        delete btn.dataset.sgmpBusyPrevDisabled;
+        if (!wasDisabled) btn.disabled = false;
+      }
+    });
   };
 
   window.sgmpV3Execute = async function(stageCode, fn, message){
     if (window.SGMP_SB3.isProcessing) {
       if (typeof gMsg === 'function') gMsg('warn', 'Ya existe una ejecución en curso. Espera a que termine.');
-      return;
+      return { ok:false, skipped:true, reason:'processing' };
     }
     window.SGMP_SB3.isProcessing = true;
-    window.sgmpV3ShowLoader(message || 'Procesando etapa ' + stageCode + '...');
+    window.sgmpV3SetApiBusy(true);
+    var stageLabel = window.sgmpV3StageLabel(stageCode);
+    window.sgmpV3ShowLoader(message || 'Procesando ' + stageLabel + '...');
+    window.sgmpV3UpdateLoader('Conectando con la IA...', 'Etapa: ' + stageLabel + '. No cierres esta ventana.', 'Conectando con la IA');
     window.sgmpV3StartStage(stageCode);
-    try { return await fn(); }
+    var executionError = null;
+    try {
+      var result = await fn();
+      window.sgmpV3StopStage(stageCode, 'completed');
+      return { ok:true, result:result };
+    }
     catch(e){
+      executionError = e;
       console.error('[SGMP SB3]', e);
+      try { if (typeof sgmpLogEvent === 'function') sgmpLogEvent('SB_API_STAGE_ERROR', { stage_code: stageCode, message: String(e && e.message || e) }); } catch(_e) {}
       if (typeof gMsg === 'function') gMsg('err', 'Error en ' + stageCode + '. Puedes continuar en modo manual.');
-      throw e;
+      window.sgmpV3UpdateLoader('Error en la ejecución API', 'La etapa no se aplicó automáticamente. Continúa con copiar prompt, IA externa, pegar respuesta y validar.', 'Fallback manual disponible');
+      return { ok:false, error:e };
     } finally {
-      window.sgmpV3StopStage(stageCode);
-      window.sgmpV3HideLoader();
+      if (stageCode && window.SGMP_SB3.timers.stageStarts[stageCode]) {
+        window.sgmpV3StopStage(stageCode, executionError ? 'error' : 'completed', executionError && executionError.message ? executionError.message : '');
+      }
+      setTimeout(window.sgmpV3HideLoader, 350);
+      window.sgmpV3SetApiBusy(false);
       window.SGMP_SB3.isProcessing = false;
+      window.sgmpV3RefreshTimersUI();
     }
   };
+
+  // Alias estándar de ejecución SB v3: una sola compuerta para API/HYBRID.
+  window.sbExecute = window.sgmpV3Execute;
 
   window.sgmpV3NormalizeInput = function(data){
     if (!data || typeof data !== 'object') throw new Error('Input vacío o inválido.');
