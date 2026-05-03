@@ -6109,9 +6109,22 @@ function renderBriefValidation(){
 
 function evaluateAnalysisCompleteness(data){
   const issues = [];
-  if(!data) return ['No existe análisis procesado.'];
+  if(!data && !state.analysis && !state.asis?.activities?.length && !state.master){
+    return ['No existe análisis procesado.'];
+  }
 
-  const acts = extractAsIsActivitiesFromPayload(data);
+  const candidates = [
+    data,
+    state.analysis?.raw,
+    state.analysis,
+    state.analysisRun?.raw,
+    state.master,
+    state.master?.sb_contract,
+    state.master?.sb_contract?.sipoc_input,
+    { activities: state.asis?.activities || [] },
+    state.briefReview?.raw
+  ];
+  const acts = candidates.flatMap(candidate => extractAsIsActivitiesFromPayload(candidate));
 
   if(!acts.length) {
     issues.push('No se detectaron actividades AS IS.');
@@ -6120,7 +6133,7 @@ function evaluateAnalysisCompleteness(data){
   return issues;
 }
 function renderAnalysisValidation(){
-  const raw = state.analysisRun?.raw || state.analysis?.raw || null;
+  const raw = state.analysisRun?.raw || state.analysis?.raw || state.analysis || state.master || (state.asis?.activities?.length ? { activities: state.asis.activities } : null);
   const issues = evaluateAnalysisCompleteness(raw);
   const msgId = 'analysisValidationMsg';
   if(!raw){ showMsg(msgId,'warn','Estado: análisis incompleto. Aún no se ha procesado un JSON maestro.'); return issues; }
@@ -7559,6 +7572,7 @@ function applyIAResponseAndContinue(){
     showMsg('iaMsg','warn','Procesa primero el análisis maestro.');
     return;
   }
+  hydrateAsIsFromMaster();
   const analysisIssues = renderAnalysisValidation();
   if(analysisIssues.length){
     showMsg('iaMsg','warn','No puedes aplicar al LMP mientras el análisis siga incompleto.');
