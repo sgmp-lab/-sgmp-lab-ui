@@ -5896,7 +5896,11 @@ function copyTextFromId(id,msgId,okMsg){
 function normalizeBriefPayload(parsed){
   const source = (parsed && typeof parsed === 'object') ? parsed : {};
   const b = (source.brief && typeof source.brief === 'object') ? source.brief : source;
-  const summarySource = Object.assign({}, source.summary || {}, b.summary || {});
+  const summarySource = Object.assign(
+    {},
+    (source.summary && typeof source.summary === 'object' && !Array.isArray(source.summary)) ? source.summary : {},
+    (b.summary && typeof b.summary === 'object' && !Array.isArray(b.summary)) ? b.summary : {}
+  );
   const sipocPre = Object.assign({}, source.sipoc_preliminary || {}, source.sipocPreliminary || {}, b.sipoc_preliminary || {}, b.sipocPreliminary || {});
   const sipocSource = Object.assign({}, source.sipoc || {}, b.sipoc || {});
   const context = Object.assign({}, state.context || {}, source.context || {}, b.context || {});
@@ -5907,6 +5911,36 @@ function normalizeBriefPayload(parsed){
     if(typeof value === 'object') return Object.keys(value).length > 0;
     return String(value).trim() !== '';
   });
+
+  const deepFind = (root, aliases) => {
+    const wanted = new Set(aliases.map(alias => String(alias).toLowerCase()));
+    const seen = new Set();
+    const walk = (value) => {
+      if(value === undefined || value === null) return undefined;
+      if(typeof value !== 'object') return undefined;
+      if(seen.has(value)) return undefined;
+      seen.add(value);
+      if(Array.isArray(value)){
+        for(const item of value){
+          const found = walk(item);
+          if(found !== undefined && found !== null && String(found).trim() !== '') return found;
+        }
+        return undefined;
+      }
+      for(const key of Object.keys(value)){
+        if(wanted.has(String(key).toLowerCase())){
+          const candidate = value[key];
+          if(candidate !== undefined && candidate !== null && (!Array.isArray(candidate) || candidate.length) && (typeof candidate === 'object' || String(candidate).trim() !== '')) return candidate;
+        }
+      }
+      for(const key of Object.keys(value)){
+        const found = walk(value[key]);
+        if(found !== undefined && found !== null && (typeof found === 'object' || String(found).trim() !== '')) return found;
+      }
+      return undefined;
+    };
+    return walk(root);
+  };
 
   const itemText = (value) => {
     if(value === undefined || value === null) return '';
@@ -5931,29 +5965,54 @@ function normalizeBriefPayload(parsed){
 
   const executiveSummary = firstFilled(
     summarySource.executiveSummary,
+    summarySource.executive_summary,
+    summarySource.resumenEjecutivo,
+    summarySource.resumen_ejecutivo,
     b.executiveSummary,
-    source.executiveSummary
+    b.executive_summary,
+    b.resumenEjecutivo,
+    b.resumen_ejecutivo,
+    source.executiveSummary,
+    source.executive_summary,
+    source.resumenEjecutivo,
+    source.resumen_ejecutivo,
+    (typeof b.summary === 'string' ? b.summary : ''),
+    (typeof source.summary === 'string' ? source.summary : ''),
+    deepFind(source, ['executiveSummary','executive_summary','resumenEjecutivo','resumen_ejecutivo'])
   );
   const purposeSummary = firstFilled(
     summarySource.purposeSummary,
+    summarySource.purpose_summary,
+    summarySource.processPurpose,
+    summarySource.process_purpose,
+    summarySource.finalidad,
     b.processPurpose,
+    b.process_purpose,
     source.processPurpose,
+    source.process_purpose,
     b.purposeSummary,
+    b.purpose_summary,
     source.purposeSummary,
-    context.purpose
+    source.purpose_summary,
+    b.purpose,
+    source.purpose,
+    context.purpose,
+    deepFind(source, ['purposeSummary','purpose_summary','processPurpose','process_purpose','purpose','finalidad','proposito','propósito'])
   );
 
   const activitiesPreliminary = mergeArray(
     b.activities_preliminary,
     b.activitiesPreliminary,
     source.activities_preliminary,
-    source.activitiesPreliminary
+    source.activitiesPreliminary,
+    deepFind(source, ['activities_preliminary','activitiesPreliminary'])
   );
   const asIsActivities = mergeArray(
     b.as_is?.activities,
     b.asIs?.activities,
     source.as_is?.activities,
-    source.asIs?.activities
+    source.asIs?.activities,
+    deepFind(source, ['as_is_activities','asIsActivities'])
   );
 
   return {
@@ -5963,16 +6022,16 @@ function normalizeBriefPayload(parsed){
       expectedResult: asString(firstFilled(summarySource.expectedResult, b.expectedResult, source.expectedResult, summarySource.expected_result, b.expected_result, source.expected_result)),
       trigger: asString(firstFilled(summarySource.trigger, b.trigger, source.trigger, summarySource.startEvent, b.startEvent, source.startEvent)),
       closure: asString(firstFilled(summarySource.closure, b.closure, source.closure, summarySource.endEvent, b.endEvent, source.endEvent)),
-      flowSummary: asString(firstFilled(summarySource.flowSummary, b.flowSummary, source.flowSummary, sipocPre.process, sipocSource.process))
+      flowSummary: asString(firstFilled(summarySource.flowSummary, summarySource.flow_summary, b.flowSummary, b.flow_summary, source.flowSummary, source.flow_summary, sipocPre.process, sipocSource.process))
     },
     sipoc: {
-      suppliers: asString(firstFilled(sipocPre.suppliers, sipocSource.suppliers, b.suppliers, source.suppliers)),
-      inputs: asString(firstFilled(sipocPre.inputs, sipocSource.inputs, b.inputs, source.inputs)),
-      process: asString(firstFilled(sipocPre.process, sipocSource.process, b.process, source.process)),
-      outputs: asString(firstFilled(sipocPre.outputs, sipocSource.outputs, b.outputs, source.outputs)),
-      customers: asString(firstFilled(sipocPre.customers, sipocSource.customers, b.customers, source.customers)),
-      actors: asString(firstFilled(b.actors, source.actors, sipocSource.actors, sipocPre.actors)),
-      documentsSystems: mergeText(b.documents, source.documents, b.systems, source.systems, sipocSource.documents, sipocSource.systems, sipocSource.documentsSystems)
+      suppliers: asString(firstFilled(sipocPre.suppliers, sipocPre.proveedores, sipocSource.suppliers, sipocSource.proveedores, b.suppliers, source.suppliers)),
+      inputs: asString(firstFilled(sipocPre.inputs, sipocPre.entradas, sipocSource.inputs, sipocSource.entradas, b.inputs, source.inputs)),
+      process: asString(firstFilled(sipocPre.process, sipocPre.proceso, sipocSource.process, sipocSource.proceso, b.process, source.process)),
+      outputs: asString(firstFilled(sipocPre.outputs, sipocPre.salidas, sipocSource.outputs, sipocSource.salidas, b.outputs, source.outputs)),
+      customers: asString(firstFilled(sipocPre.customers, sipocPre.clientes, sipocSource.customers, sipocSource.clientes, b.customers, source.customers)),
+      actors: asString(firstFilled(b.actors, b.actores, source.actors, source.actores, sipocSource.actors, sipocSource.actores, sipocPre.actors, sipocPre.actores, deepFind(source, ['actors','actores']))),
+      documentsSystems: mergeText(b.documents, source.documents, b.documentos, source.documentos, b.systems, source.systems, b.sistemas, source.sistemas, sipocSource.documents, sipocSource.documentos, sipocSource.systems, sipocSource.sistemas, sipocSource.documentsSystems)
     },
     activities_preliminary: activitiesPreliminary,
     as_is: {
@@ -6299,7 +6358,17 @@ function approveBriefAndUnlockAnalysis(){
   if(!rawText){ showMsg('briefIaMsg','warn','No hay Brief para aprobar.'); return; }
   try{
     const parsed = JSON.parse(rawText);
-    const normalized = normalizeBriefPayload(parsed);
+    let normalized = normalizeBriefPayload(parsed);
+    const responseRawText = qs('briefResponseEditor')?.value.trim() || '';
+    if(!String(normalized.summary?.executiveSummary || '').trim() && responseRawText){
+      try{
+        const responseParsed = extractJsonFromText(responseRawText);
+        const responseNormalized = normalizeBriefPayload(responseParsed);
+        if(String(responseNormalized.summary?.executiveSummary || '').trim()){
+          normalized = responseNormalized;
+        }
+      }catch(_){ }
+    }
     const issues = evaluateBriefCompleteness(normalized);
     console.log('[SGMP][BRIEF] parsed', parsed);
     console.log('[SGMP][BRIEF] normalized', normalized);
