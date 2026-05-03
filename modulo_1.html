@@ -4504,6 +4504,14 @@ function addImprovement(data = {}){
     customText: data.customText || data.custom_text || data.adjustedState || data.adjusted_state || ''
   };
 
+  if((!improvement.title || improvement.title === 'Mejora propuesta') && (improvement.problem || improvement.proposedState || improvement.impact)){
+    const titleSeed = improvement.problem || improvement.proposedState || improvement.impact;
+    improvement.title = titleSeed.length > 90 ? titleSeed.slice(0, 87) + '...' : titleSeed;
+  }
+  if(!improvement.summary) improvement.summary = improvement.problem || improvement.proposedState || improvement.impact || 'Revisa la propuesta y registra una decisión.';
+  if(!improvement.currentState) improvement.currentState = improvement.problem || '';
+  if(!improvement.proposedState) improvement.proposedState = improvement.problem ? 'Implementar una acción de mejora para resolver: ' + improvement.problem : (improvement.impact || improvement.title);
+  if(!improvement.impact) improvement.impact = data.expected_benefit || data.expectedBenefit || 'Impacto esperado por validar';
   state.tobe.improvements.push(improvement);
   renderImprovements();
   updateTopStatus();
@@ -7212,8 +7220,39 @@ function extractAsIsActivitiesFromPayload(payload){
   }
   return [];
 }
-function normalizeImprovement(item){
-  return { title:item.title||item.name||item.titulo||'Mejora propuesta', summary:item.problem||item.problema||'', problem:item.problem||item.problema||'', currentState:item.currentState||item.as_is||item.estado_actual||'', proposedState:item.proposedState||item.to_be||item.estado_propuesto||'', support:[item.support||item.sustento||item.justification||'', item.source||item.reference||item.fuente||''].filter(Boolean).join(' | '), impact:item.impact||item.impacto||'', justification:[item.support||item.sustento||item.justification||'', item.source||item.reference||item.fuente||'', item.impact||item.impacto||''].filter(Boolean).join(' | '), status:(item.status==='adjust'?'custom':item.status==='discard'?'reject':(item.status||'pending')), customText:item.customText||item.adjustedState||'' };
+function normalizeImprovement(item = {}){
+  const firstText = (...values) => values.map(value => {
+    if(value === undefined || value === null) return '';
+    if(Array.isArray(value)) return value.map(v => typeof v === 'string' ? v : JSON.stringify(v)).filter(Boolean).join('; ');
+    if(typeof value === 'object') return value.title || value.name || value.problem || value.description || value.summary || JSON.stringify(value);
+    return String(value);
+  }).map(value => value.trim()).find(Boolean) || '';
+
+  const problem = firstText(item.problem, item.problem_to_solve, item.problemSolved, item.problem_solved, item.relatedProblem, item.related_problem, item.problema, item.restriction, item.description, item.summary);
+  const proposedState = firstText(item.proposedState, item.proposed_state, item.to_be, item.toBeState, item.to_be_state, item.action, item.recommendation, item.solution, item.description);
+  const impact = firstText(item.impact, item.impacto, item.expectedImpact, item.expected_impact, item.expectedBenefit, item.expected_benefit, item.benefit);
+  const support = [
+    firstText(item.support, item.sustento, item.justification, item.justificacion, item.technicalRationale, item.technical_rationale, item.evidence),
+    firstText(item.source, item.reference, item.fuente, item.improvementType, item.improvement_type, item.type)
+  ].filter(Boolean).join(' | ');
+  const titleBase = firstText(item.title, item.name, item.titulo, item.improvementTitle, item.improvement_title, item.improvementType, item.improvement_type, problem, proposedState, impact);
+  const title = titleBase && titleBase !== 'Mejora propuesta'
+    ? (titleBase.length > 90 ? titleBase.slice(0, 87) + '...' : titleBase)
+    : 'Mejora propuesta';
+  const finalProposed = proposedState || (problem ? 'Implementar una acción de mejora para resolver: ' + problem : impact || title);
+
+  return {
+    title,
+    summary: firstText(item.summary, item.description, item.technicalRationale, item.technical_rationale, impact, problem),
+    problem,
+    currentState: firstText(item.currentState, item.current_state, item.as_is, item.asIsState, item.as_is_state, problem),
+    proposedState: finalProposed,
+    support,
+    impact,
+    justification: [support, impact].filter(Boolean).join(' | '),
+    status: (item.status === 'adjust' ? 'custom' : item.status === 'discard' ? 'reject' : (item.status || 'pending')),
+    customText: item.customText || item.custom_text || item.adjustedState || item.adjusted_state || ''
+  };
 }
 
 function firstObject(...items){
@@ -7583,8 +7622,9 @@ function renderAnalysisFromState(){
 
   const wastes = toArray(findings.wastes || data.wastes || []);
   const problems = toArray(findings.problems || data.problems || []);
-  const quickWins = toArray(findings.quickWins || data.quickWins || []);
+  const quickWins = toArray(findings.quickWins || findings.quick_wins || data.quickWins || []);
   const restrictions = toArray(findings.restrictions || findings.constraints || data.restrictions || data.constraints || []);
+  const improvements = toArray(data.improvements || state.analysis?.improvements || []);
 
   if(qs('avaKpi')) qs('avaKpi').textContent = `${VA_pct}%`;
   if(qs('nnvaKpi')) qs('nnvaKpi').textContent = `${NNVA_pct}%`;
@@ -7598,7 +7638,9 @@ function renderAnalysisFromState(){
 
   if(qs('qwrBox')){
     qs('qwrBox').textContent =
-      `Quick wins:\n${fmtList(quickWins)}\n\nRestricciones:\n${fmtList(restrictions)}`;
+      'Quick wins:\n' + fmtList(quickWins) +
+      '\n\nRestricciones:\n' + fmtList(restrictions) +
+      '\n\nMejoras detectadas:\n' + fmtList(improvements);
   }
 }
 
@@ -7701,6 +7743,10 @@ function seedImprovementsFromAnalysis(){
   }
 
   const sourceImprovements = [
+    ...toArray(data.raw_original?.improvements),
+    ...toArray(data.raw_original?.mejoras),
+    ...toArray(data.raw_original?.to_be?.improvements),
+    ...toArray(data.raw_original?.toBe?.improvements),
     ...toArray(data.improvements),
     ...toArray(analysis.improvements),
     ...toArray(data.to_be?.improvements),
@@ -7708,9 +7754,33 @@ function seedImprovementsFromAnalysis(){
     ...toArray(data.to_be?.improvement_candidates),
     ...toArray(data.improvement_candidates)
   ];
+  const usefulSourceImprovements = sourceImprovements.filter(item => {
+    if(!item) return false;
+    if(typeof item === 'string') return item.trim() && item.trim() !== 'Mejora propuesta';
+    return [
+      item.title,
+      item.name,
+      item.problem,
+      item.problem_to_solve,
+      item.problemSolved,
+      item.description,
+      item.summary,
+      item.proposedState,
+      item.proposed_state,
+      item.action,
+      item.recommendation,
+      item.expected_benefit,
+      item.expectedBenefit,
+      item.impact,
+      item.expected_impact
+    ].some(value => {
+      const text = String(value || '').trim();
+      return text && text !== 'Mejora propuesta';
+    });
+  });
 
-  if(sourceImprovements.length){
-    sourceImprovements.forEach(item => addImprovement(item));
+  if(usefulSourceImprovements.length){
+    usefulSourceImprovements.forEach(item => addImprovement(item));
     renderImprovements();
     showMsg('tobeMsg','ok','Se cargaron mejoras detectadas por la IA.');
     return;
