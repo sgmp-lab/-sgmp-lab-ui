@@ -5182,11 +5182,29 @@ function buildExecutiveHtml(){
 }
 
 function buildExecutiveSummary(){
-  const p1 = getBriefPayload()?.summary?.flowSummary || '';
-  const p2 = state.analysis ? `El proceso presenta ${state.analysis.summary.problemsCount} problema(s) identificados, ${state.analysis.summary.quickWinsCount} quick win(s) y ${state.analysis.summary.constraintsCount} restricción(es).` : '';
+  const analysis = state.analysis || {};
+  const raw = analysis.raw || {};
+  const findings = raw.findings || analysis.findings || {};
+  const toArray = (value) => {
+    if(Array.isArray(value)) return value;
+    if(value === undefined || value === null || value === '') return [];
+    return [value];
+  };
+  const countOf = (summaryKey, ...values) => {
+    const summaryValue = analysis.summary && Number(analysis.summary[summaryKey]);
+    if(Number.isFinite(summaryValue)) return summaryValue;
+    return values.reduce((total, value) => total + toArray(value).length, 0);
+  };
+
+  const p1 = getBriefPayload()?.summary?.flowSummary || getBriefPayload()?.summary?.executiveSummary || '';
+  const problemsCount = countOf('problemsCount', analysis.problems, findings.problems, raw.problems);
+  const quickWinsCount = countOf('quickWinsCount', analysis.quickWins, findings.quickWins, findings.quick_wins, raw.quickWins);
+  const constraintsCount = countOf('constraintsCount', analysis.constraints, findings.restrictions, findings.constraints, raw.restrictions, raw.constraints);
+  const p2 = state.analysis ? 'El proceso presenta ' + problemsCount + ' problema(s) identificados, ' + quickWinsCount + ' quick win(s) y ' + constraintsCount + ' restricción(es).' : '';
+  const selectedCount = (state.tobe?.improvements || []).filter(x => x.status === 'execute' || x.status === 'custom').length;
   const p3 = state.decision.route === 'tobe'
-    ? `Se avanzó a TO BE y se registraron ${state.tobe.improvements.filter(x => x.status === 'execute' || x.status === 'custom').length} mejora(s) seleccionadas.`
-    : `El proceso se cerró con AS IS sin avanzar a TO BE.`;
+    ? 'Se avanzó a TO BE y se registraron ' + selectedCount + ' mejora(s) seleccionadas.'
+    : 'El proceso se cerró con AS IS sin avanzar a TO BE.';
   return [p1,p2,p3].filter(Boolean).join('\n\n');
 }
 
