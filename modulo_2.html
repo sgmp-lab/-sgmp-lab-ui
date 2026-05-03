@@ -1053,7 +1053,6 @@ body.sgmp-v3-processing select{
   <script>
 // ── SGMP Session Guard ─────────────────────────────────────
 // Verifica sesión activa antes de cargar el módulo
-/*
 (function() {
   var SESSION_KEY = 'sgmp_session_v1';
   var LAUNCHER_URL = 'https://sgmp-lab.github.io/-sgmp-lab-ui/';
@@ -1083,7 +1082,6 @@ body.sgmp-v3-processing select{
   // Verificar inmediatamente
   checkSession();
 })();
-*/
 // ── Fin SGMP Session Guard ─────────────────────────────────
 
   </script>
@@ -1115,7 +1113,6 @@ body.sgmp-v3-processing select{
     </div>
     <div class="hdr-right sb-hero-actions">
       <button class="hdr-btn" onclick="switchTab('tab_manual')">Manual</button>
-      <button class="hdr-btn" onclick="switchTab('tab_config')">Config</button>
     </div>
   </div>
 </header>
@@ -1351,52 +1348,10 @@ body.sgmp-v3-processing select{
     </div>
   </div>
 </div>
-<!-- ═══════════════════════════════════ TAB CONFIG ═══════════════════════════════════ -->
-<div id="tab_config" class="tab-content hidden">
-  <div class="panel">
-    <h2 style="margin-bottom:14px">Configuraci&oacute;n</h2>
-    <div class="cfg-sec">
-      <h3>Etiquetas de zonas SIPOC</h3>
-      <div class="g3">
-        <div class="field"><label>Suppliers</label><input id="cfg_lbl_sup" value="SUPPLIERS"/></div>
-        <div class="field"><label>Inputs</label><input id="cfg_lbl_inp" value="INPUTS"/></div>
-        <div class="field"><label>Proceso</label><input id="cfg_lbl_proc" value="PROCESO"/></div>
-        <div class="field"><label>Outputs</label><input id="cfg_lbl_out" value="OUTPUTS"/></div>
-        <div class="field"><label>Customers</label><input id="cfg_lbl_cus" value="CUSTOMERS"/></div>
-      </div>
-    </div>
-    <div class="cfg-sec">
-      <h3>Colores de zonas</h3>
-      <div class="g3">
-        <div class="field"><label>Suppliers</label><input type="color" id="cfg_col_sup" value="#e07820" style="height:36px"/></div>
-        <div class="field"><label>Inputs</label><input type="color" id="cfg_col_inp" value="#38bdf8" style="height:36px"/></div>
-        <div class="field"><label>Proceso</label><input type="color" id="cfg_col_proc" value="#0ea5e9" style="height:36px"/></div>
-        <div class="field"><label>Outputs</label><input type="color" id="cfg_col_out" value="#2e8b44" style="height:36px"/></div>
-        <div class="field"><label>Customers</label><input type="color" id="cfg_col_cus" value="#c0306a" style="height:36px"/></div>
-      </div>
-    </div>
-    <div class="cfg-sec">
-      <h3>Editor de prompts</h3>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Deja vac&iacute;o para usar el prompt original. Los cambios se aplican al guardar.</p>
-      <div style="margin-bottom:8px"><label>Prompt 0</label><textarea id="cfg_p0" style="min-height:80px;font-size:11px;font-family:monospace" placeholder="Deja vac&iacute;o para usar el original..."></textarea></div>
-      <div style="margin-bottom:8px"><label>Prompt F1</label><textarea id="cfg_f1" style="min-height:80px;font-size:11px;font-family:monospace" placeholder="Deja vac&iacute;o para usar el original..."></textarea></div>
-      <div style="margin-bottom:8px"><label>Prompt F2</label><textarea id="cfg_f2" style="min-height:80px;font-size:11px;font-family:monospace" placeholder="Deja vac&iacute;o para usar el original..."></textarea></div>
-      <div style="margin-bottom:8px"><label>Prompt F3</label><textarea id="cfg_f3" style="min-height:80px;font-size:11px;font-family:monospace" placeholder="Deja vac&iacute;o para usar el original..."></textarea></div>
-      <div style="margin-bottom:8px"><label>Prompt optimizaci&oacute;n</label><textarea id="cfg_f4" style="min-height:80px;font-size:11px;font-family:monospace" placeholder="Deja vac&iacute;o para usar el original..."></textarea></div>
-      <div class="btn-row">
-        <button id="btn_save_cfg">Guardar prompts</button>
-        <button id="btn_reset_cfg">Restaurar originales</button>
-        <button class="ok" id="btn_export_cfg">Exportar config</button>
-        <input type="file" id="cfg_import_file" accept=".json" style="max-width:200px"/>
-        <button id="btn_import_cfg">Importar config</button>
-      </div>
-    </div>
-  </div>
-</div>
 <!-- ═══════════════════════════════════ TAB MANUAL ═══════════════════════════════════ -->
 <div id="tab_manual" class="tab-content hidden">
   <div class="panel">
-    <h2 style="margin-bottom:14px">Manual &mdash; SIPOC Builder v7.0</h2>
+    <h2 style="margin-bottom:14px">Manual &mdash; SIPOC Builder v3</h2>
     <div class="man-sec">
       <h3>Flujo de trabajo</h3>
       <ol>
@@ -1482,31 +1437,6 @@ body.sgmp-v3-processing select{
 
 
 
-<!-- ═══ LOGIN MODAL ═══ -->
-<div id="login_overlay" style="display:none;position:fixed;inset:0;background:rgba(15,25,45,.82);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(3px)">
-  <div style="background:#fff;border-radius:16px;padding:36px 40px;width:360px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <div style="text-align:center;margin-bottom:24px">
-      <div style="font-size:20px;margin-bottom:8px;font-weight:800">Config</div>
-      <h2 style="font-size:18px;color:#162033;margin-bottom:4px">SIPOC Builder</h2>
-      <p style="font-size:12px;color:#5a7090">Configuraci&oacute;n &mdash; Acceso restringido</p>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:12px">
-      <div>
-        <label style="font-size:10px;font-weight:700;color:#5a7090;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px">Usuario</label>
-        <input id="login_user" type="text" placeholder="Usuario" style="width:100%;padding:10px 12px;border:1px solid #d4dde8;border-radius:8px;font-size:14px;font-family:inherit" autocomplete="off"/>
-      </div>
-      <div>
-        <label style="font-size:10px;font-weight:700;color:#5a7090;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px">Clave</label>
-        <input id="login_pass" type="password" placeholder="Clave" style="width:100%;padding:10px 12px;border:1px solid #d4dde8;border-radius:8px;font-size:14px;font-family:inherit"/>
-      </div>
-      <div id="login_err" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:7px;padding:8px 12px;font-size:12px;color:#991b1b;text-align:center">
-        Usuario o clave incorrectos.
-      </div>
-      <button id="login_btn" style="margin-top:4px;padding:11px;background:#0ea5e9;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Ingresar</button>
-    </div>
-    <p style="font-size:10px;color:#9ab0c8;text-align:center;margin-top:18px">Piloto interno &mdash; acceso autorizado</p>
-  </div>
-</div>
 </div><!-- end .app --><script>
 
 // ══════════════════════════════════════════════════════
@@ -1515,6 +1445,8 @@ body.sgmp-v3-processing select{
 // ══════════════════════════════════════════════════════
 var SGMP_API = 'https://script.google.com/macros/s/AKfycbwGOvr8ypGtibCLQp66s1oowmYJQUCXBWJ5ZUoR3oFxwmy71VQfOsXFqv4cyT_7JjoS/exec';
 var SGMP_PROMPTS = {};
+var SGMP_CONTRACTS = {};
+var SGMP_EXECUTION_MODES = {};
 var SGMP_LOADED  = false;
 
 function sgmpLoadPrompts(moduleCode, onReady) {
@@ -1551,13 +1483,59 @@ function sgmpPrompt(key, fallback) {
   return (SGMP_PROMPTS[key] && SGMP_PROMPTS[key].trim()) ? SGMP_PROMPTS[key] : (fallback || '');
 }
 
-// Auth admin contra Sheet
-function sgmpAuthAdmin(username, password, onOk, onErr) {
-  var url = SGMP_API + '?action=auth_admin&username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password);
-  fetch(url).then(function(r){return r.json();}).then(function(res){
-    if (res.ok) { sessionStorage.setItem('sgmp_admin_token', res.data.token); onOk(res.data); }
-    else onErr(res.error || 'Credenciales incorrectas.');
-  }).catch(function(){ onErr('Error de conexión.'); });
+// Contratos gestionados desde SGMP Admin / Google Sheets.
+// Fallback silencioso: si Admin no responde, SB mantiene modo manual operativo.
+function sgmpGetContract(contractCode, onReady) {
+  fetch(SGMP_API + '?action=get_contract&contract_code=' + encodeURIComponent(contractCode))
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res && res.ok && res.data) {
+        SGMP_CONTRACTS[contractCode] = res.data;
+      }
+      if (typeof onReady === 'function') onReady(SGMP_CONTRACTS[contractCode] || null);
+    })
+    .catch(function() {
+      if (typeof onReady === 'function') onReady(null);
+    });
+}
+
+function sgmpGetExecutionMode(moduleCode, stageCode, onReady) {
+  var key = moduleCode + ':' + stageCode;
+  fetch(SGMP_API + '?action=get_execution_mode&module_code=' + encodeURIComponent(moduleCode) + '&stage_code=' + encodeURIComponent(stageCode))
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      var mode = 'MANUAL';
+      if (res && res.ok && res.data) {
+        mode = String(res.data.execution_mode || res.data.mode || 'MANUAL').toUpperCase();
+      }
+      SGMP_EXECUTION_MODES[key] = mode;
+      if (typeof onReady === 'function') onReady(mode);
+    })
+    .catch(function() {
+      SGMP_EXECUTION_MODES[key] = 'MANUAL';
+      if (typeof onReady === 'function') onReady('MANUAL');
+    });
+}
+
+function sgmpExecutionMode(stageCode) {
+  return SGMP_EXECUTION_MODES['SB:' + stageCode] || 'MANUAL';
+}
+
+function sgmpLogEvent(eventCode, detail) {
+  try {
+    var payload = {
+      action: 'log_event',
+      module_code: 'SB',
+      event_code: eventCode,
+      detail: detail || {},
+      ts: new Date().toISOString()
+    };
+    fetch(SGMP_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    }).catch(function(){});
+  } catch(e) {}
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2843,10 +2821,8 @@ ${args[0] || ''}`;
 }
 
 function getPrompt(key, ...args) {
-  // 1. Config manual del usuario (mayor prioridad)
-  var c = S.cfg.prompts[key];
-  if (c && c.trim()) return c;
-  // 2. Prompt del Sheet con variables reemplazadas
+  // SGMP v3: Admin / Google Sheets es la fuente oficial de prompts.
+  // Si no hay prompt publicado en Admin, se usa el prompt interno solo como fallback técnico.
   var sheetKey = 'prompt_' + key;
   var sheetPrompt = sgmpPrompt(sheetKey, '');
   if (sheetPrompt) {
@@ -2883,31 +2859,12 @@ function buildF3Prompt() { $('pf3_box').textContent = getPrompt('f3', S.xmlF2, S
 function buildF4Prompt() { $('pf4_box').textContent = getPrompt('f4', S.xmlF3, S.sp, S.idRef); }
 
 // ═══════════════════════════════════════════════════════════════
-// CONFIG
+// ADMIN GOVERNANCE
 // ═══════════════════════════════════════════════════════════════
-function saveCfg() {
-  ['lbl_sup','lbl_inp','lbl_proc','lbl_out','lbl_cus',
-   'col_sup','col_inp','col_proc','col_out','col_cus'].forEach(k => {
-    if ($('cfg_'+k)) S.cfg[k] = $('cfg_'+k).value;
-  });
-  ['p0','f1','f2','f3','f4'].forEach(k => { S.cfg.prompts[k] = $('cfg_'+k)?.value.trim()||''; });
-  gMsg('ok', 'Configuraci\u00f3n guardada.');
-}
-function resetCfg() {
-  ['p0','f1','f2','f3','f4'].forEach(k => { S.cfg.prompts[k]=''; if($('cfg_'+k)) $('cfg_'+k).value=''; });
-  gMsg('ok', 'Prompts restaurados a los originales.');
-}
-function exportCfg() { dlText(JSON.stringify(S.cfg, null, 2), 'sipoc_config.json'); }
-function importCfg() {
-  readFile($('cfg_import_file'), raw => {
-    try {
-      Object.assign(S.cfg, JSON.parse(raw));
-      ['lbl_sup','lbl_inp','lbl_proc','lbl_out','lbl_cus','col_sup','col_inp','col_proc','col_out','col_cus'].forEach(k=>{if($('cfg_'+k)&&S.cfg[k])$('cfg_'+k).value=S.cfg[k];});
-      ['p0','f1','f2','f3','f4'].forEach(k=>{if($('cfg_'+k)&&S.cfg.prompts[k])$('cfg_'+k).value=S.cfg.prompts[k];});
-      gMsg('ok', 'Configuraci\u00f3n importada.');
-    } catch(e) { gMsg('err', 'JSON inv\u00e1lido: '+e.message); }
-  });
-}
+function saveCfg() { gMsg('info', 'La configuración se administra desde SGMP Admin.'); }
+function resetCfg() { gMsg('info', 'La configuración se administra desde SGMP Admin.'); }
+function exportCfg() { gMsg('info', 'La configuración se administra desde SGMP Admin.'); }
+function importCfg() { gMsg('info', 'La configuración se administra desde SGMP Admin.'); }
 
 // ═══════════════════════════════════════════════════════════════
 // WIRE ALL EVENTS — called once on DOMContentLoaded
@@ -2915,68 +2872,15 @@ function importCfg() {
 document.addEventListener('DOMContentLoaded', () => {
 
   // Cargar prompts del Sheet al iniciar
-  sgmpLoadPrompts('SB', function() { /* prompts SB listos */ });
-
-  // ── CONFIG ACCESS CONTROL ─────────────────────────────────────
-  // Credenciales removidas - validación contra SGMP Sheet
-  
-  let cfgUnlocked = false;
-  // SGMP_API usa la variable global definida arriba
-
-  function attemptLogin() {
-    const u = $('login_user').value.trim();
-    const p = $('login_pass').value;
-    if (!u || !p) { $('login_err').style.display = 'block'; return; }
-    $('login_err').style.display = 'none';
-    // Validar contra SGMP Sheet
-    var url = SGMP_API + '?action=auth_admin&username=' + encodeURIComponent(u) + '&password=' + encodeURIComponent(p);
-    fetch(url).then(function(r){return r.json();}).then(function(res){
-      if (res.ok) {
-        sessionStorage.setItem('sgmp_admin_token', res.data.token);
-        $('login_overlay').style.display = 'none';
-        cfgUnlocked = true;
-        gMsg('ok', 'Acceso a Configuraci\u00f3n concedido.');
-      } else {
-        $('login_err').style.display = 'block';
-        $('login_pass').value = '';
-        $('login_pass').focus();
-      }
-    }).catch(function(){
-      $('login_err').style.display = 'block';
+  sgmpLoadPrompts('SB', function() { sgmpLogEvent('SB_PROMPTS_READY', { source: 'ADMIN_SHEET' }); });
+  sgmpGetContract('LMP_TO_SB', function(contract) { sgmpLogEvent('SB_CONTRACT_READY', { contract_code: 'LMP_TO_SB', loaded: !!contract }); });
+  ['sb_f1','sb_f2','sb_f3','sb_f4'].forEach(function(stageCode){
+    sgmpGetExecutionMode('SB', stageCode, function(mode){
+      sgmpLogEvent('SB_EXECUTION_MODE_READY', { stage_code: stageCode, mode: mode });
     });
-  }
-
-  $('login_btn').addEventListener('click', attemptLogin);
-  $('login_pass').addEventListener('keydown', e => { if (e.key === 'Enter') attemptLogin(); });
-  $('login_user').addEventListener('keydown', e => { if (e.key === 'Enter') $('login_pass').focus(); });
-
-  // Override switchTab to intercept Config access
-  const _switchTab = switchTab;
-  window.switchTab = function(id) {
-    if (id === 'tab_config' && !cfgUnlocked) {
-      $('login_overlay').style.display = 'flex';
-      $('login_user').value = '';
-      $('login_pass').value = '';
-      $('login_err').style.display = 'none';
-      setTimeout(() => $('login_user').focus(), 50);
-      return;
-    }
-    _switchTab(id);
-  };
-  // Also patch nav tab buttons that call switchTab inline
-  document.querySelectorAll('.nav-tab').forEach(btn => {
-    const tab = btn.getAttribute('data-tab');
-    if (tab === 'tab_config') {
-      btn.onclick = () => window.switchTab('tab_config');
-    }
   });
-  // Patch header config button
-  document.querySelectorAll('.hdr-btn').forEach(btn => {
-    if (btn.textContent.includes('Config')) {
-      btn.onclick = () => window.switchTab('tab_config');
-    }
-  });
-  // ── END ACCESS CONTROL ────────────────────────────────────────
+
+  // Configuración local eliminada. SB consume gobierno desde SGMP Admin.
 
 
   // Capture mode buttons
@@ -3033,10 +2937,6 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn_drawio').addEventListener('click', () => { window.open('https://app.diagrams.net/','_blank'); gMsg('info','draw.io abierto. Extras \u2192 Edit Diagram \u2192 pega el XML.'); });
 
   // Config
-  $('btn_save_cfg').addEventListener('click', saveCfg);
-  $('btn_reset_cfg').addEventListener('click', resetCfg);
-  $('btn_export_cfg').addEventListener('click', exportCfg);
-  $('btn_import_cfg').addEventListener('click', importCfg);
 });
 </script>
 <script>
