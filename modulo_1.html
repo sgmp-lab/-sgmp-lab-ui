@@ -4472,8 +4472,8 @@ function improvementTemplate(data = {}){
 
       <div class="field-grid ${status === 'custom' ? '' : 'hidden'}" data-role="edit-zone">
         <div class="field w-12">
-          <label>Personalización de la mejora</label>
-          <textarea data-role="custom-text">${escapeHtml(data.customText || data.adjustedState || '')}</textarea>
+          <label for="customText_${id}">Personalización de la mejora</label>
+          <textarea id="customText_${id}" data-role="custom-text">${escapeHtml(data.customText || data.adjustedState || '')}</textarea>
         </div>
       </div>
     </div>
@@ -4539,6 +4539,7 @@ function setImprovementStatus(id, status){
     if(status === 'reject') badge.classList.add('status-reject');
     card.querySelector('[data-role="edit-zone"]').classList.toggle('hidden', status !== 'custom');
   }
+  renderToBeSummary();
   updateTopStatus();
 }
 
@@ -4554,7 +4555,7 @@ function collectImprovements(){
 
 
 function getSelectedToBeImprovements(){
-  return (state.tobe.improvements || []).filter(i => i.status === 'execute' || i.status === 'custom');
+  return (state.tobe.improvements || []).filter(i => i.status !== 'reject');
 }
 
 function getRejectedToBeImprovements(){
@@ -7777,7 +7778,7 @@ function seedImprovementsFromAnalysis(){
 function saveToBeAndContinue(){
   collectImprovements();
   const selected = getSelectedToBeImprovements();
-  if(state.decision.route === 'tobe' && !selected.length){ showMsg('tobeMsg','warn','Debes seleccionar al menos una mejora para continuar.'); return; }
+  if(state.decision.route === 'tobe' && !selected.length){ showMsg('tobeMsg','warn','No hay mejoras activas para continuar. Conserva al menos una propuesta o agrega una mejora manual.'); return; }
   state.decision.finalMode = state.decision.route === 'tobe' ? 'tobe' : (state.decision.finalMode || 'asis');
   renderToBeSummary();
   goToNext('tobe');
