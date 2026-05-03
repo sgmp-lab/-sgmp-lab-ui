@@ -3146,12 +3146,18 @@ async function sgmpCallAI(stageCode, prompt){
     }
 
     if(parsed.fallback_manual === true){
-      throw new Error(parsed.error || parsed.message || 'El backend solicitó fallback manual.');
+      const fallbackError = new Error(parsed.error || parsed.message || 'El backend solicitó fallback manual.');
+      fallbackError.skipGetFallback = true;
+      throw fallbackError;
     }
 
     return { text: sgmpExtractAIText(parsed), raw: parsed };
   }catch(error){
     postError = error;
+    if(error && error.skipGetFallback){
+      console.warn('[sgmpCallAI] POST text/plain devolvió fallback manual.', error);
+      throw new Error(error.message || 'La API solicitó continuar en modo manual.');
+    }
     console.warn('[sgmpCallAI] POST text/plain falló. Se intentará GET payload.', error);
   }
 
@@ -6597,6 +6603,9 @@ async function generateSbContractBuilderPrompt(){
       const result = await sgmpCallAI('lmp_sb_contract', prompt);
       if(qs('sbContractResponseEditor')) qs('sbContractResponseEditor').value = sgmpAIResultText(result);
       validateSbContractBuilderResponse();
+      if(state.sbContractBuilder && state.sbContractBuilder.raw && state.sbContractBuilder.validation && !state.sbContractBuilder.validation.errors.length){
+        approveSbContractBuilderResponse();
+      }
       refreshCargaFlowState();
       hideLoader();
       return;
