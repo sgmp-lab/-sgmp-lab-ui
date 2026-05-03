@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>SGMP · Launcher</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    body{
+      margin:0;
+      font-family:Segoe UI, sans-serif;
+      background:#0B2340;
+      color:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      height:100vh;
+    }
+
+    .box{
+      background:#fff;
+      color:#0B2340;
+      padding:30px;
+      border-radius:16px;
+      width:320px;
+      box-shadow:0 20px 50px rgba(0,0,0,.3);
+      text-align:center;
+    }
+
+    h1{
+      margin-bottom:20px;
+    }
+
+    input{
+      width:100%;
+      padding:10px;
+      margin-bottom:12px;
+      border-radius:8px;
+      border:1px solid #ccc;
+    }
+
+    button{
+      width:100%;
+      padding:10px;
+      border:none;
+      border-radius:8px;
+      background:#0284C7;
+      color:#fff;
+      font-weight:bold;
+      cursor:pointer;
+    }
+
+    .modules{
+      margin-top:20px;
+      display:none;
+      flex-direction:column;
+      gap:10px;
+    }
+
+    .modules button{
+      background:#0EA5E9;
+    }
+  </style>
+</head>
+<body>
+
+<div class="box">
+  <h1>SGMP</h1>
+
+  <div id="login">
+    <input id="user" placeholder="Usuario">
+    <button onclick="login()">Entrar</button>
+  </div>
+
+  <div id="modules" class="modules">
+    <button onclick="go('modulo_1.html')">Abrir Módulo 1</button>
+    <button onclick="go('modulo_2.html')">Abrir Módulo 2</button>
+    <button onclick="logout()">Cerrar sesión</button>
+  </div>
+</div>
+
+<script>
+const SESSION_KEY = 'sgmp_session_v1';
+
+function login(){
+  const username = document.getElementById('user').value.trim();
+
+  if(!username){
+    alert('Ingresa usuario');
+    return;
+  }
+
+  const session = {
+    username,
+    login_time: new Date().toISOString()
+  };
+
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+
+  render();
+}
+
+function logout(){
+  sessionStorage.removeItem(SESSION_KEY);
+  render();
+}
+
+function go(page){
+  window.location.href = page;
+}
+
+function render(){
+  const raw = sessionStorage.getItem(SESSION_KEY);
+
+  if(raw){
+    document.getElementById('login').style.display = 'none';
+    document.getElementById('modules').style.display = 'flex';
+  }else{
+    document.getElementById('login').style.display = 'block';
+    document.getElementById('modules').style.display = 'none';
+  }
+}
+
+render();
+</script>
+
+</body>
+</html>
