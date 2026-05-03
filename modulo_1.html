@@ -6003,19 +6003,7 @@ function evaluateAnalysisCompleteness(data){
   const issues = [];
   if(!data) return ['No existe análisis procesado.'];
 
-  const acts = safeArray(
-    data.as_is?.activities ||
-    data.asIs?.activities ||
-    data.as_is_activities ||
-    data.required_ai_output?.as_is_activities ||
-    data.activities ||
-    data.sipoc?.activities ||
-    data.sipoc?.process ||
-    data.sipoc_input?.activities ||
-    data.sb_contract?.sipoc_input?.activities ||
-    data.integration_input?.activities ||
-    []
-  );
+  const acts = extractAsIsActivitiesFromPayload(data);
 
   if(!acts.length) {
     issues.push('No se detectaron actividades AS IS.');
@@ -7247,6 +7235,34 @@ function processIAResponse(){
     const parsed = extractJsonFromText(raw);
     const data = normalizeAnalysisPayload(parsed);
 
+    let recoveredActs = extractAsIsActivitiesFromPayload(data);
+
+if(!recoveredActs.length){
+  recoveredActs = extractAsIsActivitiesFromPayload(parsed);
+}
+
+if(!recoveredActs.length){
+  recoveredActs = extractAsIsActivitiesFromPayload(state.briefReview?.raw || {});
+}
+
+if(!recoveredActs.length){
+  recoveredActs = extractAsIsActivitiesFromPayload(state.briefReview?.raw?.brief || {});
+}
+
+if(recoveredActs.length){
+  data.as_is = data.as_is || {};
+  data.as_is.activities = recoveredActs;
+  data.activities = recoveredActs;
+
+  data.sb_contract = data.sb_contract || {};
+  data.sb_contract.sipoc_input = data.sb_contract.sipoc_input || {};
+  data.sb_contract.sipoc_input.activities = recoveredActs;
+}
+
+console.log('[LMP Analysis] parsed:', parsed);
+console.log('[LMP Analysis] recovered activities:', recoveredActs.length);
+console.log('[LMP Analysis] final data.as_is.activities:', data.as_is?.activities?.length || 0);
+    
     if(!data.improvements.length && data.findings.quickWins.length){
       data.improvements = data.findings.quickWins.map((q, i) => normalizeImprovement({
         title: `Quick win ${i + 1}`,
