@@ -4556,8 +4556,16 @@ function addImprovement(data = {}){
 }
 
 function renderImprovements(){
-  qs('improvementList').innerHTML = '';
-  state.tobe.improvements.forEach(item => qs('improvementList').insertAdjacentHTML('beforeend', improvementTemplate(item)));
+  const list = qs('improvementList');
+  if(!list) return;
+  list.innerHTML = '';
+  const improvements = state.tobe?.improvements || [];
+  if(!improvements.length){
+    list.innerHTML = '<div class="note">No hay mejoras cargadas todavía. Vuelve a procesar el análisis o revisa la respuesta IA.</div>';
+    renderToBeSummary();
+    return;
+  }
+  improvements.forEach(item => list.insertAdjacentHTML('beforeend', improvementTemplate(item)));
   renderToBeSummary();
 }
 
@@ -7669,10 +7677,14 @@ function runAnalysis(){
 
 function continueFromDecision(){
   if(!state.decision.route){ showMsg('decisionMsg','warn','Selecciona primero una ruta.'); return; }
-  if(state.decision.route === 'asis'){ state.decision.finalMode = 'asis'; showSection('resultados'); return; }
-  const selected = getSelectedToBeImprovements();
-  if(!selected.length){ showMsg('decisionMsg','warn','Para pasar a TO BE debes seleccionar al menos una mejora para ejecutar o personalizar.'); return; }
+  if(state.decision.route === 'asis'){
+    state.decision.finalMode = 'asis';
+    showSection('resultados');
+    return;
+  }
   state.decision.finalMode = 'tobe';
+  seedImprovementsFromAnalysis();
+  renderImprovements();
   renderToBeSummary();
   showSection('tobe');
 }
@@ -7684,7 +7696,8 @@ function seedImprovementsFromAnalysis(){
   }
 
   if(state.tobe.improvements.length){
-    showMsg('tobeMsg','warn','Ya existen mejoras registradas.');
+    renderImprovements();
+    showMsg('tobeMsg','ok','Se mostraron las mejoras ya registradas.');
     return;
   }
 
