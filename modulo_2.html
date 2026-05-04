@@ -1324,7 +1324,7 @@ body.sgmp-v3-processing select{
       </div>
       <div>
         <label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">XML resultado F2</label>
-        <textarea id="xml_f2" class="xml-ta" style="margin-top:5px" placeholder="Pega el XML devuelto por la IA..."></textarea>
+        <textarea id="xml_f2" class="xml-ta" style="margin-top:5px" placeholder="Pega aquí SOLO los mxCell edge="1" devueltos por la IA. SB los fusionará con XML F1..."></textarea>
         <div id="vld_f2" class="vld"></div>
         <div class="btn-row">
           <button id="btn_vld_f2">Validar</button>
@@ -1384,9 +1384,17 @@ body.sgmp-v3-processing select{
     <h2 style="margin-bottom:12px">Salida final</h2>
     <div id="out_report" style="margin-bottom:12px"></div>
     <div class="field"><label>XML final &mdash; encabezado y notas incorporados</label><textarea id="xml_final" class="xml-ta" style="min-height:180px" readonly></textarea></div>
+    <div id="drawio_status" class="vld warn show" style="margin-top:8px">XML final pendiente. Completa la salida antes de abrir draw.io.</div>
     <div class="btn-row" style="margin-top:10px">
       <button class="warn" id="btn_dl_final">Descargar XML final</button>
-      <button class="primary" id="btn_drawio">Abrir draw.io</button>
+      <button id="btn_copy_final_xml">Copiar XML final</button>
+      <button class="primary" id="btn_drawio">Copiar XML y abrir draw.io</button>
+    </div>
+    <div id="sb_operational_closure" class="sum-box" style="margin-top:12px;display:none"></div>
+    <div class="btn-row" style="margin-top:10px">
+      <button id="btn_copy_operational_backup">Copiar respaldo JSON SB</button>
+      <button class="warn" id="btn_dl_operational_backup">Descargar respaldo JSON SB</button>
+      <button id="btn_log_final_execution">Registrar cierre operativo</button>
     </div>
   </div>
 </div>
@@ -1670,8 +1678,19 @@ function validateXML(srcId, vldId) {
   }
 
   const isF2 = srcId === 'xml_f2';
+  if (isF2 && typeof sgmpPrepareF2Output === 'function') {
+    const prepared = sgmpPrepareF2Output(str, { strictEdgeOnly:false });
+    if (!prepared.ok) {
+      el.className = 'vld show bad';
+      el.textContent = prepared.errors.join(' ');
+      return false;
+    }
+    str = prepared.xml;
+    $(srcId).value = str;
+  }
+
   const result = window.sgmpV3ValidateXMLText
-    ? window.sgmpV3ValidateXMLText(str, { requireGraphModel: !isF2, requireEdges: isF2, edgeOnly: false })
+    ? window.sgmpV3ValidateXMLText(str, { requireGraphModel: true, requireEdges: isF2, edgeOnly: false })
     : { ok: true, errors: [] };
 
   if (!result.ok) {
@@ -2658,17 +2677,207 @@ function genTemplate() {
 // ═══════════════════════════════════════════════════════════════
 // PROMPT STEP NAVIGATION
 // ═══════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// SGMP v3 · FASE 8 · F2 EDGE-ONLY + MERGE CONTROLADO
+// La IA no reconstruye XML completo: solo entrega edges y SB los fusiona con XML F1.
+// ═══════════════════════════════════════════════════════════════
+function sgmpF2BaseXml() {
+  return String(S.xmlF1 || $('xml_f1')?.value || '').trim();
+}
+
+function sgmpParseXml(xml, wrapRoot) {
+  const text = String(xml || '').trim();
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(wrapRoot ? '<root>' + text + '</root>' : text, 'text/xml');
+  if (doc.querySelector('parsererror')) return null;
+  return doc;
+}
+
+function sgmpExtractGraphIds(xml) {
+  const ids = new Set();
+  const doc = sgmpParseXml(xml, false);
+  if (!doc) return ids;
+  Array.from(doc.querySelectorAll('mxCell[id]')).forEach(function(cell){
+    const id = cell.getAttribute('id');
+    if (id) ids.add(id);
+  });
+  return ids;
+}
+
+function sgmpBaseHasValidRoot(xml) {
+  const doc = sgmpParseXml(xml, false);
+  return !!(doc && doc.querySelector('mxGraphModel > root'));
+}
+
+function sgmpExtractF2Edges(text) {
+  const raw = String(text || '').trim();
+  const doc = sgmpParseXml(raw, true);
+  if (!doc) return [];
+
+  return Array.from(doc.querySelectorAll('mxCell[edge="1"]')).map(function(cell){
+    const serializer = new XMLSerializer();
+    return serializer.serializeToString(cell).trim();
+  });
+}
+
+function sgmpNormalizeF2Edge(edgeXml, idx) {
+  let e = String(edgeXml || '').trim();
+  if (!e) return '';
+
+  // Forzar IDs controlados por SB para evitar colisiones con nodos o edges previos.
+  const id = 'f2_edge_' + String(idx + 1).padStart(3, '0');
+  if (/\sid="[^"]*"/.test(e)) e = e.replace(/\sid="[^"]*"/, ' id="' + id + '"');
+  else e = e.replace('<mxCell', '<mxCell id="' + id + '"');
+
+  if (/\sparent="[^"]*"/.test(e)) e = e.replace(/\sparent="[^"]*"/, ' parent="1"');
+  else e = e.replace('<mxCell', '<mxCell parent="1"');
+
+  if (!/\svalue="[^"]*"/.test(e)) e = e.replace('<mxCell', '<mxCell value=""');
+  if (!/\sstyle="[^"]*"/.test(e)) {
+    e = e.replace('<mxCell', '<mxCell style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;"');
+  }
+  if (!/<mxGeometry\b/.test(e)) {
+    e = e.replace(/\/>\s*$/, '><mxGeometry relative="1" as="geometry"/></mxCell>');
+  }
+  return e;
+}
+
+function sgmpEdgeKey(edge) {
+  const source = (edge.match(/\ssource="([^"]+)"/) || [])[1] || '';
+  const target = (edge.match(/\starget="([^"]+)"/) || [])[1] || '';
+  const value = (edge.match(/\svalue="([^"]*)"/) || [])[1] || '';
+  return source + '→' + target + '|' + value;
+}
+
+function sgmpDeduplicateF2Edges(edges) {
+  const seen = new Set();
+  const out = [];
+  (edges || []).forEach(function(edge){
+    const key = sgmpEdgeKey(edge);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(edge);
+  });
+  return out;
+}
+
+function sgmpValidateF2EdgesAgainstBase(edges, baseXml) {
+  const errors = [];
+  const validIds = sgmpExtractGraphIds(baseXml);
+
+  if (!validIds.size) errors.push('No se pudieron leer IDs válidos desde XML F1.');
+
+  (edges || []).forEach(function(edge, idx){
+    const source = (edge.match(/\ssource="([^"]+)"/) || [])[1];
+    const target = (edge.match(/\starget="([^"]+)"/) || [])[1];
+
+    if (!source) errors.push('Edge F2 #' + (idx + 1) + ' no tiene source.');
+    if (!target) errors.push('Edge F2 #' + (idx + 1) + ' no tiene target.');
+    if (source && !validIds.has(source)) errors.push('Edge F2 #' + (idx + 1) + ' usa source inexistente en F1: ' + source + '.');
+    if (target && !validIds.has(target)) errors.push('Edge F2 #' + (idx + 1) + ' usa target inexistente en F1: ' + target + '.');
+    if (/\bvertex="1"/.test(edge)) errors.push('Edge F2 #' + (idx + 1) + ' contiene vertex="1".');
+    if (!/\bparent="1"/.test(edge)) errors.push('Edge F2 #' + (idx + 1) + ' no usa parent="1".');
+  });
+
+  return { ok: errors.length === 0, errors: errors };
+}
+
+function sgmpValidateF2Edges(text, opts) {
+  opts = opts || {};
+  const raw = String(text || '').trim();
+  const errors = [];
+  const baseXml = sgmpF2BaseXml();
+
+  if (!raw) errors.push('F2 vacío.');
+  if (/```/.test(raw)) errors.push('F2 contiene markdown. Pega solo mxCell edge="1".');
+  if (/<!--/.test(raw)) errors.push('F2 contiene comentarios XML. No se aceptan placeholders ni comentarios.');
+  if (opts.strictEdgeOnly && /<mxGraphModel|<root\b/i.test(raw)) errors.push('F2 API devolvió XML completo. Debe devolver solo edges.');
+  if (opts.strictEdgeOnly && /\bvertex="1"/.test(raw)) errors.push('F2 API devolvió nodos vertex="1". Debe devolver solo edges.');
+  if (!baseXml || !sgmpBaseHasValidRoot(baseXml)) errors.push('No existe XML F1 base válido para fusionar F2. Completa F1 antes de F2.');
+
+  const extracted = sgmpExtractF2Edges(raw);
+  if (!extracted.length) errors.push('F2 no contiene mxCell edge="1".');
+
+  let normalized = extracted.map(sgmpNormalizeF2Edge).filter(Boolean);
+  const beforeDedup = normalized.length;
+  normalized = sgmpDeduplicateF2Edges(normalized);
+  const duplicatesRemoved = beforeDedup - normalized.length;
+
+  const againstBase = sgmpValidateF2EdgesAgainstBase(normalized, baseXml);
+  errors.push.apply(errors, againstBase.errors);
+
+  return {
+    ok: errors.length === 0,
+    errors: errors,
+    edges: normalized,
+    baseXml: baseXml,
+    duplicatesRemoved: duplicatesRemoved
+  };
+}
+
+function sgmpRemoveExistingF2Edges(baseXml) {
+  const doc = sgmpParseXml(baseXml, false);
+  if (!doc) return String(baseXml || '');
+  Array.from(doc.querySelectorAll('mxCell[id^="f2_edge_"]')).forEach(function(edge){
+    if (edge.parentNode) edge.parentNode.removeChild(edge);
+  });
+  return new XMLSerializer().serializeToString(doc);
+}
+
+function sgmpMergeF2EdgesIntoBase(baseXml, edges) {
+  const cleanBase = sgmpRemoveExistingF2Edges(baseXml);
+  if (!sgmpBaseHasValidRoot(cleanBase)) throw new Error('No se puede fusionar F2: XML F1 no tiene root válido.');
+  const block = (edges || []).map(function(e){ return '    ' + e; }).join('\n');
+  return cleanBase.replace(/\s*<\/root>/, '\n' + block + '\n  </root>');
+}
+
+function sgmpActivateManualF2Fallback(errors) {
+  const msg = 'F2 rechazado. Usa modo manual con respuesta edge-only. ' + (errors && errors.length ? errors.join(' ') : '');
+  if (typeof gMsg === 'function') gMsg('warn', msg);
+  const el = $('vld_f2');
+  if (el) { el.className = 'vld show bad'; el.textContent = msg; }
+  try { switchTab('tab_f2'); } catch(e) {}
+  if ($('xml_f2')) $('xml_f2').focus();
+  if (typeof sgmpLogEvent === 'function') sgmpLogEvent('SB_F2_FALLBACK_MANUAL', { errors: errors || [] });
+}
+
+function sgmpPrepareF2Output(text, opts) {
+  const check = sgmpValidateF2Edges(text, opts || {});
+  if (!check.ok) return { ok:false, errors:check.errors, xml:'', edges:[], duplicatesRemoved:check.duplicatesRemoved || 0 };
+  let merged = '';
+  try {
+    merged = sgmpMergeF2EdgesIntoBase(check.baseXml, check.edges);
+  } catch(e) {
+    return { ok:false, errors:[e.message], xml:'', edges:[], duplicatesRemoved:check.duplicatesRemoved || 0 };
+  }
+  return { ok:true, errors:[], xml:merged, edges:check.edges, duplicatesRemoved:check.duplicatesRemoved || 0 };
+}
+
 function stepNext(tabId, srcId, vldId, storeKey, buildNext) {
-  const xml = $(srcId).value.trim();
+  let xml = $(srcId).value.trim();
   if (!xml) { gMsg('warn', 'Pega el XML resultado antes de continuar.'); return; }
-  if (!validateXML(srcId, vldId)) { gMsg('warn', 'El XML no es v\u00e1lido. Revisa antes de continuar.'); return; }
+
+  if (storeKey === 'f2') {
+    const prepared = sgmpPrepareF2Output(xml, { strictEdgeOnly:false });
+    if (!prepared.ok) {
+      const el = $(vldId);
+      if (el) { el.className = 'vld show bad'; el.textContent = prepared.errors.join(' '); }
+      sgmpActivateManualF2Fallback(prepared.errors);
+      return;
+    }
+    xml = prepared.xml;
+    $(srcId).value = xml;
+  }
+
+  if (!validateXML(srcId, vldId)) { gMsg('warn', 'El XML no es válido. Revisa antes de continuar.'); return; }
   if (storeKey==='f1') S.xmlF1 = xml;
   if (storeKey==='f2') S.xmlF2 = xml;
   if (storeKey==='f3') S.xmlF3 = xml;
   if (storeKey==='f4') S.xmlF4 = xml;
   buildNext();
   switchTab(tabId);
-  gMsg('ok', 'Paso completado. Copia el nuevo prompt y ej\u00e9cutalo en la IA.');
+  gMsg('ok', storeKey === 'f2' ? 'F2 validado: SB fusionó los edges con XML F1 y generó XML F2 controlado.' : 'Paso completado. Copia el nuevo prompt y ejecútalo en la IA.');
 }
 
 function goFinal(srcId='xml_f4', vldId='vld_f4') {
@@ -2679,9 +2888,12 @@ function goFinal(srcId='xml_f4', vldId='vld_f4') {
   else S.xmlF3 = xml;
   S.xmlFinal = injectHeader(xml, S.sp || {});
   $('xml_final').value = S.xmlFinal;
+  if (typeof setDrawIOReadyState === 'function') setDrawIOReadyState();
   renderOutReport();
+  if (typeof renderSBOperationalClosure === 'function') renderSBOperationalClosure();
+  if (typeof sgmpLogEvent === 'function') sgmpLogEvent('SB_XML_FINAL_READY', { process_name: (S.sp && S.sp.process_name) || '', activity_count: (S.sp && S.sp.activities ? S.sp.activities.length : 0) });
   switchTab('tab_out');
-  gMsg('ok', 'XML final listo. Descarga e importa en draw.io.');
+  gMsg('ok', 'XML final listo. Puedes descargarlo, copiarlo o abrir draw.io con el XML en portapapeles.');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2765,6 +2977,7 @@ function renderOutReport() {
       <strong>Importar en draw.io:</strong> Extras &rarr; Edit Diagram &rarr; pega el XML &rarr; Cerrar. Usa Ctrl+Shift+H para ajustar la vista.
     </div>
     ${window.sgmpV3TimingReportHTML ? window.sgmpV3TimingReportHTML() : ''}`;
+  if (typeof renderSBOperationalClosure === 'function') renderSBOperationalClosure();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2853,23 +3066,26 @@ ${args[0] || ''}`;
     return `ACTÚA COMO diagramador BPM/SIPOC experto en draw.io.
 
 OBJETIVO:
-Agregar SOLO las conexiones del flujo interno entre actividades usando previous/next. No conectes todavía Suppliers, Inputs, Outputs ni Customers.
+Generar SOLO las conexiones internas del flujo entre actividades usando previous/next. SB ya tiene el XML base F1; tú NO debes reconstruirlo.
 
-REGLAS DE CONEXIÓN:
-- Responde SOLO con XML draw.io completo.
+REGLAS NO NEGOCIABLES F2:
+- Responde SOLO con fragmentos <mxCell ... edge="1" ...>...</mxCell> o <mxCell ... edge="1" .../>.
+- PROHIBIDO devolver <mxGraphModel>, <root> o XML completo.
+- PROHIBIDO devolver nodos vertex="1".
 - PROHIBIDO usar comentarios XML <!-- -->.
-- PROHIBIDO usar markdown.
+- PROHIBIDO usar markdown o bloques de triple comilla.
 - NO inventes flujo: conecta SOLO relaciones declaradas en previous/next.
 - Si previous/next está vacío o no existe en el mapa de IDs, NO conectes.
-- NO elimines ni reescribas nodos existentes.
-- No elimines ni renombres nodos.
-- Usa edge="1" parent="1".
+- Cada edge debe incluir source="ID" y target="ID" usando exclusivamente IDs del MAPA DE IDS.
+- Cada edge debe usar parent="1".
 - Usa conectores ortogonales/elbow.
-- Evita cruces de líneas; aprovecha que las actividades están en filas por secuencia y columnas por actor.
-- Primero usa waypoints en mxGeometry de los edges para evitar cruces; no agregues nodos de ruteo en F2 salvo que sea imprescindible.
+- Evita cruces de líneas con waypoints dentro de mxGeometry cuando sea necesario.
 - Para waypoints usa <Array as="points"><mxPoint x="..." y="..."/></Array> dentro de mxGeometry del edge.
 - Para decisiones, usa las rutas o etiquetas disponibles en note, branch_label o route_label.
 - Si previous/next contradicen el orden visual, respeta previous/next y evita cruzar líneas con puntos intermedios simples.
+
+FORMATO ESPERADO:
+<mxCell id="f2_edge_001" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="ID_ORIGEN" target="ID_DESTINO"><mxGeometry relative="1" as="geometry"/></mxCell>
 
 CONTEXTO SIPOC:
 ${JSON.stringify(sp, null, 2)}
@@ -2877,7 +3093,7 @@ ${JSON.stringify(sp, null, 2)}
 MAPA DE IDS:
 ${args[2] || args[1] || ''}
 
-XML F1:
+XML F1 SOLO COMO REFERENCIA DE ESTRUCTURA. NO LO REESCRIBAS:
 ${args[0] || ''}`;
   }
 
@@ -2944,6 +3160,23 @@ ${args[0] || ''}`;
   return 'Prompt no disponible. Revisa configuración o conexión de prompts.';
 }
 
+
+function sgmpHardenF2Prompt(prompt) {
+  const guard = `
+
+=== GUARDRAIL SGMP v3 / F2 EDGE-ONLY ===
+- La respuesta debe contener SOLO mxCell edge="1".
+- NO devuelvas <mxGraphModel>.
+- NO devuelvas <root>.
+- NO devuelvas nodos vertex="1".
+- NO uses comentarios XML <!-- -->.
+- NO uses markdown.
+- Usa únicamente IDs existentes del MAPA DE IDS como source y target.
+- SB fusionará tus edges con el XML F1; no reconstruyas el XML completo.
+=== FIN GUARDRAIL ===`;
+  return String(prompt || '') + guard;
+}
+
 function getPrompt(key, ...args) {
   // SGMP v3: Admin / Google Sheets es la fuente oficial de prompts.
   // Si no hay prompt publicado en Admin, se usa el prompt interno solo como fallback técnico.
@@ -2970,9 +3203,10 @@ function getPrompt(key, ...args) {
       sheetPrompt = sheetPrompt
         .replace('{{content}}', args[0] || '');
     }
-    return sheetPrompt;
+    return key === 'f2' ? sgmpHardenF2Prompt(sheetPrompt) : sheetPrompt;
   }
-  return defaultPrompt(key, ...args);
+  const fallbackPrompt = defaultPrompt(key, ...args);
+  return key === 'f2' ? sgmpHardenF2Prompt(fallbackPrompt) : fallbackPrompt;
 }
 
 // Prompts gestionados desde SGMP Sheet
@@ -3074,7 +3308,23 @@ async function runStageWithAPI(stageCode) {
     sgmpV3UpdateLoader('Validando respuesta de IA...', 'Revisando XML antes de permitir continuar.');
     const text = sbAIResultText(result).trim();
     if (!text) throw new Error('La IA no devolvió contenido utilizable.');
-    outEl.value = text;
+    if (stageCode === 'sb_f2') {
+      const preparedF2 = sgmpPrepareF2Output(text, { strictEdgeOnly:true });
+      if (!preparedF2.ok) {
+        outEl.value = text;
+        const el = $(meta.validatorId);
+        if (el) { el.className = 'vld show bad'; el.textContent = preparedF2.errors.join(' '); }
+        sgmpLogEvent('SB_API_STAGE_INVALID_XML', { stage_code: stageCode, mode: mode, errors: preparedF2.errors });
+        sgmpV3UpdateLoader('Respuesta F2 inválida', 'La IA no respetó edge-only. Se conserva modo manual.');
+        sgmpActivateManualF2Fallback(preparedF2.errors);
+        throw new Error('F2 inválido: ' + preparedF2.errors.join(' '));
+      }
+      outEl.value = preparedF2.xml;
+      S.xmlF2 = preparedF2.xml;
+      sgmpLogEvent('SB_F2_EDGES_MERGED', { edge_count: preparedF2.edges.length, duplicates_removed: preparedF2.duplicatesRemoved || 0 });
+    } else {
+      outEl.value = text;
+    }
     const valid = validateXML(meta.outputId, meta.validatorId);
     if (!valid) {
       sgmpLogEvent('SB_API_STAGE_INVALID_XML', { stage_code: stageCode, mode: mode });
@@ -3102,6 +3352,465 @@ function resetCfg() { gMsg('info', 'La configuración se administra desde SGMP A
 function exportCfg() { gMsg('info', 'La configuración se administra desde SGMP Admin.'); }
 function importCfg() { gMsg('info', 'La configuración se administra desde SGMP Admin.'); }
 
+
+// ═══════════════════════════════════════════════════════════════
+// DRAW.IO + CIERRE OPERATIVO SB · FASE 9 FINAL
+// Criterio flexible: bloquea solo XML estructuralmente inválido.
+// Si hay advertencias, permite exportar y explica qué corregir en draw.io.
+// ═══════════════════════════════════════════════════════════════
+function getFinalXmlForDrawIO() {
+  return S && S.xmlFinal ? String(S.xmlFinal).trim() : '';
+}
+
+function parseXmlSafely(xml) {
+  try {
+    const doc = new DOMParser().parseFromString(String(xml || ''), 'text/xml');
+    if (doc.querySelector('parsererror')) return { ok:false, doc:null, error:'XML mal formado.' };
+    return { ok:true, doc, error:'' };
+  } catch(e) {
+    return { ok:false, doc:null, error:'El XML no se puede interpretar.' };
+  }
+}
+
+function validateFinalXmlForDrawIO(xml) {
+  const errors = [];
+  const text = String(xml || '').trim();
+
+  if (!text) errors.push('No hay XML final generado.');
+  if (text && !text.includes('<mxGraphModel')) errors.push('El XML final no contiene <mxGraphModel>.');
+  if (text && !text.includes('<root>')) errors.push('El XML final no contiene <root>.');
+  if (text && !text.includes('</root>')) errors.push('El XML final no contiene cierre </root>.');
+  if (text && !text.includes('<mxCell')) errors.push('El XML final no contiene nodos <mxCell>.');
+  if (text && /```/.test(text)) errors.push('El XML final contiene markdown.');
+  if (text && /<!--/.test(text)) errors.push('El XML final contiene comentarios XML.');
+
+  const parsed = text ? parseXmlSafely(text) : { ok:false, doc:null, error:'' };
+  if (text && !parsed.ok) errors.push(parsed.error || 'XML mal formado.');
+
+  return {
+    ok: errors.length === 0,
+    blocked: errors.length > 0,
+    errors,
+    doc: parsed.doc
+  };
+}
+
+function xmlIdSet(xml) {
+  const set = new Set();
+  const parsed = parseXmlSafely(xml);
+  if (!parsed.ok || !parsed.doc) return set;
+  Array.from(parsed.doc.querySelectorAll('mxCell[id]')).forEach(cell => set.add(cell.getAttribute('id')));
+  return set;
+}
+
+function xmlEdgeCount(xml) {
+  return (String(xml || '').match(/edge="1"/g) || []).length;
+}
+
+function extractXmlEdges(xml) {
+  const edges = [];
+  const parsed = parseXmlSafely(xml);
+  if (!parsed.ok || !parsed.doc) return edges;
+  Array.from(parsed.doc.querySelectorAll('mxCell[edge="1"]')).forEach(cell => {
+    edges.push({
+      id: cell.getAttribute('id') || '',
+      source: cell.getAttribute('source') || '',
+      target: cell.getAttribute('target') || '',
+      value: cell.getAttribute('value') || ''
+    });
+  });
+  return edges;
+}
+
+function normalizeActivityName(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function analyzeDiagramWarnings(sp, xml) {
+  const warnings = [];
+  sp = sp || {};
+  const activities = Array.isArray(sp.activities) ? sp.activities : [];
+  const edgeCount = xmlEdgeCount(xml);
+  const expectedFlows = [];
+  const activityNames = new Set(activities.map(a => normalizeActivityName(a.name)).filter(Boolean));
+
+  activities.forEach((a, idx) => {
+    const name = normalizeActivityName(a.name) || ('Actividad #' + (idx + 1));
+    const previous = Array.isArray(a.previous) ? a.previous.filter(Boolean) : [];
+    const next = Array.isArray(a.next) ? a.next.filter(Boolean) : [];
+
+    if (!previous.length && !a.is_start) {
+      warnings.push({
+        type: 'NO_INCOMING',
+        severity: 'warning',
+        location: name,
+        message: 'Actividad sin entrada definida: ' + name,
+        action: 'En draw.io verifica si debe recibir una flecha desde la actividad anterior o márcala como inicio si corresponde.'
+      });
+    }
+
+    if (!next.length && !a.is_end) {
+      warnings.push({
+        type: 'NO_OUTGOING',
+        severity: 'warning',
+        location: name,
+        message: 'Actividad sin salida definida: ' + name,
+        action: 'En draw.io agrega una flecha hacia la siguiente actividad o márcala como fin si corresponde.'
+      });
+    }
+
+    next.forEach(n => {
+      const target = normalizeActivityName(n);
+      expectedFlows.push({ from:name, to:target });
+      if (target && !activityNames.has(target)) {
+        warnings.push({
+          type: 'NEXT_TARGET_NOT_FOUND',
+          severity: 'warning',
+          location: name,
+          message: 'La actividad "' + name + '" apunta a una siguiente actividad no encontrada: ' + target,
+          action: 'Corrige el nombre de la actividad destino o crea/ajusta el nodo correspondiente en draw.io.'
+        });
+      }
+    });
+
+    previous.forEach(p => {
+      const source = normalizeActivityName(p);
+      if (source && !activityNames.has(source)) {
+        warnings.push({
+          type: 'PREVIOUS_SOURCE_NOT_FOUND',
+          severity: 'warning',
+          location: name,
+          message: 'La actividad "' + name + '" declara una actividad previa no encontrada: ' + source,
+          action: 'Corrige el nombre de la actividad previa o ajusta manualmente la conexión en draw.io.'
+        });
+      }
+    });
+  });
+
+  if (edgeCount === 0) {
+    warnings.push({
+      type: 'NO_FLOW',
+      severity: 'warning',
+      location: 'Diagrama completo',
+      message: 'El XML no contiene conexiones edge="1".',
+      action: 'Puedes exportarlo, pero deberás conectar manualmente el flujo en draw.io.'
+    });
+  } else if (expectedFlows.length && edgeCount < expectedFlows.length) {
+    warnings.push({
+      type: 'MISSING_EDGES_COUNT',
+      severity: 'warning',
+      location: 'Flujo interno',
+      message: 'El XML tiene menos conexiones que las esperadas según next: ' + edgeCount + '/' + expectedFlows.length + '.',
+      action: 'En draw.io revisa las actividades con next definido y agrega las flechas faltantes.'
+    });
+  }
+
+  const edges = extractXmlEdges(xml);
+  edges.forEach(e => {
+    if (!e.source || !e.target) {
+      warnings.push({
+        type: 'EDGE_WITHOUT_ENDPOINT',
+        severity: 'warning',
+        location: e.id || 'edge sin ID',
+        message: 'Existe una conexión sin source o target: ' + (e.id || '(sin id)'),
+        action: 'En draw.io elimina o reconecta esa línea.'
+      });
+    }
+  });
+
+  // Duplicados aproximados por source-target.
+  const seen = new Set();
+  const duplicates = [];
+  edges.forEach(e => {
+    if (!e.source || !e.target) return;
+    const key = e.source + '→' + e.target;
+    if (seen.has(key)) duplicates.push(key);
+    seen.add(key);
+  });
+  if (duplicates.length) {
+    warnings.push({
+      type: 'DUPLICATE_EDGES',
+      severity: 'warning',
+      location: 'Conexiones',
+      message: 'Hay conexiones duplicadas: ' + Array.from(new Set(duplicates)).slice(0, 8).join(', '),
+      action: 'En draw.io elimina las líneas repetidas para limpiar el diagrama.'
+    });
+  }
+
+  return warnings;
+}
+
+function classifyFinalStatus(validation, warnings) {
+  if (!validation || validation.blocked) return 'BLOCKED';
+  if (warnings && warnings.length) return 'WARNING_EXPORTABLE';
+  return 'OK';
+}
+
+function getFinalOperationalObject() {
+  const xml = getFinalXmlForDrawIO();
+  const validation = validateFinalXmlForDrawIO(xml);
+  const warnings = validation.blocked ? [] : analyzeDiagramWarnings(S.sp || {}, xml);
+  const status = classifyFinalStatus(validation, warnings);
+  const timing = (typeof window.sgmpV3TimingReport === 'function') ? window.sgmpV3TimingReport() : null;
+
+  S.final = {
+    xml: xml,
+    sp: S.sp || null,
+    report: timing,
+    warnings: warnings,
+    status: status,
+    validation_errors: validation.errors || [],
+    generated_at: new Date().toISOString()
+  };
+
+  return S.final;
+}
+
+function setDrawIOReadyState() {
+  const finalObj = getFinalOperationalObject();
+  const status = $('drawio_status');
+  const copyBtn = $('btn_copy_final_xml');
+  const drawBtn = $('btn_drawio');
+  const dlBtn = $('btn_dl_final');
+  const blocked = finalObj.status === 'BLOCKED';
+
+  if (status) {
+    if (finalObj.status === 'OK') {
+      status.className = 'vld ok show';
+      status.textContent = 'XML listo para exportar: sin advertencias estructurales.';
+    } else if (finalObj.status === 'WARNING_EXPORTABLE') {
+      status.className = 'vld warn show';
+      status.textContent = 'XML exportable con advertencias. Revisa el panel de cierre para saber qué ajustar manualmente en draw.io.';
+    } else {
+      status.className = 'vld bad show';
+      status.textContent = 'XML bloqueado: ' + finalObj.validation_errors.join(' ');
+    }
+  }
+
+  [copyBtn, drawBtn, dlBtn].forEach(function(btn){
+    if (!btn) return;
+    btn.disabled = blocked;
+    if (!blocked) btn.classList.add('sgmp-v3-allow');
+  });
+
+  if (typeof renderSBOperationalClosure === 'function') renderSBOperationalClosure();
+  return !blocked;
+}
+
+function requireFinalXmlForDrawIO() {
+  const finalObj = getFinalOperationalObject();
+  if (finalObj.status === 'BLOCKED') {
+    gMsg('warn', 'No puedes exportar todavía. ' + finalObj.validation_errors.join(' '));
+    setDrawIOReadyState();
+    return null;
+  }
+  if (finalObj.status === 'WARNING_EXPORTABLE') {
+    gMsg('warn', 'XML exportable con advertencias. Ajusta manualmente en draw.io: ' + finalObj.warnings.map(w => w.message).slice(0, 3).join(' | '));
+  }
+  return finalObj.xml;
+}
+
+function copyFinalXmlToClipboard() {
+  const xml = requireFinalXmlForDrawIO();
+  if (!xml) return Promise.reject(new Error('XML final no exportable'));
+
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(xml).then(function(){
+      gMsg('ok', 'XML final copiado al portapapeles.');
+      if (typeof sgmpLogEvent === 'function') sgmpLogEvent('SB_FINAL_XML_COPIED', { source: 'S.xmlFinal', status: S.final?.status || '' });
+      return true;
+    });
+  }
+
+  const ta = document.createElement('textarea');
+  ta.value = xml;
+  ta.setAttribute('readonly', 'readonly');
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    gMsg('ok', 'XML final copiado al portapapeles.');
+    if (typeof sgmpLogEvent === 'function') sgmpLogEvent('SB_FINAL_XML_COPIED', { source: 'S.xmlFinal', fallback: true, status: S.final?.status || '' });
+    return Promise.resolve(true);
+  } catch (e) {
+    gMsg('warn', 'No se pudo copiar automáticamente. Usa el campo XML final y copia manualmente.');
+    return Promise.reject(e);
+  } finally {
+    document.body.removeChild(ta);
+  }
+}
+
+function openDrawIOWithFinalXml() {
+  const xml = requireFinalXmlForDrawIO();
+  if (!xml) return;
+
+  copyFinalXmlToClipboard()
+    .then(function(){
+      window.open('https://app.diagrams.net/', '_blank');
+      gMsg('info', 'draw.io abierto. El XML ya está copiado: usa Extras → Edit Diagram → pega el XML → Cerrar.');
+      if (typeof sgmpLogEvent === 'function') sgmpLogEvent('SB_DRAWIO_OPENED', { copied: true, source: 'S.xmlFinal', status: S.final?.status || '' });
+    })
+    .catch(function(){
+      window.open('https://app.diagrams.net/', '_blank');
+      gMsg('warn', 'draw.io abierto, pero no se pudo copiar automáticamente. Copia manualmente el XML final.');
+      if (typeof sgmpLogEvent === 'function') sgmpLogEvent('SB_DRAWIO_OPENED', { copied: false, source: 'S.xmlFinal', status: S.final?.status || '' });
+    });
+}
+
+function sbGetOperationalStatus() {
+  const finalObj = getFinalOperationalObject();
+  const sp = S.sp || {};
+  return {
+    ok: finalObj.status === 'OK',
+    exportable: finalObj.status !== 'BLOCKED',
+    status: finalObj.status,
+    validation_errors: finalObj.validation_errors || [],
+    warnings: finalObj.warnings || [],
+    warnings_count: (finalObj.warnings || []).length,
+    has_process: !!sp.process_name,
+    has_xml_final: !!finalObj.xml,
+    has_edges: String(finalObj.xml || '').includes('edge="1"'),
+    process_name: sp.process_name || '',
+    process_code: sp.process_code || '',
+    activity_count: Array.isArray(sp.activities) ? sp.activities.length : 0,
+    actor_count: Array.isArray(sp.actors) ? sp.actors.length : 0,
+    generated_at: finalObj.generated_at,
+    timing_report: finalObj.report
+  };
+}
+
+function buildSBOperationalBackup() {
+  const status = sbGetOperationalStatus();
+  return {
+    sgmp_module: 'SB',
+    module_label: 'modulo_2',
+    module_version: '3.0',
+    closure_phase: 'Fase 9 - cierre operativo flexible',
+    generated_at: status.generated_at,
+    operational_status: status.status,
+    exportable: status.exportable,
+    process: {
+      process_code: status.process_code,
+      process_name: status.process_name,
+      purpose: (S.sp && S.sp.purpose) || '',
+      activity_count: status.activity_count,
+      actor_count: status.actor_count
+    },
+    source_contract: getCurrentSipocContract ? getCurrentSipocContract() : (S.sp ? { sipoc_input: S.sp } : null),
+    xml_final: status.exportable ? S.xmlFinal : '',
+    xml_validation: {
+      status: status.status,
+      exportable: status.exportable,
+      errors: status.validation_errors,
+      warnings: status.warnings
+    },
+    timing_report: status.timing_report,
+    load_trace: S.loadTrace || {},
+    output_policy: {
+      downstream_connection: 'none',
+      ed_connection: false,
+      ed_consumes_from: 'LMP',
+      sb_scope: 'diagramacion_sipoc_drawio',
+      warning_policy: 'exportable_with_actionable_warnings',
+      block_policy: 'block_only_empty_or_structurally_invalid_xml'
+    }
+  };
+}
+
+function renderSBOperationalClosure() {
+  const box = $('sb_operational_closure');
+  if (!box) return false;
+  const status = sbGetOperationalStatus();
+  box.style.display = 'block';
+  const sev = status.status === 'OK' ? 'ok' : (status.status === 'WARNING_EXPORTABLE' ? 'warn' : 'bad');
+  const msg = status.status === 'OK' ? 'Cierre operativo listo' : (status.status === 'WARNING_EXPORTABLE' ? 'Exportable con advertencias' : 'Bloqueado');
+  const warningsHtml = status.warnings.length
+    ? `<div style="margin-top:10px;color:#92400e;font-size:12px"><strong>Advertencias accionables:</strong><ul style="margin:6px 0 0 18px">${status.warnings.map(w=>`<li><strong>${ex(w.location || w.type)}:</strong> ${ex(w.message)}<br><span style="color:#78350f">Acción sugerida: ${ex(w.action || 'Revisar manualmente en draw.io.')}</span></li>`).join('')}</ul><div style="margin-top:8px">El XML es exportable. Estas advertencias sirven como guía para ajuste manual en draw.io.</div></div>`
+    : '';
+  const errorsHtml = status.validation_errors.length
+    ? `<div style="margin-top:8px;color:#991b1b;font-size:12px"><strong>Bloqueantes:</strong><ul style="margin:6px 0 0 18px">${status.validation_errors.map(x=>`<li>${ex(x)}</li>`).join('')}</ul></div>`
+    : '';
+
+  box.innerHTML = `
+    <div class="diag-head">
+      <div>
+        <div class="diag-title">Cierre operativo SB</div>
+        <div class="diag-meta">Módulo autónomo · sin conexión SB→ED · generado: ${ex(new Date(status.generated_at).toLocaleString())}</div>
+      </div>
+      <div class="diag-sem ${sev}">${msg}</div>
+    </div>
+    <div class="sum-row"><strong>XML final</strong><span>${status.exportable ? 'exportable para draw.io' : 'bloqueado por estructura inválida'}</span></div>
+    <div class="sum-row"><strong>Estado</strong><span>${ex(status.status)}</span></div>
+    <div class="sum-row"><strong>Proceso</strong><span>${ex(status.process_code || '—')} · ${ex(status.process_name || '—')}</span></div>
+    <div class="sum-row"><strong>Actividades / actores</strong><span>${status.activity_count} / ${status.actor_count}</span></div>
+    <div class="sum-row"><strong>Advertencias</strong><span>${status.warnings_count}</span></div>
+    <div class="sum-row"><strong>Salida oficial</strong><span>XML draw.io + respaldo JSON interno SB</span></div>
+    ${errorsHtml}
+    ${warningsHtml}
+  `;
+
+  ['btn_copy_operational_backup','btn_dl_operational_backup','btn_log_final_execution'].forEach(function(id){
+    const btn = $(id);
+    if (!btn) return;
+    btn.disabled = !status.exportable;
+    if (status.exportable) btn.classList.add('sgmp-v3-allow');
+  });
+  return status.exportable;
+}
+
+function copySBOperationalBackup() {
+  if (!renderSBOperationalClosure()) {
+    gMsg('warn', 'No puedes copiar el respaldo: el XML final está vacío o estructuralmente inválido.');
+    return;
+  }
+  const text = JSON.stringify(buildSBOperationalBackup(), null, 2);
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(function(){
+      gMsg('ok', 'Respaldo JSON SB copiado.');
+      if (typeof sgmpLogEvent === 'function') sgmpLogEvent('SB_OPERATIONAL_BACKUP_COPIED', { process_name: S.sp?.process_name || '', status: S.final?.status || '' });
+    }).catch(function(){ copyText(text); });
+  } else {
+    copyText(text);
+  }
+}
+
+function downloadSBOperationalBackup() {
+  if (!renderSBOperationalClosure()) {
+    gMsg('warn', 'No puedes descargar el respaldo: el XML final está vacío o estructuralmente inválido.');
+    return;
+  }
+  const safeName = String((S.sp && (S.sp.process_code || S.sp.process_name)) || 'sipoc')
+    .toLowerCase().replace(/[^a-z0-9áéíóúñ]+/gi,'_').replace(/^_+|_+$/g,'') || 'sipoc';
+  dlText(JSON.stringify(buildSBOperationalBackup(), null, 2), 'sb_respaldo_' + safeName + '.json');
+  if (typeof sgmpLogEvent === 'function') sgmpLogEvent('SB_OPERATIONAL_BACKUP_DOWNLOADED', { process_name: S.sp?.process_name || '', status: S.final?.status || '' });
+}
+
+function logSBFinalExecution() {
+  if (!renderSBOperationalClosure()) {
+    gMsg('warn', 'No se puede registrar cierre: XML final vacío o estructuralmente inválido.');
+    return;
+  }
+  const backup = buildSBOperationalBackup();
+  if (typeof sgmpLogEvent === 'function') {
+    sgmpLogEvent('SB_PROCESS_COMPLETED', {
+      process_code: backup.process.process_code,
+      process_name: backup.process.process_name,
+      activity_count: backup.process.activity_count,
+      actor_count: backup.process.actor_count,
+      timing_report: backup.timing_report,
+      status: backup.operational_status,
+      exportable: backup.exportable,
+      warnings_count: backup.xml_validation.warnings.length,
+      warnings: backup.xml_validation.warnings,
+      errors: backup.xml_validation.errors
+    });
+  }
+  try { sessionStorage.setItem('SGMP_SB_LAST_OPERATIONAL_BACKUP', JSON.stringify(backup)); } catch(e) {}
+  gMsg('ok', backup.operational_status === 'OK' ? 'Cierre operativo registrado.' : 'Cierre registrado con advertencias exportables.');
+}
+
 // ═══════════════════════════════════════════════════════════════
 // WIRE ALL EVENTS — called once on DOMContentLoaded
 // ═══════════════════════════════════════════════════════════════
@@ -3117,9 +3826,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
   sgmpWireApiButtons();
-
-  // Configuración local eliminada. SB consume gobierno desde SGMP Admin.
-
 
   // Capture mode buttons
   $('btn_guided').addEventListener('click', startGuided);
@@ -3171,10 +3877,15 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn_f4_final').addEventListener('click', () => goFinal('xml_f4','vld_f4'));
 
   // Output
-  $('btn_dl_final').addEventListener('click', () => dlText($('xml_final').value, 'sipoc_final.xml'));
-  $('btn_drawio').addEventListener('click', () => { window.open('https://app.diagrams.net/','_blank'); gMsg('info','draw.io abierto. Extras \u2192 Edit Diagram \u2192 pega el XML.'); });
+  $('btn_dl_final').addEventListener('click', () => { const xml = requireFinalXmlForDrawIO(); if (xml) dlText(xml, 'sipoc_final.xml'); });
+  if ($('btn_copy_final_xml')) $('btn_copy_final_xml').addEventListener('click', () => copyFinalXmlToClipboard().catch(function(){}));
+  $('btn_drawio').addEventListener('click', openDrawIOWithFinalXml);
+  if ($('btn_copy_operational_backup')) $('btn_copy_operational_backup').addEventListener('click', copySBOperationalBackup);
+  if ($('btn_dl_operational_backup')) $('btn_dl_operational_backup').addEventListener('click', downloadSBOperationalBackup);
+  if ($('btn_log_final_execution')) $('btn_log_final_execution').addEventListener('click', logSBFinalExecution);
+  if (typeof setDrawIOReadyState === 'function') setDrawIOReadyState();
+  if (typeof renderSBOperationalClosure === 'function') renderSBOperationalClosure();
 
-  // Config
 });
 </script>
 <script>
@@ -3241,7 +3952,7 @@ document.addEventListener('DOMContentLoaded', () => {
     inputKeys: ['SGMP_SB_INPUT', 'SGMP_LMP_TO_SB', 'SGMP_LMP_TO_SB_CONTRACT', 'sgmp_sb_payload'],
     handoffQueryParam: 'handoff_key',
     isProcessing: false,
-    timers: { globalStart:null, globalInterval:null, stageStarts:{}, stageElapsed:{}, stageStatus:{}, stageLastError:{}, stageLabels:{ sb_f1:'F1', sb_f2:'F2', sb_f3:'F3', sb_f4:'F4' } },
+    timers: { globalStart:null, globalEnd:null, globalInterval:null, stageStarts:{}, stageElapsed:{}, stageStatus:{}, stageLastError:{}, stageLabels:{ sb_f1:'F1', sb_f2:'F2', sb_f3:'F3', sb_f4:'F4' } },
     currentStage: '—'
   };
 
@@ -3253,6 +3964,30 @@ document.addEventListener('DOMContentLoaded', () => {
     var h = Math.floor(ms/3600000);
     return pad(h)+':'+pad(m)+':'+pad(s);
   }
+
+  window.sgmpV3PersistTimers = function(){
+    try {
+      var t = window.SGMP_SB3 && window.SGMP_SB3.timers ? window.SGMP_SB3.timers : null;
+      if (!t) return;
+      sessionStorage.setItem('SGMP_SB_TIMER_REPORT', JSON.stringify({
+        module_code: 'SB',
+        module_label: window.SGMP_SB3.moduleLabel || 'modulo_2',
+        saved_at: new Date().toISOString(),
+        timers: {
+          globalStart: t.globalStart,
+          globalEnd: t.globalEnd,
+          stageElapsed: t.stageElapsed || {},
+          stageStatus: t.stageStatus || {},
+          stageLastError: t.stageLastError || {}
+        }
+      }));
+    } catch(e) {}
+  };
+
+  window.sgmpV3HasRunningStages = function(){
+    var starts = (window.SGMP_SB3 && window.SGMP_SB3.timers && window.SGMP_SB3.timers.stageStarts) || {};
+    return Object.keys(starts).some(function(k){ return !!starts[k]; });
+  };
 
   window.sgmpV3TinyPause = function(){
     return new Promise(function(resolve){ setTimeout(resolve, 120); });
@@ -3316,14 +4051,18 @@ document.addEventListener('DOMContentLoaded', () => {
   window.sgmpV3StartGlobalTimer = function(){
     var t = window.SGMP_SB3.timers;
     if (!t.globalStart) t.globalStart = Date.now();
+    t.globalEnd = null;
     if (t.globalInterval) return;
     t.globalInterval = setInterval(function(){
       window.sgmpV3RefreshTimersUI();
     }, 1000);
     window.sgmpV3RefreshTimersUI();
+    window.sgmpV3PersistTimers();
   };
 
   window.sgmpV3StartStage = function(stageCode){
+    // Único punto autorizado para iniciar medición de etapa.
+    // Se invoca desde sgmpV3Execute / sbExecute, nunca desde modo manual.
     window.sgmpV3StartGlobalTimer();
     var t = window.SGMP_SB3.timers;
     window.SGMP_SB3.currentStage = stageCode || '—';
@@ -3333,9 +4072,11 @@ document.addEventListener('DOMContentLoaded', () => {
       delete t.stageLastError[stageCode];
     }
     window.sgmpV3UpdateStageTimerUI(stageCode);
+    window.sgmpV3PersistTimers();
   };
 
   window.sgmpV3StopStage = function(stageCode, status, errorMessage){
+    // Único punto autorizado para cerrar medición y estado de etapa.
     var t = window.SGMP_SB3.timers;
     if (stageCode && t.stageStarts[stageCode]) {
       t.stageElapsed[stageCode] = Date.now() - t.stageStarts[stageCode];
@@ -3345,15 +4086,19 @@ document.addEventListener('DOMContentLoaded', () => {
       t.stageStatus[stageCode] = status || t.stageStatus[stageCode] || 'completed';
       if (errorMessage) t.stageLastError[stageCode] = String(errorMessage);
     }
+    if (!window.sgmpV3HasRunningStages()) {
+      t.globalEnd = Date.now();
+    }
     var el = document.getElementById('sgmp_v3_stage_time');
     if (el) el.textContent = 'Etapa finalizada: ' + window.sgmpV3StageLabel(stageCode || '—') + ' · ' + fmt(t.stageElapsed[stageCode] || 0);
     window.sgmpV3UpdateStageTimerUI(stageCode);
+    window.sgmpV3PersistTimers();
   };
 
   window.sgmpV3TimingReport = function(){
     var t = window.SGMP_SB3.timers;
     var codes = ['sb_f1','sb_f2','sb_f3','sb_f4'];
-    var totalMs = t.globalStart ? Date.now() - t.globalStart : 0;
+    var totalMs = t.globalStart ? ((window.sgmpV3HasRunningStages() ? Date.now() : (t.globalEnd || Date.now())) - t.globalStart) : 0;
     var stagesMs = {};
     var stages = {};
     var detail = {};
@@ -3422,6 +4167,8 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   window.sgmpV3Execute = async function(stageCode, fn, message){
+    // Wrapper único de ejecución API/HYBRID.
+    // Toda medición de F1-F4 debe pasar por aquí; el modo manual no inicia timer.
     if (window.SGMP_SB3.isProcessing) {
       if (typeof gMsg === 'function') gMsg('warn', 'Ya existe una ejecución en curso. Espera a que termine.');
       return { ok:false, skipped:true, reason:'processing' };
@@ -3437,15 +4184,16 @@ document.addEventListener('DOMContentLoaded', () => {
       var result = await fn();
       window.sgmpV3StopStage(stageCode, 'completed');
       return { ok:true, result:result };
-    }
-    catch(e){
+    } catch(e) {
       executionError = e;
       console.error('[SGMP SB3]', e);
+      window.sgmpV3StopStage(stageCode, 'error', e && e.message ? e.message : String(e));
       try { if (typeof sgmpLogEvent === 'function') sgmpLogEvent('SB_API_STAGE_ERROR', { stage_code: stageCode, message: String(e && e.message || e) }); } catch(_e) {}
       if (typeof gMsg === 'function') gMsg('err', 'Error en ' + stageCode + '. Puedes continuar en modo manual.');
       window.sgmpV3UpdateLoader('Error en la ejecución API', 'La etapa no se aplicó automáticamente. Continúa con copiar prompt, IA externa, pegar respuesta y validar.', 'Fallback manual disponible');
       return { ok:false, error:e };
     } finally {
+      // Safety net: si por alguna excepción no se cerró la etapa, se marca como error.
       if (stageCode && window.SGMP_SB3.timers.stageStarts[stageCode]) {
         window.sgmpV3StopStage(stageCode, executionError ? 'error' : 'completed', executionError && executionError.message ? executionError.message : '');
       }
@@ -3453,6 +4201,7 @@ document.addEventListener('DOMContentLoaded', () => {
       window.sgmpV3SetApiBusy(false);
       window.SGMP_SB3.isProcessing = false;
       window.sgmpV3RefreshTimersUI();
+      window.sgmpV3PersistTimers();
     }
   };
 
@@ -3618,7 +4367,8 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   document.addEventListener('DOMContentLoaded', function(){
-    window.sgmpV3StartGlobalTimer();
+    // El timer global inicia únicamente al ejecutar API/HYBRID mediante sbExecute.
+    window.sgmpV3RefreshTimersUI();
     setTimeout(window.sgmpV3LoadFromLMPStorage, 250);
 
     var drawBtn = document.getElementById('btn_drawio');
@@ -3626,5 +4376,65 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 })();
 </script>
+
+
+<!-- SGMP v3 · FASE 10 · Cierre final de calidad -->
+<script>
+(function(){
+  if (window.SGMP_SB3_PHASE10_LOADED) return;
+  window.SGMP_SB3_PHASE10_LOADED = true;
+
+  window.SGMP_SB3_FINAL = {
+    module_code: 'SB',
+    module_label: 'modulo_2',
+    version: '3.0-final',
+    deployment: 'GitHub Pages',
+    backend: 'Apps Script',
+    status: 'READY_FOR_LAB_TEST',
+    updated_at: new Date().toISOString()
+  };
+
+  function phase10Check(){
+    var checks = [];
+    function add(name, ok, detail){ checks.push({ name:name, ok:!!ok, detail:detail || '' }); }
+
+    add('endpoint_configurado', typeof SGMP_API === 'string' && SGMP_API.indexOf('/exec') > -1, SGMP_API || '');
+    add('sin_tab_config_local', !document.getElementById('tab_config'), 'La configuración local no debe existir en SB.');
+    add('manual_disponible', !!document.getElementById('tab_manual'), 'Modo manual debe permanecer disponible.');
+    add('salida_xml_disponible', !!document.getElementById('xml_final'), 'Debe existir salida XML final.');
+    add('drawio_disponible', !!document.getElementById('btn_drawio'), 'Debe existir botón draw.io.');
+    add('loader_global_disponible', !!document.getElementById('sgmp_v3_loader'), 'Loader global tipo LMP.');
+    add('timer_global_disponible', !!document.getElementById('sgmp_v3_timer'), 'Timer global visible.');
+    add('wrapper_ejecucion_disponible', typeof window.sgmpV3Execute === 'function', 'Wrapper único de ejecución.');
+    add('handoff_lmp_disponible', typeof window.sgmpV3LoadFromLMPStorage === 'function', 'Recepción LMP → SB.');
+    add('validacion_xml_disponible', typeof window.sgmpV3ValidateXMLText === 'function', 'Validador XML base.');
+
+    var failed = checks.filter(function(c){ return !c.ok; });
+    window.SGMP_SB3_FINAL.health = {
+      status: failed.length ? 'WARNING' : 'OK',
+      checks: checks,
+      checked_at: new Date().toISOString()
+    };
+
+    try {
+      console.group('[SGMP SB3] Fase 10 · Health Check');
+      checks.forEach(function(c){ console[c.ok ? 'log' : 'warn']((c.ok ? '✅ ' : '⚠️ ') + c.name, c.detail || ''); });
+      console.log('Estado final:', window.SGMP_SB3_FINAL.health.status);
+      console.groupEnd();
+    } catch(e) {}
+
+    if (typeof sgmpLogEvent === 'function') {
+      sgmpLogEvent('SB_PHASE10_HEALTH_CHECK', window.SGMP_SB3_FINAL.health);
+    }
+    return window.SGMP_SB3_FINAL.health;
+  }
+
+  window.sgmpV3Phase10HealthCheck = phase10Check;
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(phase10Check, 500);
+  });
+})();
+</script>
+
 </body>
 </html>
