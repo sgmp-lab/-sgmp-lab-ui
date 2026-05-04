@@ -1324,7 +1324,7 @@ body.sgmp-v3-processing select{
       </div>
       <div>
         <label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">XML resultado F2</label>
-        <textarea id="xml_f2" class="xml-ta" style="margin-top:5px" placeholder="Pega aquí SOLO los mxCell edge=&quot;1&quot; devueltos por la IA. SB los fusionará con XML F1..."></textarea>
+        <textarea id="xml_f2" class="xml-ta" style="margin-top:5px" placeholder="Pega aquí SOLO los mxCell edge="1" devueltos por la IA. SB los fusionará con XML F1..."></textarea>
         <div id="vld_f2" class="vld"></div>
         <div class="btn-row">
           <button id="btn_vld_f2">Validar</button>
@@ -1634,6 +1634,8 @@ function switchTab(id) {
   $(id).classList.remove('hidden');
   const nb = document.querySelector('[data-tab="' + id + '"]');
   if (nb) nb.classList.add('active');
+  // SGMP v3: notifica cambio de etapa para que el timer corra también en modo manual.
+  if (typeof window.sgmpV3OnStageTab === 'function') window.sgmpV3OnStageTab(id);
 }
 
 function copyText(text) {
@@ -2875,6 +2877,7 @@ function stepNext(tabId, srcId, vldId, storeKey, buildNext) {
   if (storeKey==='f2') S.xmlF2 = xml;
   if (storeKey==='f3') S.xmlF3 = xml;
   if (storeKey==='f4') S.xmlF4 = xml;
+  if (typeof window.sgmpV3CompleteManualStage === 'function') window.sgmpV3CompleteManualStage('sb_' + storeKey, 'manual_completed');
   buildNext();
   switchTab(tabId);
   gMsg('ok', storeKey === 'f2' ? 'F2 validado: SB fusionó los edges con XML F1 y generó XML F2 controlado.' : 'Paso completado. Copia el nuevo prompt y ejecútalo en la IA.');
@@ -2887,6 +2890,7 @@ function goFinal(srcId='xml_f4', vldId='vld_f4') {
   if (srcId === 'xml_f4') S.xmlF4 = xml;
   else S.xmlF3 = xml;
   S.xmlFinal = injectHeader(xml, S.sp || {});
+  if (typeof window.sgmpV3CompleteManualStage === 'function') window.sgmpV3CompleteManualStage('sb_f4', 'manual_completed');
   $('xml_final').value = S.xmlFinal;
   if (typeof setDrawIOReadyState === 'function') setDrawIOReadyState();
   renderOutReport();
@@ -4044,7 +4048,12 @@ document.addEventListener('DOMContentLoaded', () => {
   window.sgmpV3RefreshTimersUI = function(){
     var t = window.SGMP_SB3.timers;
     var main = document.getElementById('sgmp_v3_global_time');
-    if (main) main.textContent = fmt(t.globalStart ? Date.now() - t.globalStart : 0);
+    var totalMs = 0;
+    if (t.globalStart) {
+      // Si hay etapa corriendo, el reloj avanza. Si no, queda congelado en globalEnd.
+      totalMs = (window.sgmpV3HasRunningStages() ? Date.now() : (t.globalEnd || Date.now())) - t.globalStart;
+    }
+    if (main) main.textContent = fmt(totalMs);
     window.sgmpV3UpdateStageTimerUI(window.SGMP_SB3.currentStage);
   };
 
@@ -4060,15 +4069,16 @@ document.addEventListener('DOMContentLoaded', () => {
     window.sgmpV3PersistTimers();
   };
 
-  window.sgmpV3StartStage = function(stageCode){
-    // Único punto autorizado para iniciar medición de etapa.
-    // Se invoca desde sgmpV3Execute / sbExecute, nunca desde modo manual.
+  window.sgmpV3StartStage = function(stageCode, mode){
+    // Punto único para iniciar medición de etapa.
+    // Ahora mide tanto API/HYBRID como flujo manual asistido.
     window.sgmpV3StartGlobalTimer();
     var t = window.SGMP_SB3.timers;
     window.SGMP_SB3.currentStage = stageCode || '—';
     if (stageCode) {
-      t.stageStarts[stageCode] = Date.now();
-      t.stageStatus[stageCode] = 'running';
+      // No reiniciar si la etapa ya está corriendo; evita perder tiempo cuando el usuario navega entre pestañas.
+      if (!t.stageStarts[stageCode]) t.stageStarts[stageCode] = Date.now();
+      t.stageStatus[stageCode] = mode === 'manual' ? 'manual_running' : 'running';
       delete t.stageLastError[stageCode];
     }
     window.sgmpV3UpdateStageTimerUI(stageCode);
@@ -4207,6 +4217,55 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Alias estándar de ejecución SB v3: una sola compuerta para API/HYBRID.
   window.sbExecute = window.sgmpV3Execute;
+
+  // SGMP v3 · Timer manual asistido
+  // Mide el tiempo real que el usuario permanece en F1/F2/F3/F4 aunque trabaje con copiar/pegar.
+  window.sgmpV3BeginManualStage = function(stageCode){
+    if (!stageCode || !window.SGMP_SB3 || window.SGMP_SB3.isProcessing) return;
+    var t = window.SGMP_SB3.timers;
+    // Si ya está completa, no la reinicia automáticamente. Así se conserva el reporte real.
+    if (t.stageStatus[stageCode] === 'completed' || t.stageStatus[stageCode] === 'manual_completed') {
+      window.SGMP_SB3.currentStage = stageCode;
+      window.sgmpV3RefreshTimersUI();
+      return;
+    }
+    window.sgmpV3StartStage(stageCode, 'manual');
+  };
+
+  window.sgmpV3CompleteManualStage = function(stageCode, status, errorMessage){
+    if (!stageCode || !window.SGMP_SB3) return;
+    var t = window.SGMP_SB3.timers;
+    if (t.stageStarts[stageCode]) {
+      window.sgmpV3StopStage(stageCode, status || 'manual_completed', errorMessage || '');
+    } else {
+      // Si la etapa fue completada por API o ya estaba cerrada, no rompe ni reinicia.
+      t.stageStatus[stageCode] = t.stageStatus[stageCode] || (status || 'manual_completed');
+      window.sgmpV3UpdateStageTimerUI(stageCode);
+      window.sgmpV3PersistTimers();
+    }
+  };
+
+  window.sgmpV3OnStageTab = function(tabId){
+    var map = { tab_f1:'sb_f1', tab_f2:'sb_f2', tab_f3:'sb_f3', tab_f4:'sb_f4' };
+    var stageCode = map[tabId];
+    if (!stageCode) return;
+    window.sgmpV3BeginManualStage(stageCode);
+  };
+
+  window.sgmpV3ResetTimers = function(){
+    var t = window.SGMP_SB3.timers;
+    if (t.globalInterval) clearInterval(t.globalInterval);
+    t.globalStart = null;
+    t.globalEnd = null;
+    t.globalInterval = null;
+    t.stageStarts = {};
+    t.stageElapsed = {};
+    t.stageStatus = {};
+    t.stageLastError = {};
+    window.SGMP_SB3.currentStage = '—';
+    window.sgmpV3RefreshTimersUI();
+    window.sgmpV3PersistTimers();
+  };
 
   window.sgmpV3NormalizeInput = function(data){
     if (!data || typeof data !== 'object') throw new Error('Input vacío o inválido.');
