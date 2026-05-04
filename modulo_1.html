@@ -1355,8 +1355,11 @@
   border-radius:18px;padding:12px 14px;background:rgba(255,255,255,.94);
   border:1px solid rgba(0,194,255,.30);box-shadow:0 12px 32px rgba(11,46,89,.14);
   color:#0B2E59;font-size:12px;backdrop-filter:blur(8px);
+  cursor:pointer;transition:width .18s ease,max-width .18s ease,min-width .18s ease,padding .18s ease,border-radius .18s ease,box-shadow .18s ease,transform .18s ease;
 }
+#sgmp_v3_timer:hover{box-shadow:0 14px 36px rgba(11,46,89,.18);transform:translateY(-1px);}
 #sgmp_v3_timer strong{display:block;font-size:12px;color:#0A1F44;margin-bottom:4px;}
+#sgmp_v3_timer .sgmp-time-icon{display:none;font-size:16px;line-height:1;}
 #sgmp_v3_timer .sgmp-time-main{font-size:19px;font-weight:900;letter-spacing:.04em;color:#1A56DB;line-height:1.1;}
 #sgmp_v3_timer .sgmp-time-stage{margin-top:5px;color:#5B6F8A;font-size:11px;line-height:1.35;}
 #sgmp_v3_timer .sgmp-time-grid{margin-top:9px;display:grid;grid-template-columns:1fr;gap:5px;max-height:230px;overflow:auto;padding-right:2px;}
@@ -1365,6 +1368,16 @@
 #sgmp_v3_timer .sgmp-time-row span:last-child{font-family:Consolas,monospace;color:#0A1F44;}
 #sgmp_v3_timer .sgmp-time-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;border-top:1px solid rgba(0,194,255,.16);padding-top:8px;}
 #sgmp_v3_timer .sgmp-time-actions button{border-radius:10px;padding:6px 8px;font-size:11px;font-weight:800;min-height:0;}
+#sgmp_v3_timer.sgmp-timer-collapsed{
+  min-width:0;width:auto;max-width:190px;border-radius:999px;padding:9px 12px;
+  display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.96);
+}
+#sgmp_v3_timer.sgmp-timer-collapsed strong,
+#sgmp_v3_timer.sgmp-timer-collapsed .sgmp-time-stage,
+#sgmp_v3_timer.sgmp-timer-collapsed .sgmp-time-grid,
+#sgmp_v3_timer.sgmp-timer-collapsed .sgmp-time-actions{display:none;}
+#sgmp_v3_timer.sgmp-timer-collapsed .sgmp-time-icon{display:inline-flex;align-items:center;justify-content:center;}
+#sgmp_v3_timer.sgmp-timer-collapsed .sgmp-time-main{font-size:15px;letter-spacing:.03em;white-space:nowrap;}
 .sgmp-timing-report{margin-top:12px;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:12px;padding:12px 14px;color:#075985;font-size:12px;}
 .sgmp-timing-report h3{font-size:13px;margin:0 0 8px;color:#0369A1;}
 .sgmp-timing-report table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;}
@@ -1372,7 +1385,11 @@
 .sgmp-timing-report th{background:#E0F2FE;color:#075985;font-size:11px;text-transform:uppercase;letter-spacing:.03em;}
 .sgmp-timing-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
 body.sgmp-v3-processing button:not(.sgmp-v3-allow),body.sgmp-v3-processing input,body.sgmp-v3-processing textarea,body.sgmp-v3-processing select{pointer-events:none;opacity:.72;}
-@media(max-width:720px){#sgmp_v3_timer{left:12px;right:12px;bottom:12px;max-width:none;min-width:0;}#sgmp_v3_timer .sgmp-time-grid{max-height:150px;}}
+@media(max-width:720px){
+  #sgmp_v3_timer{left:12px;right:12px;bottom:12px;max-width:none;min-width:0;}
+  #sgmp_v3_timer .sgmp-time-grid{max-height:150px;}
+  #sgmp_v3_timer.sgmp-timer-collapsed{left:auto!important;right:12px!important;width:auto!important;max-width:176px!important;min-width:0!important;}
+}
 @media print{#sgmp_v3_timer,.sgmp-timing-actions{display:none!important}}
 </style>
 
@@ -8318,6 +8335,40 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
   function stageFromCode(code){return String(code||'').replace(/^lmp_/,'');}
   function currentVisibleStage(){var el=document.querySelector('.section.active');return el&&el.id?el.id:(window.state&&state.metadata&&state.metadata.currentStage)||'inicio';}
 
+  var timerCollapseTimeout=null;
+  window.sgmpV3SetTimerExpanded = function(expanded){
+    var el=document.getElementById('sgmp_v3_timer');if(!el)return;
+    if(timerCollapseTimeout){clearTimeout(timerCollapseTimeout);timerCollapseTimeout=null;}
+    if(expanded){
+      el.classList.remove('sgmp-timer-collapsed');
+      el.setAttribute('aria-expanded','true');
+      timerCollapseTimeout=setTimeout(function(){window.sgmpV3SetTimerExpanded(false);},8000);
+    }else{
+      el.classList.add('sgmp-timer-collapsed');
+      el.setAttribute('aria-expanded','false');
+    }
+  };
+
+  window.sgmpV3ToggleTimer = function(evt){
+    if(evt && evt.target && evt.target.closest && evt.target.closest('button'))return;
+    var el=document.getElementById('sgmp_v3_timer');if(!el)return;
+    window.sgmpV3SetTimerExpanded(el.classList.contains('sgmp-timer-collapsed'));
+  };
+
+  function installTimerCompactBehavior(){
+    var el=document.getElementById('sgmp_v3_timer');if(!el||el.__sgmpCompactHooked)return;
+    el.__sgmpCompactHooked=true;
+    el.addEventListener('click',window.sgmpV3ToggleTimer);
+    el.addEventListener('keydown',function(evt){
+      if(evt.key==='Enter'||evt.key===' '){evt.preventDefault();window.sgmpV3ToggleTimer(evt);}
+      if(evt.key==='Escape'){window.sgmpV3SetTimerExpanded(false);}
+    });
+    Array.prototype.forEach.call(el.querySelectorAll('button'),function(btn){
+      btn.addEventListener('click',function(evt){evt.stopPropagation();window.sgmpV3SetTimerExpanded(true);});
+    });
+    window.sgmpV3SetTimerExpanded(false);
+  }
+
   window.sgmpV3StageLabel = function(stageCode){
     var c=codeFromStage(stageCode);return (window.SGMP_LMP3.timers.stageLabels||{})[c]||stageFromCode(c)||'—';
   };
@@ -8465,14 +8516,14 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
 
   document.addEventListener('DOMContentLoaded',function(){
-    installShowSectionHook();installResetHook();installResultsHook();
+    installShowSectionHook();installResetHook();installResultsHook();installTimerCompactBehavior();
     window.sgmpV3StartGlobalTimer();
     window.sgmpV3BeginManualStage(currentVisibleStage());
     window.sgmpV3RefreshTimersUI();
   });
 
   if(document.readyState!=='loading'){
-    installShowSectionHook();installResetHook();installResultsHook();
+    installShowSectionHook();installResetHook();installResultsHook();installTimerCompactBehavior();
     window.sgmpV3StartGlobalTimer();window.sgmpV3BeginManualStage(currentVisibleStage());window.sgmpV3RefreshTimersUI();
   }
 })();
@@ -8506,7 +8557,8 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
 
 
 <!-- ═══════════════════ TIMER SGMP v3 · LMP ═══════════════════ -->
-<div id="sgmp_v3_timer" aria-live="polite">
+<div id="sgmp_v3_timer" class="sgmp-timer-collapsed" aria-live="polite" aria-expanded="false" role="button" tabindex="0" title="Tocar para ver detalle de tiempos">
+  <span class="sgmp-time-icon" aria-hidden="true">⏱</span>
   <strong>Tiempo de ejecución</strong>
   <div id="sgmp_v3_global_time" class="sgmp-time-main">00:00:00</div>
   <div id="sgmp_v3_stage_time" class="sgmp-time-stage">Etapa actual: —</div>
