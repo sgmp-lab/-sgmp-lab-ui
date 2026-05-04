@@ -366,6 +366,64 @@ body.sgmp-v3-processing button:not(.sgmp-v3-allow),body.sgmp-v3-processing input
 .choice-list label{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid rgba(14,165,233,.24);border-radius:999px;background:#F2FBFF;color:#075985;font-size:12px;font-weight:700;text-transform:none;letter-spacing:0;}
 .choice-list input{width:auto}
 .choice-empty{color:var(--muted);font-size:12px;align-self:center}
+
+
+/* SGMP v3 · Timer compacto expandible */
+#sgmp_v3_timer{
+  cursor:pointer !important;
+  user-select:none !important;
+  transition:width .22s ease, height .22s ease, padding .22s ease, border-radius .22s ease, box-shadow .22s ease, opacity .22s ease !important;
+  overflow:hidden !important;
+}
+#sgmp_v3_timer.compact{
+  width:104px !important;
+  min-width:104px !important;
+  height:44px !important;
+  padding:7px 10px !important;
+  border-radius:999px !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+}
+#sgmp_v3_timer.compact strong,
+#sgmp_v3_timer.compact .sgmp-time-stage,
+#sgmp_v3_timer.compact .sgmp-time-grid{
+  display:none !important;
+}
+#sgmp_v3_timer.compact .sgmp-time-main{
+  font-size:14px !important;
+  line-height:1 !important;
+  letter-spacing:.02em !important;
+  color:#0284C7 !important;
+}
+#sgmp_v3_timer.expanded{
+  width:240px !important;
+  min-width:240px !important;
+  height:auto !important;
+  padding:12px 14px !important;
+  border-radius:18px !important;
+}
+#sgmp_v3_timer.expanded .sgmp-time-main{
+  font-size:19px !important;
+}
+#sgmp_v3_timer:hover{
+  box-shadow:0 16px 40px rgba(10,31,68,.18) !important;
+}
+@media(max-width:720px){
+  #sgmp_v3_timer{
+    right:12px !important;
+    bottom:12px !important;
+  }
+  #sgmp_v3_timer.compact{
+    width:96px !important;
+    min-width:96px !important;
+    height:42px !important;
+  }
+  #sgmp_v3_timer.expanded{
+    width:min(260px, calc(100vw - 24px)) !important;
+    min-width:0 !important;
+  }
+}
 </style>
   <script>
 (function() {
@@ -720,7 +778,7 @@ body.sgmp-v3-processing button:not(.sgmp-v3-allow),body.sgmp-v3-processing input
 </div>
 
 <!-- ═══════════════════ TIMER ═══════════════════ -->
-<div id="sgmp_v3_timer">
+<div id="sgmp_v3_timer" class="compact" title="Tocar para ver detalle de tiempos">
   <strong>Tiempo de ejecución</strong>
   <div id="sgmp_v3_global_time" class="sgmp-time-main">00:00:00</div>
   <div id="sgmp_v3_stage_time" class="sgmp-time-stage">Etapa actual: —</div>
@@ -1889,6 +1947,73 @@ document.addEventListener('DOMContentLoaded', () => {
     fetch(API+"?action=get_module_identity&code="+C).then(function(r){return r.json();}).then(function(res){if(res.ok&&res.data){try{sessionStorage.setItem(k,JSON.stringify({_ts:Date.now(),d:res.data}));}catch(e){}apply(res.data);}}).catch(function(){});
   }
   document.readyState==="loading"?document.addEventListener("DOMContentLoaded",load):load();
+})();
+</script>
+
+
+<script>
+// SGMP v3 · Timer compacto expandible para SB
+(function(){
+  function initCompactTimer(){
+    var timer = document.getElementById('sgmp_v3_timer');
+    if(!timer || timer.dataset.compactReady === '1') return;
+    timer.dataset.compactReady = '1';
+    timer.classList.remove('expanded');
+    timer.classList.add('compact');
+    timer.setAttribute('role','button');
+    timer.setAttribute('tabindex','0');
+    timer.setAttribute('aria-label','Ver detalle del tiempo de ejecución');
+
+    var collapseTimeout = null;
+    function clearCollapse(){
+      if(collapseTimeout){
+        clearTimeout(collapseTimeout);
+        collapseTimeout = null;
+      }
+    }
+    function collapseTimer(){
+      timer.classList.remove('expanded');
+      timer.classList.add('compact');
+      timer.setAttribute('aria-expanded','false');
+      clearCollapse();
+    }
+    function expandTimer(){
+      timer.classList.remove('compact');
+      timer.classList.add('expanded');
+      timer.setAttribute('aria-expanded','true');
+      clearCollapse();
+      collapseTimeout = setTimeout(collapseTimer, 8000);
+    }
+    function toggleTimer(e){
+      if(e){
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      if(timer.classList.contains('compact')) expandTimer();
+      else collapseTimer();
+    }
+
+    timer.addEventListener('click', toggleTimer);
+    timer.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){
+        toggleTimer(e);
+      }
+    });
+    timer.addEventListener('mouseenter', function(){
+      if(timer.classList.contains('expanded')) clearCollapse();
+    });
+    timer.addEventListener('mouseleave', function(){
+      if(timer.classList.contains('expanded')){
+        clearCollapse();
+        collapseTimeout = setTimeout(collapseTimer, 3000);
+      }
+    });
+    document.addEventListener('click', function(){
+      if(timer.classList.contains('expanded')) collapseTimer();
+    });
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initCompactTimer);
+  else initCompactTimer();
 })();
 </script>
 
