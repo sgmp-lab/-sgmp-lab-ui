@@ -1447,7 +1447,12 @@ body.sgmp-v3-processing button:not(.sgmp-v3-allow),body.sgmp-v3-processing input
 
 <button class="step-btn" data-target="carga">Carga y consolidación<small>Insumos y objeto maestro.</small></button>
 <button class="step-btn" data-target="asis">AS IS<small>Estructura actual del proceso.</small></button>
-<button class="step-btn" data-target="analisis">Análisis<small>AVA, desperdicios y quick wins.</small></button>
+<button class="step-btn" data-target="analisis_b1">B1 · Validación AS IS<small>Prompt y respuesta de validación.</small></button>
+<button class="step-btn" data-target="analisis_b2">B2 · AVA<small>Prompt y respuesta de valor agregado.</small></button>
+<button class="step-btn" data-target="analisis_b3">B3 · Desperdicios<small>Prompt y respuesta de hallazgos Lean.</small></button>
+<button class="step-btn" data-target="analisis_b4">B4 · Restricciones<small>Prompt y respuesta de restricciones TOC.</small></button>
+<button class="step-btn" data-target="analisis_b5">B5 · Mejoras<small>Prompt y respuesta para TO BE.</small></button>
+<button class="step-btn" data-target="analisis_b6">B6 · Builder SB<small>Prompt y respuesta del contrato SIPOC.</small></button>
 <button class="step-btn" data-target="decision">Decisión<small>Cerrar con AS IS o pasar a TO BE.</small></button>
 <button class="step-btn" data-target="tobe">TO BE<small>Evaluación de mejoras.</small></button>
 <button class="step-btn" data-target="resultados">Resultados<small>SB, informes y plan.</small></button>
@@ -2722,14 +2727,6 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
     <button class="btn-ghost" onclick="generateAnalysisStagePrompt('B6')" type="button">B6 · Builder</button>
   </div>
 </div>
-<div class="actions" style="border-top:none;padding-top:8px;margin-top:8px">
-  <div class="actions-left">
-    <button class="btn-ok" id="btnRunCurrentAnalysisStage" onclick="executeAnalysisStage()" type="button">Ejecutar etapa actual con IA</button>
-    <button class="btn" id="btnRunNextAnalysisStage" onclick="executeNextAnalysisStage()" type="button">Ejecutar siguiente pendiente</button>
-    <button class="btn-ghost" onclick="processAnalysisStageResponse()" type="button">Procesar respuesta manual</button>
-  </div>
-</div>
-<div class="note" id="analysisStageStatus"><strong>Estado de subetapas</strong><br/>B1 pendiente · B2 pendiente · B3 pendiente · B4 pendiente · B5 pendiente · B6 pendiente</div>
 </article>
 
 <article class="card half">
@@ -2826,43 +2823,282 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 <div class="actions-right"><button class="btn" onclick="saveAsIsAndContinue()" type="button">Guardar y continuar</button></div>
 </div>
 </section>
-<!-- ANALISIS -->
-<section class="section" id="analisis">
-<div class="section-head">
-<div>
-<h2>Análisis AS IS</h2>
-<p>Genera una lectura Lean Six Sigma del proceso actual: AVA, desperdicios, problemas, quick wins y restricciones.</p>
-</div>
-<div class="step-pill">Paso 5</div>
-</div>
-<div class="cards">
-<article class="card">
-<h3>Ejecutar análisis</h3>
-<div class="actions">
-<div class="actions-left">
-<button class="btn-ok" onclick="runAnalysis()" type="button">Generar análisis</button>
-</div>
-</div>
-<div class="msg" id="analysisMsg"></div>
-<div class="kpi-wrap">
-<div class="kpi-card"><h4>AVA</h4><div class="big" id="avaKpi">0%</div><small>Valor agregado</small></div>
-<div class="kpi-card"><h4>NNVA</h4><div class="big" id="nnvaKpi">0%</div><small>Necesario sin valor agregado</small></div>
-<div class="kpi-card"><h4>NVA</h4><div class="big" id="nvaKpi">0%</div><small>Sin valor agregado</small></div>
-<div class="kpi-card"><h4>Quick wins</h4><div class="big" id="qwKpi">0</div><small>Oportunidades rápidas</small></div>
-<div class="kpi-card"><h4>Restricciones</h4><div class="big" id="resKpi">0</div><small>Puntos de bloqueo</small></div>
-</div>
-<div class="split3">
-<div><h3 style="margin-top:18px">Desperdicios</h3><div class="box" id="wasteBox"></div></div>
-<div><h3 style="margin-top:18px">Problemas</h3><div class="box" id="problemBox"></div></div>
-<div><h3 style="margin-top:18px">Quick wins / Restricciones</h3><div class="box" id="qwrBox"></div></div>
-</div>
-<textarea id="analysisEditor" placeholder="Aquí aparecerá el análisis estructurado." style="width:100%;min-height:320px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;margin-top:16px"></textarea>
-</article>
-</div>
-<div class="actions">
-<div class="actions-left"><button class="btn-ghost" onclick="goToPrev('analisis')" type="button">Volver</button></div>
-<div class="actions-right"><button class="btn" onclick="saveAnalysisAndContinue()" type="button">Guardar y continuar</button></div>
-</div>
+<!-- ANALISIS POR ETAPAS -->
+<!-- ANALISIS B1 -->
+<section class="section analysis-stage-section" id="analisis_b1" data-analysis-stage="B1">
+  <div class="section-head">
+    <div>
+      <h2>B1 · Validación AS IS</h2>
+      <p>Valida, limpia y estructura el AS IS. Debe recibir las actividades reales del Brief aprobado, no una actividad vacía.</p>
+    </div>
+    <div class="step-pill">Paso 5.1</div>
+  </div>
+  <div class="cards">
+    <article class="card half">
+      <h3>Prompt B1</h3>
+      <p>Genera el prompt de esta etapa y ejecútalo con la API. El prompt queda visible para revisión y depuración.</p>
+      <div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left">
+        <button class="btn" onclick="generateAnalysisScreenPrompt('B1')" type="button">Generar prompt</button>
+        <button class="btn-ok" onclick="runAnalysisScreenStage('B1')" type="button">Generar y ejecutar IA</button>
+        <button class="btn-ghost" onclick="copyTextFromId('analysisPrompt_B1','analysisMsg_B1','Prompt B1 copiado correctamente.')" type="button">Copiar prompt</button>
+      </div></div>
+      <textarea id="analysisPrompt_B1" placeholder="Aquí aparecerá el prompt B1." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+    </article>
+    <article class="card half">
+      <h3>Respuesta IA B1</h3>
+      <p>La respuesta aparece automáticamente si la API responde. También puedes pegar una respuesta manual y procesarla.</p>
+      <textarea id="analysisResponse_B1" placeholder="Aquí aparecerá o se pegará la respuesta JSON de la IA para B1." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+      <div class="actions"><div class="actions-left"><button class="btn-warn" onclick="processAnalysisScreenStage('B1')" type="button">Procesar respuesta B1</button></div><div class="actions-right"><button class="btn-ghost" onclick="downloadAnalysisStageJson('B1')" type="button">Descargar resultado</button></div></div>
+      <div class="msg" id="analysisMsg_B1"></div>
+    </article>
+    <article class="card">
+      <h3>Resultado editable B1</h3>
+      <p>Resultado normalizado de esta etapa. Puedes revisarlo antes de avanzar.</p>
+      <textarea id="analysisResult_B1" placeholder="Resultado procesado de B1." style="width:100%;min-height:280px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+    </article>
+    <article class="card">
+      <h3>Resumen acumulado</h3>
+      <div class="kpi-wrap">
+        <div class="kpi-card"><h4>AS IS</h4><div class="big" id="stageActsKpi_B1">0</div><small>actividades</small></div>
+        <div class="kpi-card"><h4>Mejoras</h4><div class="big" id="stageImpKpi_B1">0</div><small>candidatas</small></div>
+        <div class="kpi-card"><h4>Quick wins</h4><div class="big" id="stageQwKpi_B1">0</div><small>detectados</small></div>
+        <div class="kpi-card"><h4>Restricciones</h4><div class="big" id="stageResKpi_B1">0</div><small>detectadas</small></div>
+        <div class="kpi-card"><h4>NVA</h4><div class="big" id="stageNvaKpi_B1">0%</div><small>sin valor agregado</small></div>
+      </div>
+      <div class="pre" id="analysisAccumPreview_B1" style="margin-top:14px;min-height:220px"></div>
+    </article>
+  </div>
+  <div class="actions"><div class="actions-left"><button class="btn-ghost" onclick="goToPrev('analisis_b1')" type="button">Volver</button></div><div class="actions-right"><button class="btn" onclick="goToNext('analisis_b1')" type="button">Guardar y continuar</button></div></div>
+</section>
+<!-- ANALISIS B2 -->
+<section class="section analysis-stage-section" id="analisis_b2" data-analysis-stage="B2">
+  <div class="section-head">
+    <div>
+      <h2>B2 · Análisis AVA</h2>
+      <p>Clasifica cada actividad en VA, NNVA o NVA y calcula la distribución de valor agregado.</p>
+    </div>
+    <div class="step-pill">Paso 5.2</div>
+  </div>
+  <div class="cards">
+    <article class="card half">
+      <h3>Prompt B2</h3>
+      <p>Genera el prompt de esta etapa y ejecútalo con la API. El prompt queda visible para revisión y depuración.</p>
+      <div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left">
+        <button class="btn" onclick="generateAnalysisScreenPrompt('B2')" type="button">Generar prompt</button>
+        <button class="btn-ok" onclick="runAnalysisScreenStage('B2')" type="button">Generar y ejecutar IA</button>
+        <button class="btn-ghost" onclick="copyTextFromId('analysisPrompt_B2','analysisMsg_B2','Prompt B2 copiado correctamente.')" type="button">Copiar prompt</button>
+      </div></div>
+      <textarea id="analysisPrompt_B2" placeholder="Aquí aparecerá el prompt B2." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+    </article>
+    <article class="card half">
+      <h3>Respuesta IA B2</h3>
+      <p>La respuesta aparece automáticamente si la API responde. También puedes pegar una respuesta manual y procesarla.</p>
+      <textarea id="analysisResponse_B2" placeholder="Aquí aparecerá o se pegará la respuesta JSON de la IA para B2." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+      <div class="actions"><div class="actions-left"><button class="btn-warn" onclick="processAnalysisScreenStage('B2')" type="button">Procesar respuesta B2</button></div><div class="actions-right"><button class="btn-ghost" onclick="downloadAnalysisStageJson('B2')" type="button">Descargar resultado</button></div></div>
+      <div class="msg" id="analysisMsg_B2"></div>
+    </article>
+    <article class="card">
+      <h3>Resultado editable B2</h3>
+      <p>Resultado normalizado de esta etapa. Puedes revisarlo antes de avanzar.</p>
+      <textarea id="analysisResult_B2" placeholder="Resultado procesado de B2." style="width:100%;min-height:280px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+    </article>
+    <article class="card">
+      <h3>Resumen acumulado</h3>
+      <div class="kpi-wrap">
+        <div class="kpi-card"><h4>AS IS</h4><div class="big" id="stageActsKpi_B2">0</div><small>actividades</small></div>
+        <div class="kpi-card"><h4>Mejoras</h4><div class="big" id="stageImpKpi_B2">0</div><small>candidatas</small></div>
+        <div class="kpi-card"><h4>Quick wins</h4><div class="big" id="stageQwKpi_B2">0</div><small>detectados</small></div>
+        <div class="kpi-card"><h4>Restricciones</h4><div class="big" id="stageResKpi_B2">0</div><small>detectadas</small></div>
+        <div class="kpi-card"><h4>NVA</h4><div class="big" id="stageNvaKpi_B2">0%</div><small>sin valor agregado</small></div>
+      </div>
+      <div class="pre" id="analysisAccumPreview_B2" style="margin-top:14px;min-height:220px"></div>
+    </article>
+  </div>
+  <div class="actions"><div class="actions-left"><button class="btn-ghost" onclick="goToPrev('analisis_b2')" type="button">Volver</button></div><div class="actions-right"><button class="btn" onclick="goToNext('analisis_b2')" type="button">Guardar y continuar</button></div></div>
+</section>
+<!-- ANALISIS B3 -->
+<section class="section analysis-stage-section" id="analisis_b3" data-analysis-stage="B3">
+  <div class="section-head">
+    <div>
+      <h2>B3 · Desperdicios y problemas</h2>
+      <p>Detecta desperdicios Lean, problemas, riesgos, dependencias manuales, controles ocultos y evidencia operativa.</p>
+    </div>
+    <div class="step-pill">Paso 5.3</div>
+  </div>
+  <div class="cards">
+    <article class="card half">
+      <h3>Prompt B3</h3>
+      <p>Genera el prompt de esta etapa y ejecútalo con la API. El prompt queda visible para revisión y depuración.</p>
+      <div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left">
+        <button class="btn" onclick="generateAnalysisScreenPrompt('B3')" type="button">Generar prompt</button>
+        <button class="btn-ok" onclick="runAnalysisScreenStage('B3')" type="button">Generar y ejecutar IA</button>
+        <button class="btn-ghost" onclick="copyTextFromId('analysisPrompt_B3','analysisMsg_B3','Prompt B3 copiado correctamente.')" type="button">Copiar prompt</button>
+      </div></div>
+      <textarea id="analysisPrompt_B3" placeholder="Aquí aparecerá el prompt B3." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+    </article>
+    <article class="card half">
+      <h3>Respuesta IA B3</h3>
+      <p>La respuesta aparece automáticamente si la API responde. También puedes pegar una respuesta manual y procesarla.</p>
+      <textarea id="analysisResponse_B3" placeholder="Aquí aparecerá o se pegará la respuesta JSON de la IA para B3." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+      <div class="actions"><div class="actions-left"><button class="btn-warn" onclick="processAnalysisScreenStage('B3')" type="button">Procesar respuesta B3</button></div><div class="actions-right"><button class="btn-ghost" onclick="downloadAnalysisStageJson('B3')" type="button">Descargar resultado</button></div></div>
+      <div class="msg" id="analysisMsg_B3"></div>
+    </article>
+    <article class="card">
+      <h3>Resultado editable B3</h3>
+      <p>Resultado normalizado de esta etapa. Puedes revisarlo antes de avanzar.</p>
+      <textarea id="analysisResult_B3" placeholder="Resultado procesado de B3." style="width:100%;min-height:280px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+    </article>
+    <article class="card">
+      <h3>Resumen acumulado</h3>
+      <div class="kpi-wrap">
+        <div class="kpi-card"><h4>AS IS</h4><div class="big" id="stageActsKpi_B3">0</div><small>actividades</small></div>
+        <div class="kpi-card"><h4>Mejoras</h4><div class="big" id="stageImpKpi_B3">0</div><small>candidatas</small></div>
+        <div class="kpi-card"><h4>Quick wins</h4><div class="big" id="stageQwKpi_B3">0</div><small>detectados</small></div>
+        <div class="kpi-card"><h4>Restricciones</h4><div class="big" id="stageResKpi_B3">0</div><small>detectadas</small></div>
+        <div class="kpi-card"><h4>NVA</h4><div class="big" id="stageNvaKpi_B3">0%</div><small>sin valor agregado</small></div>
+      </div>
+      <div class="pre" id="analysisAccumPreview_B3" style="margin-top:14px;min-height:220px"></div>
+    </article>
+  </div>
+  <div class="actions"><div class="actions-left"><button class="btn-ghost" onclick="goToPrev('analisis_b3')" type="button">Volver</button></div><div class="actions-right"><button class="btn" onclick="goToNext('analisis_b3')" type="button">Guardar y continuar</button></div></div>
+</section>
+<!-- ANALISIS B4 -->
+<section class="section analysis-stage-section" id="analisis_b4" data-analysis-stage="B4">
+  <div class="section-head">
+    <div>
+      <h2>B4 · Restricciones y causa probable</h2>
+      <p>Identifica restricciones, cuellos de botella, causas probables y puntos de bloqueo.</p>
+    </div>
+    <div class="step-pill">Paso 5.4</div>
+  </div>
+  <div class="cards">
+    <article class="card half">
+      <h3>Prompt B4</h3>
+      <p>Genera el prompt de esta etapa y ejecútalo con la API. El prompt queda visible para revisión y depuración.</p>
+      <div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left">
+        <button class="btn" onclick="generateAnalysisScreenPrompt('B4')" type="button">Generar prompt</button>
+        <button class="btn-ok" onclick="runAnalysisScreenStage('B4')" type="button">Generar y ejecutar IA</button>
+        <button class="btn-ghost" onclick="copyTextFromId('analysisPrompt_B4','analysisMsg_B4','Prompt B4 copiado correctamente.')" type="button">Copiar prompt</button>
+      </div></div>
+      <textarea id="analysisPrompt_B4" placeholder="Aquí aparecerá el prompt B4." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+    </article>
+    <article class="card half">
+      <h3>Respuesta IA B4</h3>
+      <p>La respuesta aparece automáticamente si la API responde. También puedes pegar una respuesta manual y procesarla.</p>
+      <textarea id="analysisResponse_B4" placeholder="Aquí aparecerá o se pegará la respuesta JSON de la IA para B4." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+      <div class="actions"><div class="actions-left"><button class="btn-warn" onclick="processAnalysisScreenStage('B4')" type="button">Procesar respuesta B4</button></div><div class="actions-right"><button class="btn-ghost" onclick="downloadAnalysisStageJson('B4')" type="button">Descargar resultado</button></div></div>
+      <div class="msg" id="analysisMsg_B4"></div>
+    </article>
+    <article class="card">
+      <h3>Resultado editable B4</h3>
+      <p>Resultado normalizado de esta etapa. Puedes revisarlo antes de avanzar.</p>
+      <textarea id="analysisResult_B4" placeholder="Resultado procesado de B4." style="width:100%;min-height:280px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+    </article>
+    <article class="card">
+      <h3>Resumen acumulado</h3>
+      <div class="kpi-wrap">
+        <div class="kpi-card"><h4>AS IS</h4><div class="big" id="stageActsKpi_B4">0</div><small>actividades</small></div>
+        <div class="kpi-card"><h4>Mejoras</h4><div class="big" id="stageImpKpi_B4">0</div><small>candidatas</small></div>
+        <div class="kpi-card"><h4>Quick wins</h4><div class="big" id="stageQwKpi_B4">0</div><small>detectados</small></div>
+        <div class="kpi-card"><h4>Restricciones</h4><div class="big" id="stageResKpi_B4">0</div><small>detectadas</small></div>
+        <div class="kpi-card"><h4>NVA</h4><div class="big" id="stageNvaKpi_B4">0%</div><small>sin valor agregado</small></div>
+      </div>
+      <div class="pre" id="analysisAccumPreview_B4" style="margin-top:14px;min-height:220px"></div>
+    </article>
+  </div>
+  <div class="actions"><div class="actions-left"><button class="btn-ghost" onclick="goToPrev('analisis_b4')" type="button">Volver</button></div><div class="actions-right"><button class="btn" onclick="goToNext('analisis_b4')" type="button">Guardar y continuar</button></div></div>
+</section>
+<!-- ANALISIS B5 -->
+<section class="section analysis-stage-section" id="analisis_b5" data-analysis-stage="B5">
+  <div class="section-head">
+    <div>
+      <h2>B5 · Mejoras candidatas</h2>
+      <p>Convierte hallazgos en mejoras candidatas para que el TO BE tenga elementos para aprobar, ajustar o rechazar.</p>
+    </div>
+    <div class="step-pill">Paso 5.5</div>
+  </div>
+  <div class="cards">
+    <article class="card half">
+      <h3>Prompt B5</h3>
+      <p>Genera el prompt de esta etapa y ejecútalo con la API. El prompt queda visible para revisión y depuración.</p>
+      <div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left">
+        <button class="btn" onclick="generateAnalysisScreenPrompt('B5')" type="button">Generar prompt</button>
+        <button class="btn-ok" onclick="runAnalysisScreenStage('B5')" type="button">Generar y ejecutar IA</button>
+        <button class="btn-ghost" onclick="copyTextFromId('analysisPrompt_B5','analysisMsg_B5','Prompt B5 copiado correctamente.')" type="button">Copiar prompt</button>
+      </div></div>
+      <textarea id="analysisPrompt_B5" placeholder="Aquí aparecerá el prompt B5." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+    </article>
+    <article class="card half">
+      <h3>Respuesta IA B5</h3>
+      <p>La respuesta aparece automáticamente si la API responde. También puedes pegar una respuesta manual y procesarla.</p>
+      <textarea id="analysisResponse_B5" placeholder="Aquí aparecerá o se pegará la respuesta JSON de la IA para B5." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+      <div class="actions"><div class="actions-left"><button class="btn-warn" onclick="processAnalysisScreenStage('B5')" type="button">Procesar respuesta B5</button></div><div class="actions-right"><button class="btn-ghost" onclick="downloadAnalysisStageJson('B5')" type="button">Descargar resultado</button></div></div>
+      <div class="msg" id="analysisMsg_B5"></div>
+    </article>
+    <article class="card">
+      <h3>Resultado editable B5</h3>
+      <p>Resultado normalizado de esta etapa. Puedes revisarlo antes de avanzar.</p>
+      <textarea id="analysisResult_B5" placeholder="Resultado procesado de B5." style="width:100%;min-height:280px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+    </article>
+    <article class="card">
+      <h3>Resumen acumulado</h3>
+      <div class="kpi-wrap">
+        <div class="kpi-card"><h4>AS IS</h4><div class="big" id="stageActsKpi_B5">0</div><small>actividades</small></div>
+        <div class="kpi-card"><h4>Mejoras</h4><div class="big" id="stageImpKpi_B5">0</div><small>candidatas</small></div>
+        <div class="kpi-card"><h4>Quick wins</h4><div class="big" id="stageQwKpi_B5">0</div><small>detectados</small></div>
+        <div class="kpi-card"><h4>Restricciones</h4><div class="big" id="stageResKpi_B5">0</div><small>detectadas</small></div>
+        <div class="kpi-card"><h4>NVA</h4><div class="big" id="stageNvaKpi_B5">0%</div><small>sin valor agregado</small></div>
+      </div>
+      <div class="pre" id="analysisAccumPreview_B5" style="margin-top:14px;min-height:220px"></div>
+    </article>
+  </div>
+  <div class="actions"><div class="actions-left"><button class="btn-ghost" onclick="goToPrev('analisis_b5')" type="button">Volver</button></div><div class="actions-right"><button class="btn" onclick="goToNext('analisis_b5')" type="button">Guardar y continuar</button></div></div>
+</section>
+<!-- ANALISIS B6 -->
+<section class="section analysis-stage-section" id="analisis_b6" data-analysis-stage="B6">
+  <div class="section-head">
+    <div>
+      <h2>B6 · Builder SB</h2>
+      <p>Construye el contrato final LMP → SIPOC Builder usando el AS IS validado.</p>
+    </div>
+    <div class="step-pill">Paso 5.6</div>
+  </div>
+  <div class="cards">
+    <article class="card half">
+      <h3>Prompt B6</h3>
+      <p>Genera el prompt de esta etapa y ejecútalo con la API. El prompt queda visible para revisión y depuración.</p>
+      <div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left">
+        <button class="btn" onclick="generateAnalysisScreenPrompt('B6')" type="button">Generar prompt</button>
+        <button class="btn-ok" onclick="runAnalysisScreenStage('B6')" type="button">Generar y ejecutar IA</button>
+        <button class="btn-ghost" onclick="copyTextFromId('analysisPrompt_B6','analysisMsg_B6','Prompt B6 copiado correctamente.')" type="button">Copiar prompt</button>
+      </div></div>
+      <textarea id="analysisPrompt_B6" placeholder="Aquí aparecerá el prompt B6." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+    </article>
+    <article class="card half">
+      <h3>Respuesta IA B6</h3>
+      <p>La respuesta aparece automáticamente si la API responde. También puedes pegar una respuesta manual y procesarla.</p>
+      <textarea id="analysisResponse_B6" placeholder="Aquí aparecerá o se pegará la respuesta JSON de la IA para B6." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+      <div class="actions"><div class="actions-left"><button class="btn-warn" onclick="processAnalysisScreenStage('B6')" type="button">Procesar respuesta B6</button></div><div class="actions-right"><button class="btn-ghost" onclick="downloadAnalysisStageJson('B6')" type="button">Descargar resultado</button></div></div>
+      <div class="msg" id="analysisMsg_B6"></div>
+    </article>
+    <article class="card">
+      <h3>Resultado editable B6</h3>
+      <p>Resultado normalizado de esta etapa. Puedes revisarlo antes de avanzar.</p>
+      <textarea id="analysisResult_B6" placeholder="Resultado procesado de B6." style="width:100%;min-height:280px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+    </article>
+    <article class="card">
+      <h3>Resumen acumulado</h3>
+      <div class="kpi-wrap">
+        <div class="kpi-card"><h4>AS IS</h4><div class="big" id="stageActsKpi_B6">0</div><small>actividades</small></div>
+        <div class="kpi-card"><h4>Mejoras</h4><div class="big" id="stageImpKpi_B6">0</div><small>candidatas</small></div>
+        <div class="kpi-card"><h4>Quick wins</h4><div class="big" id="stageQwKpi_B6">0</div><small>detectados</small></div>
+        <div class="kpi-card"><h4>Restricciones</h4><div class="big" id="stageResKpi_B6">0</div><small>detectadas</small></div>
+        <div class="kpi-card"><h4>NVA</h4><div class="big" id="stageNvaKpi_B6">0%</div><small>sin valor agregado</small></div>
+      </div>
+      <div class="pre" id="analysisAccumPreview_B6" style="margin-top:14px;min-height:220px"></div>
+    </article>
+  </div>
+  <div class="actions"><div class="actions-left"><button class="btn-ghost" onclick="goToPrev('analisis_b6')" type="button">Volver</button></div><div class="actions-right"><button class="btn" onclick="goToNext('analisis_b6')" type="button">Guardar y continuar</button></div></div>
 </section>
 <!-- DECISION -->
 <section class="section" id="decision">
@@ -9296,36 +9532,161 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
 <style>
 @keyframes sgmpSpin{to{transform:rotate(360deg)}}
 </style>
-<script id="sgmp-lmp-staged-analysis-orchestrator-v2">
+<script id="sgmp-analysis-screen-flow-override">
 (function(){
-  const STAGE_ORDER = ['B1','B2','B3','B4','B5','B6'];
-  function stageDefs(){ return (typeof sgmpGetAnalysisStageDefinitions === 'function') ? sgmpGetAnalysisStageDefinitions() : {}; }
-  function getDef(stageKey){ const defs = stageDefs(); return defs[stageKey] || defs.B1 || { label: stageKey, stageCode: 'lmp_analysis', instruction: '' }; }
-  function parseEditorJson(id){ try{ const raw = (typeof qs === 'function' && qs(id)) ? qs(id).value.trim() : ''; if(!raw) return null; return (typeof extractJsonFromText === 'function') ? extractJsonFromText(raw) : JSON.parse(raw); }catch(e){ return null; } }
-  function isMeaningfulActivity(a){ if(!a || typeof a !== 'object') return false; const name=String(a.name||a.nombre||a.activity||a.title||'').trim(); const id=String(a.id||a.code||'').trim(); const actor=String(a.actor||a.responsable||'').trim(); const note=String(a.note||a.notes||a.descripcion||a.description||'').trim(); return !!(name || (id && id !== 'A1') || actor || note); }
-  function normalizeStageActivityList(value){
-    let arr=[]; try{ arr = (typeof sgmpCanonicalizeActivityList === 'function') ? sgmpCanonicalizeActivityList(value) : (Array.isArray(value) ? value : []); }catch(e){ arr = Array.isArray(value) ? value : []; }
-    arr=(arr||[]).filter(isMeaningfulActivity).map(function(a){ try{ return (typeof normalizeActivity === 'function') ? normalizeActivity(a) : Object.assign({},a); }catch(e){ return Object.assign({},a); } }).filter(isMeaningfulActivity);
-    const seen=new Set(), out=[];
-    arr.forEach(function(a,idx){ const key=String(a.id||'').trim().toLowerCase() || String(a.name||'').trim().toLowerCase() || ('idx-'+idx); if(seen.has(key)) return; seen.add(key); out.push(a); });
-    if(out.length){ out.forEach(function(a){ a.is_start=false; a.is_end=false; }); out[0].is_start=true; out[out.length-1].is_end=true; for(let i=0;i<out.length;i++){ if(!Array.isArray(out[i].previous)||!out[i].previous.length) out[i].previous = i ? [out[i-1].name] : []; if(!Array.isArray(out[i].next)||!out[i].next.length) out[i].next = i < out.length-1 ? [out[i+1].name] : []; } }
+  const ANALYSIS_SCREEN_ORDER = ['inicio','preparacion','documentacion_existente','carga','asis','analisis_b1','analisis_b2','analisis_b3','analisis_b4','analisis_b5','analisis_b6','decision','tobe','resultados'];
+  const ANALYSIS_KEY_BY_SECTION = { analisis_b1:'B1', analisis_b2:'B2', analisis_b3:'B3', analisis_b4:'B4', analisis_b5:'B5', analisis_b6:'B6' };
+  function el(id){ return document.getElementById(id); }
+  function arr(v){ return Array.isArray(v) ? v : (v ? [v] : []); }
+  function isBlankActivity(a){ return !a || (!String(a.name||'').trim() && !String(a.actor||'').trim() && !String(a.id||'').trim()); }
+  function cleanActivities(list){
+    const out = [], seen = new Set();
+    arr(list).forEach((a, idx) => {
+      if(!a || typeof a !== 'object' || isBlankActivity(a)) return;
+      const id = String(a.id || '').trim();
+      const name = String(a.name || a.activity || a.actividad || '').trim();
+      const key = (id || name || ('idx_'+idx)).toLowerCase();
+      if(seen.has(key)) return;
+      seen.add(key);
+      out.push(Object.assign({ id: id || ('ACT-' + String(out.length + 1).padStart(2,'0')), name, type: a.type || 'operation', actor: a.actor || '', document: a.document || '', previous: arr(a.previous), next: arr(a.next), is_start: !!a.is_start, is_end: !!a.is_end, note: a.note || a.notes || '' }, a, { id: id || a.id || ('ACT-' + String(out.length + 1).padStart(2,'0')), name }));
+    });
+    if(out.length){
+      out.forEach((a,i)=>{ a.is_start = i === 0; a.is_end = i === out.length - 1; });
+      out.forEach((a,i)=>{ if(!arr(a.previous).length && i > 0) a.previous = [out[i-1].name]; if(!arr(a.next).length && i < out.length - 1) a.next = [out[i+1].name]; if(i === 0) a.previous = []; if(i === out.length - 1) a.next = []; });
+    }
     return out;
   }
-  function getApprovedBrief(){ const fromEditor=parseEditorJson('briefEditor'); const raw=fromEditor || (window.state && (state.briefReview?.raw || state.brief)) || {}; try{ return (typeof normalizeBriefPayload === 'function') ? normalizeBriefPayload(raw) : raw; }catch(e){ return raw; } }
-  function chooseLongestActivityList(candidates){ let best=[]; (candidates||[]).forEach(function(c){ const arr=normalizeStageActivityList(c); if(arr.length > best.length) best=arr; }); return best; }
-  window.sgmpGetBestAnalysisActivities = function(stageKey){ const results=state.analysisStages?.results || {}; const brief=getApprovedBrief(); const master=state.master || {}; const structural=(typeof sgmpGetStructuralSourceActivities === 'function') ? sgmpGetStructuralSourceActivities() : []; const candidates=[]; if(stageKey && stageKey !== 'B1') candidates.push(results.B1?.as_is?.activities); candidates.push(brief.as_is?.activities, brief.activities_preliminary, state.briefReview?.raw?.as_is?.activities, state.briefReview?.raw?.activities_preliminary, state.briefReview?.raw?.brief?.as_is?.activities, state.briefReview?.raw?.brief?.activities_preliminary, state.asis?.activities, master.as_is?.activities, master.activities, master.proceso?.actividades, structural); const best=chooseLongestActivityList(candidates); if(best.length===1 && !String(best[0].name||'').trim()) return []; return best; };
-  window.sgmpBuildAnalysisStagePrompt = function(stageKey){ const key=stageKey || state.analysisStages?.current || 'B1'; const def=getDef(key); const master=state.master || (typeof mergeMaster === 'function' ? mergeMaster() : {}); const brief=getApprovedBrief(); const c=master.context || state.context || {}; const stageResults=state.analysisStages?.results || {}; const baseActivities=sgmpGetBestAnalysisActivities(key); if(baseActivities.length < 2) console.warn('[LMP B-stage] source_activities insuficiente.', {key, baseActivities, brief, master}); const evidencePack={ context:c, brief:brief, current_as_is:baseActivities, previous_stage_results:stageResults, master_sipoc:master.sipoc || {}, source_activity_count:baseActivities.length, source_activities:baseActivities }; const stageSpecificRule = key === 'B1' ? '\nREGLA DURA B1: source_activities debe ser la única base estructural. Si source_activity_count es mayor a 1, no devuelvas una sola actividad. No uses current_as_is si está vacío o contiene A1 sin nombre.' : '\nREGLA DURA: conserva el AS IS validado en B1. No reinterpretes el flujo ni reduzcas actividades.'; return String(def.instruction || '') + stageSpecificRule + '\n\nREGLAS GLOBALES SGMP:\n- Responde SOLO JSON válido.\n- No uses markdown.\n- No inventes evidencia.\n- Si falta información, registra warnings o dataGaps.\n- Mantén nombres de campos exactamente como se solicita.\n\nINSUMOS:\n' + JSON.stringify(evidencePack, null, 2); };
-  window.generateAnalysisStagePrompt = function(stageKey){ if(!(state.briefReview && state.briefReview.approved)){ showMsg('cargaMsg','warn','Debes aprobar primero el Brief.'); return; } state.analysisStages=state.analysisStages || { current:'B1', results:{} }; state.analysisStages.current=stageKey || state.analysisStages.current || 'B1'; const prompt=sgmpBuildAnalysisStagePrompt(state.analysisStages.current); if(qs('analysisPromptEditor')) qs('analysisPromptEditor').value=prompt; sgmpUpdateAnalysisStageStatus(); showMsg('cargaMsg','ok','Prompt '+state.analysisStages.current+' generado. Puedes ejecutarlo con IA o copiarlo para modo manual.'); };
-  function analysisStageApiEnabled(stageCode){ try{ if(typeof sgmpGlobalApiEnabled === 'function' && !sgmpGlobalApiEnabled()) return false; if(typeof sgmpStageUseApi === 'function') return sgmpStageUseApi(stageCode) || sgmpStageUseApi('lmp_analysis'); return true; }catch(e){ return true; } }
-  window.executeAnalysisStage = async function(stageKey){ if(!(state.briefReview && state.briefReview.approved)){ showMsg('iaMsg','warn','Debes aprobar primero el Brief.'); return; } state.analysisStages=state.analysisStages || { current:'B1', results:{} }; const key=stageKey || state.analysisStages.current || 'B1'; state.analysisStages.current=key; const def=getDef(key); const prompt=sgmpBuildAnalysisStagePrompt(key); if(qs('analysisPromptEditor')) qs('analysisPromptEditor').value=prompt; const acts=sgmpGetBestAnalysisActivities(key); if(key==='B1' && acts.length<2){ showMsg('iaMsg','err','No se ejecutó B1: no se detectó el flujo real del Brief. Revisa que el Brief aprobado tenga activities_preliminary o as_is.activities.'); return; } if(!analysisStageApiEnabled(def.stageCode)){ showMsg('iaMsg','warn','Modo manual: API no habilitada para '+key+'. Copia el prompt, ejecuta la IA y pega la respuesta.'); sgmpUpdateAnalysisStageStatus(); return; } try{ showMsg('iaMsg','ok','Ejecutando '+key+' con IA...'); if(typeof showLoader === 'function') showLoader('Ejecutando '+key+' con IA', def.label || 'Análisis por etapas'); const result=await sgmpCallAI(def.stageCode || 'lmp_analysis', prompt); const text=(typeof sgmpAIResultText === 'function') ? sgmpAIResultText(result) : (result.text || String(result)); if(qs('iaResponseEditor')) qs('iaResponseEditor').value=text; processAnalysisStageResponse(); if(typeof hideLoader === 'function') hideLoader(); }catch(error){ if(typeof hideLoader === 'function') hideLoader(); showMsg('iaMsg','warn','No fue posible ejecutar '+key+' con API. Queda listo para modo manual. Detalle: '+error.message); } sgmpUpdateAnalysisStageStatus(); };
-  window.executeNextAnalysisStage = function(){ state.analysisStages=state.analysisStages || { current:'B1', results:{} }; const results=state.analysisStages.results || {}; const next=STAGE_ORDER.find(function(k){ return !results[k]; }) || 'B6'; state.analysisStages.current=next; executeAnalysisStage(next); };
-  function mergeFindings(){ const r=state.analysisStages?.results || {}; const out={}; const mergeObj=function(obj){ Object.entries(obj || {}).forEach(function(pair){ const k=pair[0], v=pair[1]; const arr=sgmpToList(out[k]).concat(sgmpToList(v)); out[k]=(typeof sgmpUniqueStrings === 'function') ? sgmpUniqueStrings(arr) : arr; }); }; mergeObj(r.B3?.findings || {}); mergeObj(r.B4?.findings || {}); return out; }
-  window.sgmpAssembleStagedAnalysisPayload = function(){ const results=state.analysisStages?.results || {}; const b1=results.B1 || {}, b2=results.B2 || {}, b5=results.B5 || {}, b6=results.B6 || {}; let activities=normalizeStageActivityList(b1.as_is?.activities || sgmpGetBestAnalysisActivities('B1')); const avaActivityAnalysis=safeArray(b2.ava?.activityAnalysis || b2.ava?.activities || b2.activityAnalysis || b2.activities); if(avaActivityAnalysis.length && activities.length){ activities=activities.map(function(a){ const hit=avaActivityAnalysis.find(function(x){ return String(x.id||'').trim()===String(a.id||'').trim() || String(x.name||'').trim().toLowerCase()===String(a.name||'').trim().toLowerCase(); }); return hit ? Object.assign({}, a, { ava_classification: hit.ava_classification || hit.avaClassification || hit.ava || hit.classification || hit.tipo_ava || a.ava_classification || a.ava, ava: hit.ava_classification || hit.avaClassification || hit.ava || hit.classification || hit.tipo_ava || a.ava, ava_reason: hit.reason || hit.evidence || hit.justification || a.ava_reason, wastes: hit.wastes || hit.waste || a.wastes, problems: hit.problems || hit.problem || a.problems }) : a; }); } const findings=mergeFindings(); if(b5.quickWins || b5.quick_wins) findings.quickWins=sgmpToList(findings.quickWins).concat(sgmpToList(b5.quickWins || b5.quick_wins)); let improvements=safeArray(b5.improvements || b5.mejoras).map(normalizeImprovement); if(!improvements.length && typeof sgmpBuildCandidateImprovementsFromFindings === 'function') improvements=sgmpBuildCandidateImprovementsFromFindings(findings, 12); const payload={ context:state.context || state.master?.context || {}, as_is:{activities:activities}, ava:b2.ava || {}, findings:findings, quickWins:findings.quickWins || b5.quickWins || b5.quick_wins || [], improvements:improvements, sb_contract:b6.sipoc_input ? {sipoc_input:b6.sipoc_input} : (b6.sb_contract || {}) }; return (typeof sgmpEnrichAnalysisModel === 'function') ? sgmpEnrichAnalysisModel(payload) : payload; };
-  window.processAnalysisStageResponse = function(){ const raw=qs('iaResponseEditor')?.value.trim() || ''; if(!raw){ showMsg('iaMsg','warn','Pega primero la respuesta de la etapa.'); return; } try{ const parsed=(typeof extractJsonFromText === 'function') ? extractJsonFromText(raw) : JSON.parse(raw); state.analysisStages=state.analysisStages || { current:'B1', results:{} }; const key=state.analysisStages.current || 'B1'; if(key==='B1'){ const acts=normalizeStageActivityList(parsed.as_is?.activities || parsed.activities); if(acts.length<2){ showMsg('iaMsg','err','B1 no es válido: la respuesta no contiene el AS IS real. No se guardó la etapa.'); return; } parsed.as_is=parsed.as_is || {}; parsed.as_is.activities=acts; state.asis=state.asis || {}; state.asis.activities=acts.map(function(a){ return Object.assign({},a); }); if(typeof renderAsIsActivities === 'function') renderAsIsActivities(); } state.analysisStages.results[key]=parsed; const assembled=sgmpAssembleStagedAnalysisPayload(); const normalized=(typeof normalizeAnalysisPayload === 'function') ? normalizeAnalysisPayload(assembled) : assembled; normalized.improvements=assembled.improvements || normalized.improvements || []; if(!normalized.improvements.length && typeof sgmpBuildCandidateImprovementsFromFindings === 'function') normalized.improvements=sgmpBuildCandidateImprovementsFromFindings(normalized.findings || {}, 12); if(qs('iaResponseEditor')) qs('iaResponseEditor').value=JSON.stringify(normalized, null, 2); if(typeof processIAResponse === 'function') processIAResponse(); const next=STAGE_ORDER[STAGE_ORDER.indexOf(key)+1]; if(next){ state.analysisStages.current=next; if(qs('analysisPromptEditor')) qs('analysisPromptEditor').value=sgmpBuildAnalysisStagePrompt(next); showMsg('iaMsg','ok','Etapa '+key+' procesada. Siguiente lista: '+next+'.'); }else{ showMsg('iaMsg','ok','Todas las etapas fueron procesadas. Puedes aplicar al LMP y continuar.'); } sgmpUpdateAnalysisStageStatus(); }catch(error){ showMsg('iaMsg','err','No fue posible procesar la etapa. Detalle: '+error.message); } };
-  window.sgmpUpdateAnalysisStageStatus = function(){ const el=(typeof qs === 'function') ? qs('analysisStageStatus') : null; if(!el || !window.state) return; const results=state.analysisStages?.results || {}; const current=state.analysisStages?.current || 'B1'; const labels=STAGE_ORDER.map(function(k){ return (results[k] ? '✅ ' : (k===current ? '▶️ ' : '○ ')) + k; }); const acts=sgmpGetBestAnalysisActivities(current); el.innerHTML='<strong>Estado de subetapas</strong><br/>'+labels.join(' · ')+'<br/><small>Etapa actual: '+current+' · Actividades fuente detectadas: '+acts.length+'</small>'; };
-  document.addEventListener('DOMContentLoaded', function(){ try{ sgmpUpdateAnalysisStageStatus(); }catch(e){} });
+  window.sgmpGetBestAnalysisSourceActivities = function(){
+    const brief = (window.state && (state.briefReview?.raw || state.brief)) || {};
+    const candidates = [brief?.as_is?.activities, brief?.activities_preliminary, state?.brief?.as_is?.activities, state?.brief?.activities_preliminary, state?.analysisStages?.results?.B1?.as_is?.activities, state?.asis?.activities, (typeof sgmpGetStructuralSourceActivities === 'function' ? sgmpGetStructuralSourceActivities() : [])];
+    for(const c of candidates){ const cleaned = cleanActivities(c); if(cleaned.length >= 2) return cleaned; }
+    return [];
+  };
+  window.sgmpBuildAnalysisStagePrompt = function(stageKey){
+    const defs = (typeof sgmpGetAnalysisStageDefinitions === 'function') ? sgmpGetAnalysisStageDefinitions() : {};
+    const def = defs[stageKey] || defs.B1 || { instruction:'Responde JSON válido.', stageCode:'lmp_analysis' };
+    const master = (window.state && (state.master || (typeof mergeMaster === 'function' ? mergeMaster() : {}))) || {};
+    const brief = (typeof normalizeBriefPayload === 'function') ? normalizeBriefPayload(state.briefReview?.raw || state.brief || {}) : (state.briefReview?.raw || state.brief || {});
+    const results = state.analysisStages?.results || {};
+    const sourceActivities = stageKey === 'B1' ? window.sgmpGetBestAnalysisSourceActivities() : cleanActivities(results.B1?.as_is?.activities || window.sgmpGetBestAnalysisSourceActivities());
+    const payload = { context: Object.assign({}, state.context || {}, master.context || {}), brief, current_stage: stageKey, previous_stage_results: results, source_activity_count: sourceActivities.length, source_activities: sourceActivities, master_sipoc: master.sipoc || {}, rules: { source_activities_are_mandatory: true, do_not_reduce_activities: true, return_only_valid_json: true } };
+    return def.instruction + '\n\nREGLAS GLOBALES SGMP:\n- Responde SOLO JSON válido.\n- No uses markdown.\n- No inventes evidencia.\n- Si falta información, registra warnings o dataGaps.\n- Mantén nombres de campos exactamente como se solicita.\n\nINSUMOS:\n' + JSON.stringify(payload, null, 2);
+  };
+  window.generateAnalysisScreenPrompt = function(stageKey){
+    if(!(state.briefReview && state.briefReview.approved)){ if(typeof showMsg === 'function') showMsg('analysisMsg_' + stageKey,'warn','Debes aprobar primero el Brief.'); return; }
+    state.analysisStages = state.analysisStages || { current:'B1', results:{} }; state.analysisStages.current = stageKey;
+    const prompt = window.sgmpBuildAnalysisStagePrompt(stageKey);
+    const promptBox = el('analysisPrompt_' + stageKey); if(promptBox) promptBox.value = prompt;
+    if(typeof showMsg === 'function') showMsg('analysisMsg_' + stageKey,'ok','Prompt ' + stageKey + ' generado.');
+    return prompt;
+  };
+  window.runAnalysisScreenStage = async function(stageKey){
+    const defs = (typeof sgmpGetAnalysisStageDefinitions === 'function') ? sgmpGetAnalysisStageDefinitions() : {};
+    const def = defs[stageKey] || { stageCode:'lmp_analysis_' + String(stageKey).toLowerCase() };
+    const msgId = 'analysisMsg_' + stageKey;
+    try{
+      state.analysisStages = state.analysisStages || { current:'B1', results:{} }; state.analysisStages.current = stageKey;
+      const prompt = window.generateAnalysisScreenPrompt(stageKey); if(!prompt) return;
+      if(typeof showLoader === 'function') showLoader('Ejecutando ' + stageKey + ' con IA...', 'Procesando etapa individual del análisis.');
+      if(typeof showMsg === 'function') showMsg(msgId,'ok','Ejecutando IA para ' + stageKey + '...');
+      const result = await sgmpCallAI(def.stageCode || ('lmp_analysis_' + String(stageKey).toLowerCase()), prompt);
+      const text = (typeof sgmpAIResultText === 'function') ? sgmpAIResultText(result) : (result?.text || String(result || ''));
+      const responseBox = el('analysisResponse_' + stageKey); if(responseBox) responseBox.value = text;
+      window.processAnalysisScreenStage(stageKey);
+      if(typeof showMsg === 'function') showMsg(msgId,'ok','Etapa ' + stageKey + ' ejecutada y procesada.');
+    }catch(error){ console.error('[LMP ' + stageKey + '] Error:', error); if(typeof showMsg === 'function') showMsg(msgId,'err','No se pudo ejecutar la API para ' + stageKey + '. Puedes pegar una respuesta manual. Detalle: ' + error.message); }
+    finally{ if(typeof hideLoader === 'function') hideLoader(); }
+  };
+  window.processAnalysisScreenStage = function(stageKey){
+    const msgId = 'analysisMsg_' + stageKey;
+    const responseBox = el('analysisResponse_' + stageKey);
+    const raw = responseBox ? responseBox.value.trim() : '';
+    if(!raw){ if(typeof showMsg === 'function') showMsg(msgId,'warn','No hay respuesta para procesar.'); return; }
+    try{
+      const parsed = (typeof extractJsonFromText === 'function') ? extractJsonFromText(raw) : JSON.parse(raw);
+      state.analysisStages = state.analysisStages || { current:'B1', results:{} }; state.analysisStages.current = stageKey; state.analysisStages.results[stageKey] = parsed;
+      const resultBox = el('analysisResult_' + stageKey); if(resultBox) resultBox.value = JSON.stringify(parsed, null, 2);
+      if(stageKey === 'B1'){
+        const acts = cleanActivities(parsed?.as_is?.activities || parsed?.activities);
+        if(acts.length){ state.asis = state.asis || {}; state.asis.activities = acts; if(typeof renderAsIsActivities === 'function') renderAsIsActivities(); }
+      }
+      const assembled = window.sgmpAssembleStagedAnalysisPayload ? window.sgmpAssembleStagedAnalysisPayload() : {};
+      const normalized = (typeof normalizeAnalysisPayload === 'function') ? normalizeAnalysisPayload(assembled) : assembled;
+      const enriched = (typeof sgmpEnrichAnalysisModel === 'function') ? sgmpEnrichAnalysisModel(normalized) : normalized;
+      state.analysis = enriched;
+      if(stageKey === 'B5'){
+        const improvements = arr(enriched.improvements).map(x => (typeof normalizeImprovement === 'function' ? normalizeImprovement(x) : x));
+        state.tobe = state.tobe || {}; state.tobe.improvements = improvements; if(typeof renderImprovements === 'function') renderImprovements();
+      }
+      if(stageKey === 'B6'){
+        const sipocInput = parsed?.sipoc_input || parsed?.sb_contract?.sipoc_input || enriched?.sb_contract?.sipoc_input;
+        if(sipocInput){ state.sb_contract = { sipoc_input: sipocInput }; state.sbContractBuilder = state.sbContractBuilder || {}; state.sbContractBuilder.raw = { sipoc_input: sipocInput }; state.sbContractBuilder.approved = true; }
+      }
+      window.renderAnalysisScreenAccumulated(stageKey);
+      if(typeof renderAnalysisFromState === 'function') renderAnalysisFromState();
+      if(typeof updateTopStatus === 'function') updateTopStatus();
+      if(typeof showMsg === 'function') showMsg(msgId,'ok','Respuesta ' + stageKey + ' procesada correctamente.');
+    }catch(error){ console.error('[LMP process ' + stageKey + '] Error:', error); if(typeof showMsg === 'function') showMsg(msgId,'err','No fue posible procesar ' + stageKey + '. Detalle: ' + error.message); }
+  };
+  window.sgmpAssembleStagedAnalysisPayload = function(){
+    const results = state.analysisStages?.results || {}, b1 = results.B1 || {}, b2 = results.B2 || {}, b3 = results.B3 || {}, b4 = results.B4 || {}, b5 = results.B5 || {}, b6 = results.B6 || {};
+    let activities = cleanActivities(b2.as_is?.activities || b1.as_is?.activities || window.sgmpGetBestAnalysisSourceActivities());
+    const avaItems = arr(b2.ava?.activityAnalysis || b2.ava?.activities || b2.activityAnalysis);
+    if(avaItems.length && activities.length){
+      activities = activities.map(a => { const hit = avaItems.find(x => String(x.id || '').trim() === String(a.id || '').trim() || String(x.name || '').trim().toLowerCase() === String(a.name || '').trim().toLowerCase()); return hit ? Object.assign({}, a, { ava_classification: hit.ava_classification || hit.avaClassification || hit.ava || hit.classification || a.ava_classification || a.ava, ava_reason: hit.reason || hit.evidence || hit.justification || a.ava_reason }) : a; });
+    }
+    const mergedFindings = Object.assign({}, b3.findings || {}, b4.findings || {});
+    return (typeof sgmpEnrichAnalysisModel === 'function') ? sgmpEnrichAnalysisModel({ context: state.context || state.master?.context || {}, as_is: { activities }, ava: b2.ava || {}, findings: mergedFindings, quickWins: b5.quickWins || b5.quick_wins || [], improvements: b5.improvements || [], sb_contract: b6.sipoc_input ? { sipoc_input: b6.sipoc_input } : (b6.sb_contract || {}) }) : { as_is:{ activities }, findings: mergedFindings, improvements:b5.improvements || [] };
+  };
+  window.renderAnalysisScreenAccumulated = function(stageKey){
+    const assembled = window.sgmpAssembleStagedAnalysisPayload();
+    const acts = arr(assembled?.as_is?.activities), findings = assembled?.findings || {}, improvements = arr(assembled?.improvements);
+    const avaDist = assembled?.ava?.distribution || (typeof sgmpCalculateAvaDistribution === 'function' ? sgmpCalculateAvaDistribution(acts) : {});
+    const quickWins = arr(findings.quickWins || findings.quick_wins).length;
+    const restrictions = arr(findings.restrictions || findings.constraints || findings.suspectedConstraints || findings.suspected_constraints).length;
+    [['stageActsKpi_', acts.length], ['stageImpKpi_', improvements.length], ['stageQwKpi_', quickWins], ['stageResKpi_', restrictions], ['stageNvaKpi_', (avaDist.NVA || avaDist.NVA_pct || 0) + '%']].forEach(([prefix, value]) => { const node = el(prefix + stageKey); if(node) node.textContent = value; });
+    const preview = el('analysisAccumPreview_' + stageKey); if(preview) preview.textContent = JSON.stringify(assembled, null, 2);
+  };
+  window.downloadAnalysisStageJson = function(stageKey){
+    const resultBox = el('analysisResult_' + stageKey), txt = resultBox ? resultBox.value.trim() : '';
+    if(!txt){ if(typeof showMsg === 'function') showMsg('analysisMsg_' + stageKey,'warn','No hay resultado para descargar.'); return; }
+    const blob = new Blob([txt], {type:'application/json;charset=utf-8'}), a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'LMP_' + stageKey + '_resultado.json'; a.click(); URL.revokeObjectURL(a.href);
+  };
+  const oldShowSection = window.showSection;
+  window.showSection = function(id){
+    if(id === 'analisis') id = 'analisis_b1';
+    if(typeof oldShowSection === 'function'){ oldShowSection(id); }
+    else{ document.querySelectorAll('.section').forEach(s => s.classList.toggle('active', s.id === id)); document.querySelectorAll('.step-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.target === id)); }
+    const key = ANALYSIS_KEY_BY_SECTION[id];
+    if(key){ state.analysisStages = state.analysisStages || { current:key, results:{} }; state.analysisStages.current = key; if(!el('analysisPrompt_' + key)?.value) window.generateAnalysisScreenPrompt(key); window.renderAnalysisScreenAccumulated(key); }
+  };
+  window.labelStage = function(id){ return { inicio:'Inicio', documentacion_existente:'Documentación existente', preparacion:'Preparación y contexto', carga:'Carga y consolidación', asis:'AS IS', analisis:'Análisis', analisis_b1:'B1 · Validación AS IS', analisis_b2:'B2 · AVA', analisis_b3:'B3 · Desperdicios', analisis_b4:'B4 · Restricciones', analisis_b5:'B5 · Mejoras', analisis_b6:'B6 · Builder SB', decision:'Decisión', tobe:'TO BE', resultados:'Resultados' }[id] || id; };
+  window.goToNext = function(current){
+    if(typeof syncVisibleStage === 'function') syncVisibleStage();
+    if(current === 'preparacion'){ if(state.metadata.route === 'doc'){ showSection('documentacion_existente'); return; } showSection('carga'); return; }
+    if(current === 'documentacion_existente'){ showSection('carga'); return; }
+    if(current === 'asis'){ showSection('analisis_b1'); return; }
+    if(current === 'analisis_b6'){ showSection('decision'); return; }
+    if(current === 'decision'){ if(typeof continueFromDecision === 'function') continueFromDecision(); return; }
+    if(current === 'tobe' && state.decision?.route === 'asis'){ showSection('resultados'); return; }
+    const idx = ANALYSIS_SCREEN_ORDER.indexOf(current); if(idx >= 0 && ANALYSIS_SCREEN_ORDER[idx+1]) showSection(ANALYSIS_SCREEN_ORDER[idx+1]);
+  };
+  window.goToPrev = function(current){
+    if(typeof syncVisibleStage === 'function') syncVisibleStage();
+    if(current === 'documentacion_existente'){ showSection('preparacion'); return; }
+    if(current === 'carga' && state.metadata.route === 'doc'){ showSection('documentacion_existente'); return; }
+    if(current === 'carga'){ showSection('preparacion'); return; }
+    if(current === 'analisis_b1'){ showSection('asis'); return; }
+    const idx = ANALYSIS_SCREEN_ORDER.indexOf(current); if(idx > 0) showSection(ANALYSIS_SCREEN_ORDER[idx-1]);
+  };
+  window.saveAsIsAndContinue = function(){
+    if(typeof syncAsIsFromDom === 'function') syncAsIsFromDom();
+    const acts = cleanActivities(state.asis?.activities || window.sgmpGetBestAnalysisSourceActivities());
+    if(!acts.length){ if(typeof showMsg === 'function') showMsg('asisBuilderMsg','warn','No hay actividades AS IS para continuar.'); return; }
+    state.asis.activities = acts; if(typeof renderAsIsActivities === 'function') renderAsIsActivities(); if(typeof updateTopStatus === 'function') updateTopStatus(); showSection('analisis_b1');
+  };
+  window.saveAnalysisAndContinue = function(){ showSection('decision'); };
 })();
 </script>
-
 </body>
 </html>
