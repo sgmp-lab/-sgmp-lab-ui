@@ -1346,6 +1346,36 @@
 */
 // ── Fin SGMP Session Guard ─────────────────────────────────
   </script>
+
+
+<style id="sgmp-lmp-v3-timer-layer">
+/* SGMP v3 · Timer adaptado para LMP / SYNAPSE */
+#sgmp_v3_timer{
+  position:fixed;right:18px;bottom:18px;z-index:9998;min-width:236px;max-width:280px;
+  border-radius:18px;padding:12px 14px;background:rgba(255,255,255,.94);
+  border:1px solid rgba(0,194,255,.30);box-shadow:0 12px 32px rgba(11,46,89,.14);
+  color:#0B2E59;font-size:12px;backdrop-filter:blur(8px);
+}
+#sgmp_v3_timer strong{display:block;font-size:12px;color:#0A1F44;margin-bottom:4px;}
+#sgmp_v3_timer .sgmp-time-main{font-size:19px;font-weight:900;letter-spacing:.04em;color:#1A56DB;line-height:1.1;}
+#sgmp_v3_timer .sgmp-time-stage{margin-top:5px;color:#5B6F8A;font-size:11px;line-height:1.35;}
+#sgmp_v3_timer .sgmp-time-grid{margin-top:9px;display:grid;grid-template-columns:1fr;gap:5px;max-height:230px;overflow:auto;padding-right:2px;}
+#sgmp_v3_timer .sgmp-time-row{display:flex;justify-content:space-between;gap:8px;border-top:1px solid rgba(0,194,255,.16);padding-top:5px;font-size:11px;}
+#sgmp_v3_timer .sgmp-time-row span:first-child{font-weight:800;color:#0B2E59;}
+#sgmp_v3_timer .sgmp-time-row span:last-child{font-family:Consolas,monospace;color:#0A1F44;}
+#sgmp_v3_timer .sgmp-time-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;border-top:1px solid rgba(0,194,255,.16);padding-top:8px;}
+#sgmp_v3_timer .sgmp-time-actions button{border-radius:10px;padding:6px 8px;font-size:11px;font-weight:800;min-height:0;}
+.sgmp-timing-report{margin-top:12px;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:12px;padding:12px 14px;color:#075985;font-size:12px;}
+.sgmp-timing-report h3{font-size:13px;margin:0 0 8px;color:#0369A1;}
+.sgmp-timing-report table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;}
+.sgmp-timing-report th,.sgmp-timing-report td{padding:7px 8px;border-bottom:1px solid #E0F2FE;font-size:12px;text-align:left;vertical-align:top;}
+.sgmp-timing-report th{background:#E0F2FE;color:#075985;font-size:11px;text-transform:uppercase;letter-spacing:.03em;}
+.sgmp-timing-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+body.sgmp-v3-processing button:not(.sgmp-v3-allow),body.sgmp-v3-processing input,body.sgmp-v3-processing textarea,body.sgmp-v3-processing select{pointer-events:none;opacity:.72;}
+@media(max-width:720px){#sgmp_v3_timer{left:12px;right:12px;bottom:12px;max-width:none;min-width:0;}#sgmp_v3_timer .sgmp-time-grid{max-height:150px;}}
+@media print{#sgmp_v3_timer,.sgmp-timing-actions{display:none!important}}
+</style>
+
 </head>
 <body>
 <div class="app">
@@ -4422,13 +4452,16 @@ function setDecisionRoute(route, navigate = true){
    TO BE
 ========================= */
 function improvementTemplate(data = {}){
-  const id = data.id || cryptoRandom();
+  const id = String(data.id || cryptoRandom());
+  data.id = id;
+  const safeId = escapeHtml(id);
+  const jsId = id.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   const status = data.status || 'pending';
   const badgeClass = status === 'execute' ? 'status-execute' : status === 'custom' ? 'status-custom' : status === 'reject' ? 'status-reject' : '';
   const badgeText = status === 'execute' ? 'Ejecutar' : status === 'custom' ? 'Personalizar' : status === 'reject' ? 'Rechazar' : 'Pendiente';
 
   return `
-    <div class="improvement-card" data-id="${id}" data-status="${status}">
+    <div class="improvement-card" data-id="${safeId}" data-status="${status}">
       <div class="improvement-head">
         <div>
           <h4>${escapeHtml(data.title || 'Mejora propuesta')}</h4>
@@ -4465,16 +4498,16 @@ function improvementTemplate(data = {}){
 
       <div class="actions">
         <div class="actions-left">
-          <button class="btn-ok" type="button" onclick="setImprovementStatus('${id}','execute')">Ejecutar</button>
-          <button class="btn-warn" type="button" onclick="setImprovementStatus('${id}','custom')">Personalizar</button>
-          <button class="btn-danger" type="button" onclick="setImprovementStatus('${id}','reject')">Rechazar</button>
+          <button class="btn-ok" type="button" onclick="setImprovementStatus('${jsId}','execute')">Ejecutar</button>
+          <button class="btn-warn" type="button" onclick="setImprovementStatus('${jsId}','custom')">Personalizar</button>
+          <button class="btn-danger" type="button" onclick="setImprovementStatus('${jsId}','reject')">Rechazar</button>
         </div>
       </div>
 
       <div class="field-grid ${status === 'custom' ? '' : 'hidden'}" data-role="edit-zone">
         <div class="field w-12">
-          <label for="customText_${id}">Personalización de la mejora</label>
-          <textarea id="customText_${id}" data-role="custom-text">${escapeHtml(data.customText || data.adjustedState || '')}</textarea>
+          <label for="customText_${safeId}">Personalización de la mejora</label>
+          <textarea id="customText_${safeId}" data-role="custom-text">${escapeHtml(data.customText || data.adjustedState || '')}</textarea>
         </div>
       </div>
     </div>
@@ -4486,8 +4519,8 @@ function addImprovement(data = {}){
   const relatedActivities = Array.isArray(relatedSource) ? relatedSource.join(', ') : relatedSource;
 
   const improvement = {
-    id: data.id || cryptoRandom(),
-    title: data.title || data.name || data.improvementTitle || data.improvement_title || 'Mejora propuesta',
+    id: String(data.id || cryptoRandom()),
+    title: data.title || data.name || data.titulo || data.improvementTitle || data.improvement_title || data.recommendation || data.action || data.header || data.category || data.type || 'Mejora propuesta',
     summary: data.summary || data.description || data.technicalRationale || data.technical_rationale || data.expected_benefit || data.expectedBenefit || '',
     problem: data.problem || data.problemSolved || data.problem_solved || data.problem_to_solve || data.relatedProblem || data.related_problem || data.restriction || data.description || data.summary || '',
     currentState: data.currentState || data.current_state || data.asIsState || data.as_is_state || data.problemSolved || data.problem_to_solve || data.rootCauseAddressed || data.root_cause_addressed || '',
@@ -4532,12 +4565,18 @@ function renderImprovements(){
   renderToBeSummary();
 }
 
+function getImprovementCardById(id){
+  const target = String(id || '');
+  return Array.from(document.querySelectorAll('.improvement-card')).find(card => card.dataset.id === target) || null;
+}
+
 function setImprovementStatus(id, status){
-  const item = state.tobe.improvements.find(i => i.id === id);
+  const targetId = String(id || '');
+  const item = state.tobe.improvements.find(i => String(i.id) === targetId);
   if(!item) return;
   item.status = status;
 
-  const card = document.querySelector(`.improvement-card[data-id="${id}"]`);
+  const card = getImprovementCardById(targetId);
   if(card){
     card.dataset.status = status;
     const badge = card.querySelector('[data-role="badge"]');
@@ -4554,7 +4593,7 @@ function setImprovementStatus(id, status){
 
 function collectImprovements(){
   state.tobe.improvements.forEach(item => {
-    const card = document.querySelector(`.improvement-card[data-id="${item.id}"]`);
+    const card = getImprovementCardById(item.id);
     if(card){
       const custom = card.querySelector('[data-role="custom-text"]');
       item.customText = custom ? custom.value.trim() : '';
@@ -7330,7 +7369,14 @@ function normalizeImprovement(item = {}){
     firstText(item.support, item.sustento, item.justification, item.justificacion, item.technicalRationale, item.technical_rationale, item.evidence),
     firstText(item.source, item.reference, item.fuente, item.improvementType, item.improvement_type, item.type)
   ].filter(Boolean).join(' | ');
-  const titleBase = firstText(item.title, item.name, item.titulo, item.improvementTitle, item.improvement_title, item.improvementType, item.improvement_type, problem, proposedState, impact);
+  const titleBase = firstText(
+    item.title, item.name, item.titulo,
+    item.improvementTitle, item.improvement_title,
+    item.improvementType, item.improvement_type,
+    item.recommendation, item.action, item.header,
+    item.category, item.type,
+    problem, proposedState, impact
+  );
   const title = titleBase && titleBase !== 'Mejora propuesta'
     ? (titleBase.length > 90 ? titleBase.slice(0, 87) + '...' : titleBase)
     : 'Mejora propuesta';
@@ -7662,8 +7708,8 @@ function applyIAResponseAndContinue(){
   }
   hydrateAsIsFromMaster();
   renderAnalysisFromState();
-  renderImprovements();
   goToNext('carga');
+  // Las mejoras se cargan/renderizan al entrar a TO BE para evitar estados parciales o desincronizados.
 }
 
 function renderAnalysisFromState(){
@@ -7815,8 +7861,13 @@ function seedImprovementsFromAnalysis(){
     return [value];
   };
 
-  if(state.tobe.improvements.length){
-    const hasUsefulImprovements = state.tobe.improvements.some(item => [
+  const meaningfulText = (value) => {
+    const text = String(value || '').trim();
+    return text && text !== 'Mejora propuesta' && text !== 'Revisa la propuesta y registra una decisión.';
+  };
+
+  const improvementRichness = (item = {}) => {
+    return [
       item.title,
       item.summary,
       item.problem,
@@ -7825,18 +7876,17 @@ function seedImprovementsFromAnalysis(){
       item.support,
       item.impact,
       item.justification,
-      item.customText
-    ].some(value => {
-      const text = String(value || '').trim();
-      return text && text !== 'Mejora propuesta';
-    }));
-    if(hasUsefulImprovements){
-      renderImprovements();
-      showMsg('tobeMsg','ok','Se mostraron las mejoras ya registradas.');
-      return;
-    }
-    state.tobe.improvements = [];
-  }
+      item.recommendation,
+      item.action,
+      item.expected_benefit,
+      item.expectedBenefit,
+      item.expected_impact
+    ].filter(meaningfulText).length;
+  };
+
+  const userAlreadyDecided = (item = {}) => {
+    return ['execute','custom','reject'].includes(item.status) || meaningfulText(item.customText);
+  };
 
   const sourceImprovements = [
     ...toArray(data.raw_original?.improvements),
@@ -7850,12 +7900,14 @@ function seedImprovementsFromAnalysis(){
     ...toArray(data.to_be?.improvement_candidates),
     ...toArray(data.improvement_candidates)
   ];
+
   const usefulSourceImprovements = sourceImprovements.filter(item => {
     if(!item) return false;
-    if(typeof item === 'string') return item.trim() && item.trim() !== 'Mejora propuesta';
+    if(typeof item === 'string') return meaningfulText(item);
     return [
       item.title,
       item.name,
+      item.titulo,
       item.problem,
       item.problem_to_solve,
       item.problemSolved,
@@ -7863,17 +7915,42 @@ function seedImprovementsFromAnalysis(){
       item.summary,
       item.proposedState,
       item.proposed_state,
+      item.toBeState,
+      item.to_be_state,
       item.action,
       item.recommendation,
+      item.header,
+      item.category,
+      item.type,
       item.expected_benefit,
       item.expectedBenefit,
       item.impact,
       item.expected_impact
-    ].some(value => {
-      const text = String(value || '').trim();
-      return text && text !== 'Mejora propuesta';
-    });
+    ].some(meaningfulText);
   });
+
+  if(state.tobe.improvements.length){
+    const hasUserDecisions = state.tobe.improvements.some(userAlreadyDecided);
+    const existingAvgRichness = state.tobe.improvements.reduce((sum, item) => sum + improvementRichness(item), 0) / state.tobe.improvements.length;
+    const sourceAvgRichness = usefulSourceImprovements.length
+      ? usefulSourceImprovements.reduce((sum, item) => sum + improvementRichness(typeof item === 'string' ? { title:item, summary:item } : item), 0) / usefulSourceImprovements.length
+      : 0;
+
+    if(hasUserDecisions){
+      renderImprovements();
+      showMsg('tobeMsg','ok','Se conservaron las mejoras ya evaluadas por el usuario.');
+      return;
+    }
+
+    if(!usefulSourceImprovements.length || existingAvgRichness >= Math.max(2, sourceAvgRichness - 1)){
+      renderImprovements();
+      showMsg('tobeMsg','ok','Se mostraron las mejoras ya registradas.');
+      return;
+    }
+
+    // Hay mejores datos fuente y el usuario aún no decidió: se reconstruye sin borrar decisiones reales.
+    state.tobe.improvements = [];
+  }
 
   if(usefulSourceImprovements.length){
     usefulSourceImprovements.forEach(item => addImprovement(item));
@@ -7940,7 +8017,6 @@ function seedImprovementsFromAnalysis(){
     showMsg('tobeMsg','warn','No se detectaron quick wins, restricciones, problemas ni mejoras en el análisis procesado.');
   }
 }
-
 function saveToBeAndContinue(){
   collectImprovements();
   const selected = getSelectedToBeImprovements();
@@ -8210,6 +8286,198 @@ function openUserManual(){
 setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 </script>
+
+<script id="sgmp-lmp-v3-timer-script">
+// ═══════════════════════════════════════════════════════════════
+// SGMP v3 · Timer global + control por etapa · Adaptado a LMP
+// Basado en el patrón operativo usado en SB, con etapas propias del LMP.
+// ═══════════════════════════════════════════════════════════════
+(function(){
+  if(window.SGMP_LMP3_TIMER_LOADED) return;
+  window.SGMP_LMP3_TIMER_LOADED = true;
+
+  var STAGE_ORDER = ['inicio','preparacion','documentacion_existente','carga','asis','analisis','decision','tobe','resultados'];
+  window.SGMP_LMP3 = window.SGMP_LMP3 || {
+    moduleCode:'LMP', moduleLabel:'modulo_1', isProcessing:false,
+    timers:{
+      globalStart:null, globalEnd:null, globalInterval:null,
+      stageStarts:{}, stageElapsed:{}, stageStatus:{}, stageLastError:{},
+      stageLabels:{
+        lmp_inicio:'Inicio', lmp_preparacion:'Preparación y contexto',
+        lmp_documentacion_existente:'Documentación existente', lmp_carga:'Carga y consolidación',
+        lmp_asis:'AS IS', lmp_analisis:'Análisis', lmp_decision:'Decisión',
+        lmp_tobe:'TO BE', lmp_resultados:'Resultados'
+      }
+    },
+    currentStage:'—'
+  };
+
+  function pad(n){return String(n).padStart(2,'0');}
+  function fmt(ms){ms=Math.max(0,Number(ms)||0);var s=Math.floor(ms/1000)%60,m=Math.floor(ms/60000)%60,h=Math.floor(ms/3600000);return pad(h)+':'+pad(m)+':'+pad(s);}
+  function codeFromStage(id){return id && String(id).indexOf('lmp_')===0 ? String(id) : 'lmp_'+String(id||'inicio');}
+  function stageFromCode(code){return String(code||'').replace(/^lmp_/,'');}
+  function currentVisibleStage(){var el=document.querySelector('.section.active');return el&&el.id?el.id:(window.state&&state.metadata&&state.metadata.currentStage)||'inicio';}
+
+  window.sgmpV3StageLabel = function(stageCode){
+    var c=codeFromStage(stageCode);return (window.SGMP_LMP3.timers.stageLabels||{})[c]||stageFromCode(c)||'—';
+  };
+
+  window.sgmpV3PersistTimers = function(){
+    try{var t=window.SGMP_LMP3&&window.SGMP_LMP3.timers;if(!t)return;sessionStorage.setItem('SGMP_LMP_TIMER_REPORT',JSON.stringify({module_code:'LMP',module_label:window.SGMP_LMP3.moduleLabel||'modulo_1',saved_at:new Date().toISOString(),timers:{globalStart:t.globalStart,globalEnd:t.globalEnd,stageElapsed:t.stageElapsed||{},stageStatus:t.stageStatus||{},stageLastError:t.stageLastError||{}}}));}catch(e){}
+  };
+
+  window.sgmpV3HasRunningStages = function(){
+    var starts=(window.SGMP_LMP3&&window.SGMP_LMP3.timers&&window.SGMP_LMP3.timers.stageStarts)||{};
+    return Object.keys(starts).some(function(k){return !!starts[k];});
+  };
+
+  window.sgmpV3UpdateStageTimerUI = function(stageCode){
+    var t=window.SGMP_LMP3.timers;
+    STAGE_ORDER.forEach(function(id){
+      var code=codeFromStage(id), el=document.getElementById('sgmp_v3_time_'+code);if(!el)return;
+      var ms=t.stageStarts[code]?Date.now()-t.stageStarts[code]:(t.stageElapsed[code]||0);
+      el.textContent=fmt(ms);
+      var row=el.closest?el.closest('.sgmp-time-row'):null;
+      if(row)row.title=(t.stageStatus[code]||'pending')+(t.stageLastError[code]?' · '+t.stageLastError[code]:'');
+    });
+    var c=codeFromStage(stageCode||window.SGMP_LMP3.currentStage||currentVisibleStage());
+    var stageEl=document.getElementById('sgmp_v3_stage_time');
+    if(stageEl){var ms=t.stageStarts[c]?Date.now()-t.stageStarts[c]:(t.stageElapsed[c]||0);stageEl.textContent='Etapa actual: '+window.sgmpV3StageLabel(c)+' · '+fmt(ms);}
+  };
+
+  window.sgmpV3RefreshTimersUI = function(){
+    var t=window.SGMP_LMP3.timers, main=document.getElementById('sgmp_v3_global_time'), totalMs=0;
+    if(t.globalStart)totalMs=(window.sgmpV3HasRunningStages()?Date.now():(t.globalEnd||Date.now()))-t.globalStart;
+    if(main)main.textContent=fmt(totalMs);
+    window.sgmpV3UpdateStageTimerUI(window.SGMP_LMP3.currentStage);
+  };
+
+  window.sgmpV3StartGlobalTimer = function(){
+    var t=window.SGMP_LMP3.timers;if(!t.globalStart)t.globalStart=Date.now();t.globalEnd=null;
+    if(!t.globalInterval)t.globalInterval=setInterval(function(){window.sgmpV3RefreshTimersUI();},1000);
+    window.sgmpV3RefreshTimersUI();window.sgmpV3PersistTimers();
+  };
+
+  window.sgmpV3StartStage = function(stageCode,mode){
+    var code=codeFromStage(stageCode);window.sgmpV3StartGlobalTimer();var t=window.SGMP_LMP3.timers;
+    window.SGMP_LMP3.currentStage=code;
+    if(!t.stageStarts[code] && t.stageStatus[code] !== 'manual_completed' && t.stageStatus[code] !== 'completed')t.stageStarts[code]=Date.now();
+    if(t.stageStarts[code])t.stageStatus[code]=mode==='manual'?'manual_running':'running';
+    delete t.stageLastError[code];window.sgmpV3UpdateStageTimerUI(code);window.sgmpV3PersistTimers();
+  };
+
+  window.sgmpV3StopStage = function(stageCode,status,errorMessage){
+    var code=codeFromStage(stageCode);var t=window.SGMP_LMP3.timers;
+    if(code&&t.stageStarts[code]){t.stageElapsed[code]=Date.now()-t.stageStarts[code];delete t.stageStarts[code];}
+    if(code){t.stageStatus[code]=status||t.stageStatus[code]||'manual_completed';if(errorMessage)t.stageLastError[code]=String(errorMessage);}
+    if(!window.sgmpV3HasRunningStages())t.globalEnd=Date.now();
+    var el=document.getElementById('sgmp_v3_stage_time');if(el)el.textContent='Etapa finalizada: '+window.sgmpV3StageLabel(code)+' · '+fmt(t.stageElapsed[code]||0);
+    window.sgmpV3UpdateStageTimerUI(code);window.sgmpV3PersistTimers();
+  };
+
+  window.sgmpV3BeginManualStage = function(stageCode){
+    var code=codeFromStage(stageCode);if(!code||!window.SGMP_LMP3)return;
+    window.sgmpV3StartGlobalTimer();
+    if(window.SGMP_LMP3.isProcessing){window.SGMP_LMP3.currentStage=code;window.sgmpV3RefreshTimersUI();return;}
+    var t=window.SGMP_LMP3.timers;
+    if(t.stageStatus[code]==='completed'||t.stageStatus[code]==='manual_completed'){
+      window.SGMP_LMP3.currentStage=code;window.sgmpV3RefreshTimersUI();return;
+    }
+    window.sgmpV3StartStage(code,'manual');
+  };
+
+  window.sgmpV3CompleteManualStage = function(stageCode,status,errorMessage){
+    var code=codeFromStage(stageCode);if(!code||!window.SGMP_LMP3)return;var t=window.SGMP_LMP3.timers;
+    if(t.stageStarts[code])window.sgmpV3StopStage(code,status||'manual_completed',errorMessage||'');
+    else{t.stageStatus[code]=t.stageStatus[code]||(status||'manual_completed');window.sgmpV3UpdateStageTimerUI(code);window.sgmpV3PersistTimers();}
+  };
+
+  window.sgmpV3TimingReport = function(){
+    var t=window.SGMP_LMP3.timers,codes=STAGE_ORDER.map(codeFromStage);
+    var totalMs=t.globalStart?((window.sgmpV3HasRunningStages()?Date.now():(t.globalEnd||Date.now()))-t.globalStart):0;
+    var stagesMs={},stages={},detail={};
+    codes.forEach(function(code){var ms=t.stageStarts[code]?Date.now()-t.stageStarts[code]:(t.stageElapsed[code]||0);stagesMs[code]=ms;stages[code]=fmt(ms);detail[code]={label:window.sgmpV3StageLabel(code),time_ms:ms,time:fmt(ms),status:t.stageStatus[code]||'pending',error:t.stageLastError[code]||''};});
+    return{module_code:'LMP',module_label:window.SGMP_LMP3.moduleLabel||'modulo_1',generated_at:new Date().toISOString(),total_time_ms:totalMs,total_time:fmt(totalMs),stages_ms:stagesMs,stages:stages,detail:detail};
+  };
+
+  window.sgmpV3TimingReportHTML = function(){
+    var report=window.sgmpV3TimingReport();
+    var rows=Object.keys(report.detail).map(function(code){var d=report.detail[code];return '<tr><td>'+d.label+'</td><td>'+d.time+'</td><td>'+d.status+'</td></tr>';}).join('');
+    return '<div class="sgmp-timing-report"><h3>Reporte de tiempos SGMP v3 · LMP</h3><div class="sum-row"><strong>Total</strong><span>'+report.total_time+'</span></div><table><thead><tr><th>Etapa</th><th>Tiempo</th><th>Estado</th></tr></thead><tbody>'+rows+'</tbody></table><div class="sgmp-timing-actions"><button type="button" class="sgmp-v3-allow" onclick="sgmpV3CopyTimingReport()">Copiar reporte</button><button type="button" class="sgmp-v3-allow" onclick="sgmpV3DownloadTimingReport()">Descargar reporte JSON</button></div></div>';
+  };
+
+  window.sgmpV3CopyTimingReport = function(){
+    var text=JSON.stringify(window.sgmpV3TimingReport(),null,2);
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(function(){if(typeof showMsg==='function')showMsg('resultsMsg','ok','Reporte de tiempos copiado.');}).catch(function(){fallbackCopy(text);});
+    else fallbackCopy(text);
+    function fallbackCopy(value){var ta=document.createElement('textarea');ta.value=value;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(e){}document.body.removeChild(ta);}
+  };
+
+  window.sgmpV3DownloadTimingReport = function(){
+    var text=JSON.stringify(window.sgmpV3TimingReport(),null,2);
+    if(typeof downloadText==='function')downloadText('lmp_timing_report.json',text,'application/json;charset=utf-8');
+    else{var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'application/json'}));a.download='lmp_timing_report.json';a.click();URL.revokeObjectURL(a.href);}
+  };
+
+  window.sgmpV3ResetTimers = function(){
+    var t=window.SGMP_LMP3.timers;if(t.globalInterval)clearInterval(t.globalInterval);
+    t.globalStart=null;t.globalEnd=null;t.globalInterval=null;t.stageStarts={};t.stageElapsed={};t.stageStatus={};t.stageLastError={};
+    window.SGMP_LMP3.currentStage='—';window.sgmpV3RefreshTimersUI();window.sgmpV3PersistTimers();window.sgmpV3StartGlobalTimer();window.sgmpV3BeginManualStage(currentVisibleStage());
+  };
+
+  function installShowSectionHook(){
+    if(typeof window.showSection !== 'function' || window.showSection.__sgmpTimerHooked) return;
+    var original=window.showSection;
+    window.showSection=function(id){
+      var prev=currentVisibleStage();
+      if(prev && prev!==id && typeof window.sgmpV3CompleteManualStage==='function')window.sgmpV3CompleteManualStage(prev,'manual_completed');
+      var result=original.apply(this,arguments);
+      var next=currentVisibleStage();
+      if(typeof window.sgmpV3BeginManualStage==='function')window.sgmpV3BeginManualStage(next);
+      return result;
+    };
+    window.showSection.__sgmpTimerHooked=true;
+  }
+
+  function installResetHook(){
+    if(typeof window.resetAll !== 'function' || window.resetAll.__sgmpTimerHooked) return;
+    var original=window.resetAll;
+    window.resetAll=function(){var result=original.apply(this,arguments);if(typeof window.sgmpV3ResetTimers==='function')window.sgmpV3ResetTimers();return result;};
+    window.resetAll.__sgmpTimerHooked=true;
+  }
+
+  function installResultsHook(){
+    if(typeof window.generateResults !== 'function' || window.generateResults.__sgmpTimerHooked) return;
+    var original=window.generateResults;
+    window.generateResults=function(){
+      var result=original.apply(this,arguments);
+      try{
+        window.sgmpV3CompleteManualStage('resultados','manual_completed');
+        var target=document.getElementById('implementationView');
+        if(target && typeof window.sgmpV3TimingReportHTML==='function'){
+          var block=document.createElement('div');block.innerHTML=window.sgmpV3TimingReportHTML();
+          target.appendChild(block.firstChild);
+        }
+      }catch(e){console.warn('[SGMP LMP Timer] No se pudo anexar reporte de tiempos',e);}
+      return result;
+    };
+    window.generateResults.__sgmpTimerHooked=true;
+  }
+
+  document.addEventListener('DOMContentLoaded',function(){
+    installShowSectionHook();installResetHook();installResultsHook();
+    window.sgmpV3StartGlobalTimer();
+    window.sgmpV3BeginManualStage(currentVisibleStage());
+    window.sgmpV3RefreshTimersUI();
+  });
+
+  if(document.readyState!=='loading'){
+    installShowSectionHook();installResetHook();installResultsHook();
+    window.sgmpV3StartGlobalTimer();window.sgmpV3BeginManualStage(currentVisibleStage());window.sgmpV3RefreshTimersUI();
+  }
+})();
+</script>
+
 <script>
 (function(){
   var C="LMP",API="https://script.google.com/macros/s/AKfycbyQZi1flaILc4e3I7MFp8gLctkzC6VccjfFz5aHluMrGZLwOUeS3uQaHPsMZ3l5yfDw-Q/exec";
@@ -8235,6 +8503,29 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
   document.readyState==="loading"?document.addEventListener("DOMContentLoaded",load):load();
 })();
 </script>
+
+
+<!-- ═══════════════════ TIMER SGMP v3 · LMP ═══════════════════ -->
+<div id="sgmp_v3_timer" aria-live="polite">
+  <strong>Tiempo de ejecución</strong>
+  <div id="sgmp_v3_global_time" class="sgmp-time-main">00:00:00</div>
+  <div id="sgmp_v3_stage_time" class="sgmp-time-stage">Etapa actual: —</div>
+  <div id="sgmp_v3_stage_grid" class="sgmp-time-grid">
+    <div class="sgmp-time-row"><span>Inicio</span><span id="sgmp_v3_time_lmp_inicio">00:00:00</span></div>
+    <div class="sgmp-time-row"><span>Preparación</span><span id="sgmp_v3_time_lmp_preparacion">00:00:00</span></div>
+    <div class="sgmp-time-row"><span>Documentación</span><span id="sgmp_v3_time_lmp_documentacion_existente">00:00:00</span></div>
+    <div class="sgmp-time-row"><span>Carga</span><span id="sgmp_v3_time_lmp_carga">00:00:00</span></div>
+    <div class="sgmp-time-row"><span>AS IS</span><span id="sgmp_v3_time_lmp_asis">00:00:00</span></div>
+    <div class="sgmp-time-row"><span>Análisis</span><span id="sgmp_v3_time_lmp_analisis">00:00:00</span></div>
+    <div class="sgmp-time-row"><span>Decisión</span><span id="sgmp_v3_time_lmp_decision">00:00:00</span></div>
+    <div class="sgmp-time-row"><span>TO BE</span><span id="sgmp_v3_time_lmp_tobe">00:00:00</span></div>
+    <div class="sgmp-time-row"><span>Resultados</span><span id="sgmp_v3_time_lmp_resultados">00:00:00</span></div>
+  </div>
+  <div class="sgmp-time-actions">
+    <button type="button" class="sgmp-v3-allow" onclick="sgmpV3CopyTimingReport()">Copiar</button>
+    <button type="button" class="sgmp-v3-allow" onclick="sgmpV3DownloadTimingReport()">Descargar</button>
+  </div>
+</div>
 
 <div id="sgmpLoaderOverlay" aria-live="polite" aria-busy="false" style="display:none;position:fixed;inset:0;background:rgba(7,28,54,.58);z-index:99999;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);">
   <div style="width:min(420px, calc(100vw - 32px));background:linear-gradient(135deg,#071C36,#0B2E59);color:#FFFFFF;border:1px solid rgba(0,194,255,.28);border-radius:22px;padding:24px 26px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.32),0 0 32px rgba(0,194,255,.16);">
