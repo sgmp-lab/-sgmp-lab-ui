@@ -5949,6 +5949,153 @@ function safeArray(value){
   return [value];
 }
 
+
+/* =========================
+   SGMP · Blindaje de granularidad AS IS
+   Objetivo: evitar que el Brief o el Prompt B reduzcan el flujo estructurado a pasos macro.
+========================= */
+function sgmpActivityIdentityText(activity){
+  const a = activity || {};
+  return normalizeContractString(a.id || a.codigo || a.code || a.activity_id || a.name || a.nombre || '').trim();
+}
+
+function sgmpIsWeakQuestionnaireActivity(activity){
+  const name = normalizeContractString(activity?.name || '').toLowerCase();
+  const note = normalizeContractString(activity?.note || '').toLowerCase();
+  return /^(rol y responsabilidades|actividades del proceso|problemas y demoras|documentos y herramientas|interacci[oó]n|carga de trabajo|decisiones)$/i.test(name)
+    || (name.length < 35 && /pregunta|respuesta|cuestionario/.test(note));
+}
+
+function sgmpIsDocOnlyDuplicate(activity){
+  const a = activity || {};
+  const id = normalizeContractString(a.id || '').trim();
+  const name = normalizeContractString(a.name || '').trim();
+  return !!id && /^document$/i.test(a.type || '') && name.toLowerCase() === id.toLowerCase();
+}
+
+function sgmpCanonicalizeActivityList(rawList, options = {}){
+  const normalized = safeArray(rawList).map(normalizeActivity).filter(a => a && a.name);
+  if(!normalized.length) return [];
+
+  const byId = new Map();
+  const noId = [];
+
+  normalized.forEach((act, idx) => {
+    const id = normalizeContractString(act.id || '').trim();
+    const key = id ? id.toLowerCase() : '';
+    const cleaned = { ...act };
+    cleaned.__idx = idx;
+    if(key){
+      const current = byId.get(key);
+      if(!current){
+        byId.set(key, cleaned);
+      }else{
+        const currentIsWeak = sgmpIsDocOnlyDuplicate(current) || sgmpIsWeakQuestionnaireActivity(current);
+        const cleanedIsWeak = sgmpIsDocOnlyDuplicate(cleaned) || sgmpIsWeakQuestionnaireActivity(cleaned);
+        const preferCleaned = currentIsWeak && !cleanedIsWeak;
+        const target = preferCleaned ? cleaned : current;
+        const other = preferCleaned ? current : cleaned;
+        target.document = dedupeCatalog([target.document, other.document]).join('; ');
+        target.actor = target.actor || other.actor || '';
+        target.note = normalizeContractString([target.note, other.note].filter(Boolean).join(' | '));
+        target.ext_suppliers = dedupeCatalog([target.ext_suppliers, other.ext_suppliers]);
+        target.ext_inputs = dedupeCatalog([target.ext_inputs, other.ext_inputs]);
+        target.ext_outputs = dedupeCatalog([target.ext_outputs, other.ext_outputs]);
+        target.ext_customers = dedupeCatalog([target.ext_customers, other.ext_customers]);
+        if(!target.previous?.length) target.previous = other.previous || [];
+        if(!target.next?.length) target.next = other.next || [];
+        target.is_start = !!(target.is_start || other.is_start);
+        target.is_end = !!(target.is_end || other.is_end);
+        byId.set(key, target);
+      }
+    }else{
+      noId.push(cleaned);
+    }
+  });
+
+  let withIds = Array.from(byId.values()).sort((a,b) => {
+    const na = parseInt(String(a.id || '').match(/\d+/)?.[0] || '999999', 10);
+    const nb = parseInt(String(b.id || '').match(/\d+/)?.[0] || '999999', 10);
+    if(na !== nb) return na - nb;
+    return (a.__idx || 0) - (b.__idx || 0);
+  });
+
+  // Si existe una cadena estructurada por ID ACT-XX, evitar que preguntas narrativas la contaminen.
+  if(withIds.length >= 5){
+    noId.length = 0;
+  }
+
+  const result = [...withIds, ...noId.filter(a => !sgmpIsWeakQuestionnaireActivity(a))]
+    .filter(a => !sgmpIsDocOnlyDuplicate(a) || !byId.has(String(a.id || '').toLowerCase()));
+
+  const cleaned = result.map((a, idx, all) => {
+    const item = { ...a };
+    delete item.__idx;
+    item.previous = normalizeRelationList(item.previous);
+    item.next = normalizeRelationList(item.next);
+    // Si no hay conexión válida o viene "pendiente_validacion", reconstruir secuencia por orden.
+    const invalidPrev = item.previous.some(v => /pendiente_validacion/i.test(String(v)));
+    const invalidNext = item.next.some(v => /pendiente_validacion/i.test(String(v)));
+    if(!item.previous.length || invalidPrev) item.previous = idx === 0 ? [] : [all[idx - 1].name];
+    if(!item.next.length || invalidNext) item.next = idx === all.length - 1 ? [] : [all[idx + 1].name];
+    item.is_start = idx === 0;
+    item.is_end = idx === all.length - 1;
+    return item;
+  });
+
+  return cleaned;
+}
+
+function sgmpGetStructuralSourceActivities(){
+  const sources = [
+    state.master?.activities,
+    state.master?.proceso?.actividades,
+    state.master?.raw?.proceso?.actividades,
+    state.master?.sipoc_input?.activities,
+    state.briefReview?.raw?.activities_preliminary,
+    state.briefReview?.raw?.as_is?.activities,
+    state.brief?.activities_preliminary,
+    state.brief?.as_is?.activities
+  ];
+
+  for(const source of sources){
+    const acts = sgmpCanonicalizeActivityList(source);
+    if(acts.length >= 5) return acts;
+  }
+  return [];
+}
+
+function sgmpEnsureBriefHasSourceActivities(brief){
+  const normalized = brief || {};
+  const sourceActivities = sgmpGetStructuralSourceActivities();
+  const briefActs = sgmpCanonicalizeActivityList([
+    ...safeArray(normalized.activities_preliminary),
+    ...safeArray(normalized.as_is?.activities)
+  ]);
+
+  if(sourceActivities.length >= 5 && briefActs.length < sourceActivities.length){
+    normalized.activities_preliminary = sourceActivities.map(a => ({...a}));
+    normalized.as_is = normalized.as_is || {};
+    normalized.as_is.activities = sourceActivities.map(a => ({...a}));
+    normalized.validation = Object.assign({}, normalized.validation || {}, {
+      sourceActivitiesDetected: sourceActivities.length,
+      activitiesRecoveredFromMaster: true,
+      warnings: dedupeCatalog([normalized.validation?.warnings || [], `Se recuperaron ${sourceActivities.length} actividades estructurales desde el JSON maestro para evitar pérdida de granularidad.`])
+    });
+  }
+  return normalized;
+}
+
+function sgmpGuardActivityGranularity(candidateActivities, label){
+  const sourceActivities = sgmpGetStructuralSourceActivities();
+  const current = sgmpCanonicalizeActivityList(candidateActivities);
+  if(sourceActivities.length >= 10 && current.length < sourceActivities.length){
+    console.warn(`[SGMP][LMP] Pérdida de granularidad en ${label || 'AS IS'}: fuente=${sourceActivities.length}, actual=${current.length}. Se usa fuente estructural.`);
+    return sourceActivities.map(a => ({...a}));
+  }
+  return current.length ? current : sourceActivities.map(a => ({...a}));
+}
+
 function getBriefPayload(){
   if(state.briefReview && state.briefReview.raw) return state.briefReview.raw;
   if(state.brief && state.brief.raw) return state.brief.raw;
@@ -6142,7 +6289,7 @@ function normalizeBriefPayload(parsed){
     deepFind(source, ['as_is_activities','asIsActivities'])
   );
 
-  return {
+  const normalizedBrief = {
     summary: {
       executiveSummary: asString(executiveSummary),
       purposeSummary: asString(purposeSummary),
@@ -6179,6 +6326,7 @@ function normalizeBriefPayload(parsed){
       ? Object.assign({}, b.validation)
       : ((source.validation && typeof source.validation === 'object' && !Array.isArray(source.validation)) ? Object.assign({}, source.validation) : {})
   };
+  return sgmpEnsureBriefHasSourceActivities(normalizedBrief);
 }
 
 function evaluateBriefCompleteness(normalizedBrief){
@@ -6188,9 +6336,10 @@ function evaluateBriefCompleteness(normalizedBrief){
   const brief = normalizedBrief;
   const summary = brief.summary || {};
   const sipoc = brief.sipoc || {};
-  const asIsActivities = safeArray(brief.as_is?.activities);
-  const preliminaryActivities = safeArray(brief.activities_preliminary);
-  const activities = [...asIsActivities, ...preliminaryActivities].filter(Boolean);
+  const asIsActivities = sgmpCanonicalizeActivityList(brief.as_is?.activities);
+  const preliminaryActivities = sgmpCanonicalizeActivityList(brief.activities_preliminary);
+  const sourceActivities = sgmpGetStructuralSourceActivities();
+  const activities = sgmpCanonicalizeActivityList([...asIsActivities, ...preliminaryActivities]);
   const activityHasActors = activities.some(item => String((item && typeof item === 'object') ? (item.actor || item.role || item.responsable || item.owner || '') : '').trim());
 
   const hasExecutiveSummary = !!String(summary.executiveSummary || '').trim();
@@ -6214,11 +6363,16 @@ function evaluateBriefCompleteness(normalizedBrief){
   if(!hasExecutiveSummary) issues.push('Falta resumen ejecutivo del brief.');
   if(!hasPurposeSummary) issues.push('Falta finalidad del proceso en el brief.');
   if(!hasActivities && !hasSipocAny) issues.push('Faltan actividades preliminares o información SIPOC mínima del brief.');
+  if(sourceActivities.length >= 10 && activities.length < sourceActivities.length){
+    issues.push(`Pérdida de granularidad: el JSON maestro tiene ${sourceActivities.length} actividades estructurales y el Brief conserva ${activities.length}.`);
+  }
 
   brief.validation = Object.assign({}, brief.validation || {}, {
     warnings,
     blockingIssues: issues,
-    canProceedToAnalysis: issues.length === 0
+    canProceedToAnalysis: issues.length === 0,
+    sourceActivitiesDetected: sourceActivities.length,
+    briefActivitiesDetected: activities.length
   });
 
   return issues;
@@ -6337,7 +6491,11 @@ function buildBriefPrompt(master){
   const prePack = JSON.stringify(safeArray(master.preInterview || master.pre || []), null, 2);
   const interviewPack = JSON.stringify(safeArray(master.interview || []), null, 2);
 
-  const dynamicSection = `ENTRADA CONSOLIDADA COMPLETA (NO RESUMIR PREMATURAMENTE):
+  const sourceActivities = sgmpCanonicalizeActivityList(master.activities || []);
+  const dynamicSection = `FUENTE ESTRUCTURAL OBLIGATORIA DE ACTIVIDADES DEL PROCESO:
+${JSON.stringify({ source_activity_count: sourceActivities.length, source_activities: sourceActivities }, null, 2)}
+
+ENTRADA CONSOLIDADA COMPLETA (NO RESUMIR PREMATURAMENTE):
 ${JSON.stringify(master, null, 2)}
 
 EVIDENCIA DE PREENTREVISTAS (PRESERVAR MATICES, DIFERENCIAS Y CONTRADICCIONES):
@@ -6352,6 +6510,13 @@ ${docs}`;
   const hardening = `
 
 REGLAS CRÍTICAS DE PRESERVACIÓN DE EVIDENCIA:
+- FUENTE ESTRUCTURAL OBLIGATORIA: si existe source_activities, debes copiar TODAS esas actividades en activities_preliminary y as_is.activities.
+- PROHIBIDO devolver activities_preliminary vacío si source_activity_count es mayor que 0.
+- PROHIBIDO devolver as_is.activities vacío si source_activity_count es mayor que 0.
+- PROHIBIDO reconstruir el flujo solo desde flowSummary o sipoc_preliminary.process cuando source_activities exista.
+- Si source_activity_count es mayor a 10, la salida debe contener al menos esa misma cantidad de actividades en activities_preliminary y as_is.activities.
+- Conserva id, name, actor, type, document, previous, next, is_start, is_end y note de cada actividad fuente.
+- flowSummary debe ser resumen ejecutivo; NO sustituye el flujo operativo.
 - NO resumas demasiado pronto.
 - NO sustituyas diferencias entre entrevistados por una sola versión armonizada si hay contradicción relevante.
 - PRESERVA explícitamente excepciones, handoffs, controles manuales, aprobaciones informales, retrabajos, demoras, dependencias de personas y reglas implícitas.
@@ -6396,7 +6561,22 @@ JSON OBLIGATORIO DEL BRIEF:
     "hiddenControls": [],
     "manualDependencies": [],
     "suspectedConstraints": [],
-    "evidenceHighlights": []
+    "evidenceHighlights": [],
+    "activities_preliminary": [
+      {"id":"", "name":"", "type":"operation", "actor":"", "document":"", "previous":[], "next":[], "is_start":false, "is_end":false, "note":""}
+    ],
+    "as_is": {
+      "activities": [
+        {"id":"", "name":"", "type":"operation", "actor":"", "document":"", "previous":[], "next":[], "is_start":false, "is_end":false, "note":""}
+      ]
+    },
+    "validation": {
+      "sourceActivityCount": 0,
+      "briefActivityCount": 0,
+      "canProceedToAnalysis": false,
+      "blockingGaps": [],
+      "warnings": []
+    }
   }
 }`;
 
@@ -6554,13 +6734,20 @@ async function generateAnalysisPromptFromApprovedBrief(){
   if(issues.length || !state.briefReview.approved){ renderBriefDraft(); renderBriefValidation(); refreshCargaFlowState(); showMsg('cargaMsg','warn','Debes procesar y aprobar primero el Brief.'); return; }
   const master = state.master || mergeMaster();
   const c = master.context || state.context || {};
+  const sourceActivities = sgmpGetStructuralSourceActivities();
   const evidencePack = {
+    source_activities: sourceActivities,
+    source_activity_count: sourceActivities.length,
+    master_sipoc: master.sipoc || {},
     preInterview: safeArray(master.preInterview || master.pre || []),
     interview: safeArray(master.interview || []),
     additionalDocuments: safeArray(master.notes?.additionalDocuments).map(d => ({name:d.name, preview:d.preview || d.content || ''})),
     context: c
   };
-  const dynamic = `BRIEF APROBADO (NO RECONSTRUIR, USAR COMO BASE OFICIAL):
+  const dynamic = `FUENTE ESTRUCTURAL OBLIGATORIA DEL AS IS:
+${JSON.stringify({ source_activity_count: sourceActivities.length, source_activities: sourceActivities }, null, 2)}
+
+BRIEF APROBADO (USAR COMO RESUMEN EJECUTIVO, NO COMO FUENTE ÚNICA DEL FLUJO):
 ${JSON.stringify(brief, null, 2)}
 
 EVIDENCIA OPERATIVA COMPLEMENTARIA (NO PERDERLA POR RESUMEN EXCESIVO):
@@ -6568,6 +6755,12 @@ ${JSON.stringify(evidencePack, null, 2)}`;
   const hardening = `
 
 REGLAS CRÍTICAS DE ANÁLISIS CONSULTIVO:
+- FUENTE ESTRUCTURAL OBLIGATORIA: si existe source_activities, debes usar esa lista como base principal del AS IS.
+- PROHIBIDO reconstruir el flujo desde flowSummary o sipoc.process cuando source_activities exista.
+- PROHIBIDO reducir, agrupar o fusionar actividades de source_activities.
+- Si source_activity_count es mayor a 10, tu salida debe incluir al menos esa misma cantidad de actividades en as_is.activities, activities y sb_contract.sipoc_input.activities.
+- Cada actividad de source_activities debe conservar su id, name, actor, document, previous, next, is_start, is_end y note cuando existan.
+- flowSummary y sipoc.process son referencias ejecutivas, no reemplazan el flujo operativo.
 - NO resumas demasiado pronto ni borres evidencia operativa valiosa.
 - PRESERVA excepciones, retrabajos, controles manuales, aprobaciones informales, handoffs, variaciones y dependencias de personas.
 - DISTINGUE hechos observados, inferencias, supuestos y vacíos.
@@ -7222,8 +7415,6 @@ function sgmpCollectActivitiesFromPayload(payload){
     p.entrevista?.actividades,
     p.entrevista?.actividades_referenciadas,
     p.actividades_referenciadas,
-    p.documentos_por_actividad,
-    p.entrevista?.documentos_por_actividad,
     p.activities,
     p.as_is?.activities,
     p.activities_preliminary,
@@ -7239,19 +7430,7 @@ function sgmpCollectActivitiesFromPayload(payload){
   rawGroups.forEach(group => {
     const arr = safeArray(group);
     arr.forEach((item, idx) => {
-      let normalized;
-      if(item && typeof item === 'object' && item.actividad && item.documento && !item.nombre && !item.name){
-        // documentos_por_actividad: convertirlo en actividad documental si no existe aún.
-        normalized = sgmpNormalizeSourceActivity({
-          id:item.actividad,
-          nombre:item.actividad,
-          tipo:'document',
-          documento:item.documento,
-          descripcion:item.uso || ''
-        }, idx, arr, actorMap);
-      } else {
-        normalized = sgmpNormalizeSourceActivity(item, idx, arr, actorMap);
-      }
+      const normalized = sgmpNormalizeSourceActivity(item, idx, arr, actorMap);
       if(normalized && normalized.name) out.push(normalized);
     });
   });
@@ -7562,8 +7741,6 @@ function extractAsIsActivitiesFromPayload(payload){
     p.process?.activities,
     p.entrevista?.actividades_referenciadas,
     p.actividades_referenciadas,
-    p.documentos_por_actividad,
-    p.entrevista?.documentos_por_actividad,
     p.sb_contract?.sipoc_input?.activities,
     p.sipoc_builder_ready?.sipoc_input?.activities,
     p.sbContract?.sipoc_input?.activities,
@@ -7580,20 +7757,23 @@ function extractAsIsActivitiesFromPayload(payload){
     p.sipoc?.process,
     p.sipoc_input?.activities,
     p.structured_process?.activities,
-    p.integration_input?.activities
+    p.integration_input?.activities,
+    p.activities_preliminary
   ];
+
+  let best = [];
   for(const candidate of candidates){
-    const arr = safeArray(candidate).map(normalizeActivity).filter(a => a.name);
-    if(arr.length) return arr.map((a, idx, all) => ({
-      ...a,
-      previous: a.previous?.length ? a.previous : (idx === 0 ? [] : [all[idx-1].name]),
-      next: a.next?.length ? a.next : (idx === all.length - 1 ? [] : [all[idx+1].name]),
-      is_start: a.is_start || idx === 0,
-      is_end: a.is_end || idx === all.length - 1
-    }));
+    const arr = sgmpCanonicalizeActivityList(candidate);
+    if(arr.length > best.length) best = arr;
   }
-  return [];
+
+  const sourceActivities = sgmpGetStructuralSourceActivities();
+  if(sourceActivities.length >= 10 && best.length < sourceActivities.length){
+    return sourceActivities.map(a => ({...a}));
+  }
+  return best;
 }
+
 function normalizeImprovement(item = {}){
   const firstText = (...values) => values.map(value => {
     if(value === undefined || value === null) return '';
@@ -7713,8 +7893,13 @@ function normalizeAnalysisPayload(parsed){
     parsed.to_be_package?.document_proposal
   ).map(normalizeDocumentProposalItem);
 
-  const sbActivities = safeArray(sbInput.activities);
-  const finalActivities = sbActivities.length ? sbActivities : activities;
+  const sbActivities = sgmpCanonicalizeActivityList(sbInput.activities);
+  const sourceActivities = sgmpGetStructuralSourceActivities();
+  let finalActivities = sbActivities.length ? sbActivities : activities;
+  finalActivities = sgmpGuardActivityGranularity(finalActivities, 'normalizeAnalysisPayload');
+  if(sourceActivities.length >= 10 && finalActivities.length < sourceActivities.length){
+    finalActivities = sourceActivities.map(a => ({...a}));
+  }
 
   return {
     raw_original: parsed,
