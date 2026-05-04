@@ -2706,11 +2706,22 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 <p>Se habilita cuando el Brief fue aprobado. Usa el brief oficial y los complementos cargados para generar el análisis completo.</p>
 <div class="actions" style="border-top:none;padding-top:0;margin-top:0">
 <div class="actions-left">
-<button class="btn" id="btnGenerateAnalysisPrompt" onclick="generateAnalysisPromptFromApprovedBrief()" type="button">Generar Prompt B</button>
+<button class="btn" id="btnGenerateAnalysisPrompt" onclick="generateAnalysisStagePrompt('B1')" type="button">Generar B1 · AS IS</button>
 <button class="btn-ghost" id="btnCopyAnalysisPrompt" onclick="copyTextFromId('analysisPromptEditor','cargaMsg','Prompt B copiado correctamente.')" type="button">Copiar prompt</button>
 </div>
 </div>
 <textarea id="analysisPromptEditor" placeholder="Aquí aparecerá el Prompt B una vez aprobado el Brief." style="width:100%;min-height:300px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+<div class="note" id="analysisStageHelp"><strong>Análisis por etapas</strong><br/>Genera y procesa una etapa a la vez: B1 AS IS, B2 AVA, B3 desperdicios/problemas, B4 restricciones, B5 mejoras candidatas y B6 contrato SB. Los prompts están embebidos temporalmente en el HTML.</div>
+<div class="actions" style="border-top:none;padding-top:8px;margin-top:8px">
+  <div class="actions-left">
+    <button class="btn-ghost" onclick="generateAnalysisStagePrompt('B1')" type="button">B1 · AS IS</button>
+    <button class="btn-ghost" onclick="generateAnalysisStagePrompt('B2')" type="button">B2 · AVA</button>
+    <button class="btn-ghost" onclick="generateAnalysisStagePrompt('B3')" type="button">B3 · Desperdicios</button>
+    <button class="btn-ghost" onclick="generateAnalysisStagePrompt('B4')" type="button">B4 · Restricciones</button>
+    <button class="btn-ghost" onclick="generateAnalysisStagePrompt('B5')" type="button">B5 · Mejoras</button>
+    <button class="btn-ghost" onclick="generateAnalysisStagePrompt('B6')" type="button">B6 · Builder</button>
+  </div>
+</div>
 </article>
 
 <article class="card half">
@@ -2718,7 +2729,7 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 <p>Pega aquí la respuesta del Prompt B. El sistema debe poder procesar estructuras parciales sin romper el flujo.</p>
 <textarea id="iaResponseEditor" placeholder="Pega aquí la respuesta completa de la IA..." style="width:100%;min-height:300px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
 <div class="actions">
-<div class="actions-left"><button class="btn-ok" id="btnProcessAnalysis" onclick="processIAResponse()" type="button">Procesar análisis</button></div>
+<div class="actions-left"><button class="btn-ok" id="btnProcessAnalysis" onclick="processIAResponse()" type="button">Procesar análisis completo</button><button class="btn-warn" id="btnProcessAnalysisStage" onclick="processAnalysisStageResponse()" type="button">Procesar etapa actual</button></div>
 <div class="actions-right"><button class="btn" id="btnApplyAnalysis" onclick="applyIAResponseAndContinue()" type="button">Aplicar al LMP y continuar</button></div>
 </div>
 <div class="msg" id="iaMsg"></div><div class="msg" id="analysisValidationMsg"></div>
@@ -7820,6 +7831,283 @@ function firstObject(...items){
   return items.find(x => x && typeof x === 'object' && !Array.isArray(x)) || {};
 }
 
+
+function sgmpToList(value){
+  if(Array.isArray(value)) return value.filter(v => v !== undefined && v !== null && String(typeof v === 'object' ? JSON.stringify(v) : v).trim() !== '');
+  if(value === undefined || value === null || value === '') return [];
+  if(typeof value === 'string'){
+    return value.split(/\n|;|\u2022|\|/).map(x => x.trim()).filter(Boolean);
+  }
+  return [value];
+}
+
+function sgmpTextOf(value){
+  if(value === undefined || value === null) return '';
+  if(typeof value === 'string') return value.trim();
+  if(typeof value === 'object') return (value.title || value.name || value.problem || value.description || value.summary || value.restriction || value.constraint || value.waste || JSON.stringify(value)).trim();
+  return String(value).trim();
+}
+
+function sgmpUniqueStrings(values){
+  const out = [];
+  (values || []).forEach(v => {
+    const t = sgmpTextOf(v);
+    if(t && !out.some(x => x.toLowerCase() === t.toLowerCase())) out.push(t);
+  });
+  return out;
+}
+
+function sgmpNormalizeAvaLabel(value){
+  const v = String(value || '').trim().toUpperCase().replace(/\s+/g,'');
+  if(['VA','VALORAGREGADO','VALUEADDED'].includes(v)) return 'VA';
+  if(['NVA','SINVALORAGREGADO','NONVALUEADDED'].includes(v)) return 'NVA';
+  if(['NNVA','NECESARIOSINVALORAGREGADO','BUSINESSNECESSARY'].includes(v)) return 'NNVA';
+  return '';
+}
+
+function sgmpCalculateAvaDistribution(activities){
+  const acts = safeArray(activities);
+  const total = acts.length || 0;
+  const counts = { VA:0, NNVA:0, NVA:0 };
+  acts.forEach(a => {
+    const label = sgmpNormalizeAvaLabel(a.ava_classification || a.avaClassification || a.ava || a.valueType || a.value_type);
+    if(label) counts[label] += 1;
+  });
+  return {
+    VA: total ? Math.round((counts.VA / total) * 100) : 0,
+    NNVA: total ? Math.round((counts.NNVA / total) * 100) : 0,
+    NVA: total ? Math.round((counts.NVA / total) * 100) : 0,
+    VA_pct: total ? Math.round((counts.VA / total) * 100) : 0,
+    NNVA_pct: total ? Math.round((counts.NNVA / total) * 100) : 0,
+    NVA_pct: total ? Math.round((counts.NVA / total) * 100) : 0,
+    counts,
+    total
+  };
+}
+
+function sgmpBuildCandidateImprovementsFromFindings(findings, maxItems){
+  const f = findings || {};
+  const candidates = [];
+  const add = (kind, item, idx) => {
+    const text = sgmpTextOf(item);
+    if(!text) return;
+    const title = kind + ' ' + (idx + 1);
+    candidates.push(normalizeImprovement({
+      title,
+      summary: text,
+      problem: text,
+      problemSolved: text,
+      currentState: text,
+      proposedState:
+        kind === 'Quick win' ? 'Implementar una acción rápida para resolver o mitigar: ' + text :
+        kind === 'Restricción' ? 'Eliminar, reducir o controlar la restricción detectada: ' + text :
+        kind === 'Desperdicio' ? 'Reducir el desperdicio identificado mediante estandarización, control visual o automatización selectiva: ' + text :
+        'Diseñar una acción de mejora para resolver: ' + text,
+      support: 'Generado desde hallazgos del análisis AS IS.',
+      impact:
+        kind === 'Quick win' ? 'Impacto rápido esperado en control, trazabilidad o reducción de reproceso.' :
+        kind === 'Restricción' ? 'Mejora esperada en capacidad, flujo o eliminación de bloqueo operativo.' :
+        kind === 'Desperdicio' ? 'Reducción esperada de tiempo, esperas, retrabajo o carga manual.' :
+        'Mejora esperada en desempeño operativo del proceso.',
+      status: 'pending'
+    }));
+  };
+  sgmpToList(f.quickWins || f.quick_wins).forEach((x,i)=>add('Quick win',x,i));
+  sgmpToList(f.restrictions || f.constraints || f.suspectedConstraints || f.suspected_constraints).forEach((x,i)=>add('Restricción',x,i));
+  sgmpToList(f.wastes || f.manualDependencies || f.manual_dependencies).forEach((x,i)=>add('Desperdicio',x,i));
+  sgmpToList(f.problems || f.evidenceHighlights || f.evidence_highlights || f.contradictions || f.contradictions_detected).slice(0,5).forEach((x,i)=>add('Mejora derivada de problema',x,i));
+  const unique = [];
+  candidates.forEach(c => {
+    const key = String(c.problem || c.summary || c.title || '').toLowerCase();
+    if(key && !unique.some(u => String(u.problem || u.summary || u.title || '').toLowerCase() === key)) unique.push(c);
+  });
+  return unique.slice(0, maxItems || 12);
+}
+
+function sgmpEnrichAnalysisModel(data){
+  const d = data || {};
+  d.findings = d.findings || {};
+  const f = d.findings;
+
+  f.wastes = sgmpUniqueStrings([
+    ...sgmpToList(f.wastes),
+    ...sgmpToList(f.desperdicios),
+    ...sgmpToList(f.manualDependencies),
+    ...sgmpToList(f.manual_dependencies)
+  ]);
+  f.problems = sgmpUniqueStrings([
+    ...sgmpToList(f.problems),
+    ...sgmpToList(f.problemas),
+    ...sgmpToList(f.evidenceHighlights),
+    ...sgmpToList(f.evidence_highlights),
+    ...sgmpToList(f.contradictions),
+    ...sgmpToList(f.contradictions_detected)
+  ]);
+  f.restrictions = sgmpUniqueStrings([
+    ...sgmpToList(f.restrictions),
+    ...sgmpToList(f.constraints),
+    ...sgmpToList(f.restricciones),
+    ...sgmpToList(f.suspectedConstraints),
+    ...sgmpToList(f.suspected_constraints),
+    ...sgmpToList(f.bottlenecks),
+    ...sgmpToList(f.constraints_detected)
+  ]);
+  f.quickWins = sgmpUniqueStrings([
+    ...sgmpToList(f.quickWins),
+    ...sgmpToList(f.quick_wins),
+    ...sgmpToList(f.quickwins)
+  ]);
+  f.risks = sgmpUniqueStrings([...sgmpToList(f.risks), ...sgmpToList(f.riesgos)]);
+  f.evidenceHighlights = sgmpUniqueStrings([...sgmpToList(f.evidenceHighlights), ...sgmpToList(f.evidence_highlights)]);
+  f.manualDependencies = sgmpUniqueStrings([...sgmpToList(f.manualDependencies), ...sgmpToList(f.manual_dependencies)]);
+  f.suspectedConstraints = sgmpUniqueStrings([...sgmpToList(f.suspectedConstraints), ...sgmpToList(f.suspected_constraints)]);
+  f.contradictions = sgmpUniqueStrings([...sgmpToList(f.contradictions), ...sgmpToList(f.contradictions_detected)]);
+
+  const acts = safeArray(d.as_is?.activities || d.activities);
+  d.ava = d.ava || {};
+  const existingDist = d.ava.distribution || d.ava.percentages || {};
+  const calc = sgmpCalculateAvaDistribution(acts);
+  const hasAvaNumbers = ['VA','NNVA','NVA','VA_pct','NNVA_pct','NVA_pct'].some(k => Number(existingDist[k]) > 0);
+  d.ava.distribution = hasAvaNumbers ? Object.assign({}, calc, existingDist) : calc;
+
+  d.improvements = safeArray(d.improvements || d.mejoras).map(normalizeImprovement);
+  if(!d.improvements.length){
+    d.improvements = sgmpBuildCandidateImprovementsFromFindings(f, 12);
+  }
+  return d;
+}
+
+function sgmpGetAnalysisStageDefinitions(){
+  return {
+    B1:{
+      label:'B1 · Validación AS IS',
+      stageCode:'lmp_analysis_b1',
+      instruction:`ACTÚA COMO consultor senior en procesos y modelador AS IS.\n\nOBJETIVO B1:\nValidar, limpiar y estructurar el AS IS usando como fuente principal source_activities.\n\nREGLAS:\n- No hagas análisis de mejoras todavía.\n- No hagas AVA todavía.\n- No reduzcas ni agrupes actividades.\n- Conserva todas las actividades estructurales.\n- Corrige continuidad previous/next si hay vacíos.\n- Marca una sola actividad inicial y una sola final.\n\nSALIDA JSON ESTRICTA:\n{\n  "as_is": {"activities": []},\n  "validation": {"valid": true, "activity_count": 0, "warnings": [], "blockingIssues": []}\n}`
+    },
+    B2:{
+      label:'B2 · Análisis AVA',
+      stageCode:'lmp_analysis_b2',
+      instruction:`ACTÚA COMO especialista Lean Six Sigma.\n\nOBJETIVO B2:\nClasificar cada actividad AS IS en VA, NNVA o NVA, con evidencia breve.\n\nREGLAS:\n- Usa solo las actividades recibidas.\n- No elimines ni renombres actividades.\n- No propongas mejoras todavía.\n- Devuelve distribución porcentual y detalle por actividad.\n\nSALIDA JSON ESTRICTA:\n{\n  "as_is": {"activities": []},\n  "ava": {"distribution": {"VA": 0, "NNVA": 0, "NVA": 0}, "activityAnalysis": [], "evidence": []}\n}`
+    },
+    B3:{
+      label:'B3 · Desperdicios y problemas',
+      stageCode:'lmp_analysis_b3',
+      instruction:`ACTÚA COMO experto Lean, análisis de desperdicios y diagnóstico operativo.\n\nOBJETIVO B3:\nDetectar desperdicios, problemas, riesgos, dependencias manuales, controles ocultos y evidencias desde el AS IS y el brief.\n\nREGLAS:\n- No diseñes TO BE.\n- No hagas contrato SB.\n- Cada hallazgo debe tener evidencia o actividad relacionada cuando sea posible.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "wastes": [],\n    "problems": [],\n    "risks": [],\n    "evidence_highlights": [],\n    "manual_dependencies": [],\n    "hidden_controls": [],\n    "contradictions_detected": []\n  }\n}`
+    },
+    B4:{
+      label:'B4 · Restricciones y causa probable',
+      stageCode:'lmp_analysis_b4',
+      instruction:`ACTÚA COMO especialista TOC, causa raíz y flujo operativo.\n\nOBJETIVO B4:\nIdentificar restricciones, cuellos de botella, causas probables y puntos de bloqueo del proceso.\n\nREGLAS:\n- Diferencia restricción real de problema general.\n- No propongas aún el plan TO BE completo.\n- Relaciona restricciones con actividades cuando aplique.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "restrictions": [],\n    "suspected_constraints": [],\n    "bottlenecks": [],\n    "rootCauseHypotheses": [],\n    "controlIssues": [],\n    "dataGaps": []\n  }\n}`
+    },
+    B5:{
+      label:'B5 · Mejoras candidatas para TO BE',
+      stageCode:'lmp_analysis_b5',
+      instruction:`ACTÚA COMO consultor senior de mejora continua.\n\nOBJETIVO B5:\nConvertir hallazgos, problemas, desperdicios y restricciones en mejoras candidatas para que el usuario las apruebe, ajuste o rechace en TO BE.\n\nREGLAS:\n- No generes mejoras genéricas.\n- Cada mejora debe estar conectada a un problema, desperdicio o restricción.\n- Distingue quick win de mejora gradual y proyecto estructural.\n- La salida debe alimentar directamente la pantalla TO BE.\n\nSALIDA JSON ESTRICTA:\n{\n  "quickWins": [],\n  "improvements": [\n    {\n      "title": "",\n      "summary": "",\n      "problem": "",\n      "currentState": "",\n      "proposedState": "",\n      "support": "",\n      "impact": "",\n      "justification": "",\n      "type": "quick_win|gradual|strategic",\n      "status": "pending"\n    }\n  ]\n}`
+    },
+    B6:{
+      label:'B6 · Contrato para SIPOC Builder',
+      stageCode:'lmp_analysis_b6',
+      instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder.\n\nOBJETIVO B6:\nConstruir el bloque sipoc_input usando el AS IS validado y los datos SIPOC disponibles.\n\nREGLAS:\n- Devuelve SOLO sipoc_input.\n- No incluyas análisis, métricas ni mejoras.\n- previous y next deben ser arrays.\n- activities debe conservar todas las actividades AS IS.\n\nSALIDA JSON ESTRICTA:\n{\n  "sipoc_input": {\n    "process_code": "",\n    "process_name": "",\n    "purpose": "",\n    "start_event": "",\n    "end_event": "",\n    "notes": "",\n    "suppliers": [],\n    "inputs": [],\n    "outputs": [],\n    "customers": [],\n    "actors": [],\n    "documents": [],\n    "activities": []\n  }\n}`
+    }
+  };
+}
+
+function sgmpBuildAnalysisStagePrompt(stageKey){
+  const defs = sgmpGetAnalysisStageDefinitions();
+  const def = defs[stageKey] || defs.B1;
+  const master = state.master || mergeMaster();
+  const brief = normalizeBriefPayload(state.briefReview?.raw || state.brief || {});
+  const c = master.context || state.context || {};
+  const stageResults = state.analysisStages?.results || {};
+  const baseActivities = safeArray(
+    stageResults.B1?.as_is?.activities ||
+    state.asis?.activities ||
+    brief.as_is?.activities ||
+    brief.activities_preliminary ||
+    sgmpGetStructuralSourceActivities()
+  );
+  const evidencePack = {
+    context: c,
+    brief,
+    current_as_is: baseActivities,
+    previous_stage_results: stageResults,
+    master_sipoc: master.sipoc || {},
+    source_activity_count: baseActivities.length,
+    source_activities: baseActivities
+  };
+  return `${def.instruction}\n\nREGLAS GLOBALES SGMP:\n- Responde SOLO JSON válido.\n- No uses markdown.\n- No inventes evidencia.\n- Si falta información, registra warnings o dataGaps.\n- Mantén nombres de campos exactamente como se solicita.\n\nINSUMOS:\n${JSON.stringify(evidencePack, null, 2)}`;
+}
+
+function generateAnalysisStagePrompt(stageKey){
+  if(!(state.briefReview && state.briefReview.approved)){
+    showMsg('cargaMsg','warn','Debes aprobar primero el Brief.');
+    return;
+  }
+  state.analysisStages = state.analysisStages || { current:'B1', results:{} };
+  state.analysisStages.current = stageKey || 'B1';
+  const prompt = sgmpBuildAnalysisStagePrompt(state.analysisStages.current);
+  if(qs('analysisPromptEditor')) qs('analysisPromptEditor').value = prompt;
+  showMsg('cargaMsg','ok','Prompt ' + state.analysisStages.current + ' generado correctamente.');
+}
+
+function sgmpAssembleStagedAnalysisPayload(){
+  const results = state.analysisStages?.results || {};
+  const b1 = results.B1 || {};
+  const b2 = results.B2 || {};
+  const b3 = results.B3 || {};
+  const b4 = results.B4 || {};
+  const b5 = results.B5 || {};
+  const b6 = results.B6 || {};
+  let activities = safeArray(b2.as_is?.activities || b1.as_is?.activities || state.asis?.activities || state.briefReview?.raw?.as_is?.activities || state.briefReview?.raw?.activities_preliminary).map(a => ({...a}));
+  const avaActivityAnalysis = safeArray(b2.ava?.activityAnalysis || b2.ava?.activities || b2.activityAnalysis);
+  if(avaActivityAnalysis.length && activities.length){
+    activities = activities.map(a => {
+      const hit = avaActivityAnalysis.find(x => String(x.id || '').trim() === String(a.id || '').trim() || String(x.name || '').trim().toLowerCase() === String(a.name || '').trim().toLowerCase());
+      return hit ? Object.assign({}, a, {
+        ava_classification: hit.ava_classification || hit.avaClassification || hit.ava || hit.classification || a.ava_classification,
+        ava_reason: hit.reason || hit.evidence || hit.justification || a.ava_reason
+      }) : a;
+    });
+  }
+  const mergedFindings = Object.assign({}, b3.findings || {}, b4.findings || {});
+  return sgmpEnrichAnalysisModel({
+    context: state.context || state.master?.context || {},
+    as_is: { activities },
+    ava: b2.ava || {},
+    findings: mergedFindings,
+    quickWins: b5.quickWins || b5.quick_wins || [],
+    improvements: b5.improvements || [],
+    sb_contract: b6.sipoc_input ? { sipoc_input: b6.sipoc_input } : (b6.sb_contract || {})
+  });
+}
+
+function processAnalysisStageResponse(){
+  const raw = qs('iaResponseEditor')?.value.trim() || '';
+  if(!raw){ showMsg('iaMsg','warn','Pega primero la respuesta de la etapa.'); return; }
+  try{
+    const parsed = extractJsonFromText(raw);
+    state.analysisStages = state.analysisStages || { current:'B1', results:{} };
+    const key = state.analysisStages.current || 'B1';
+    state.analysisStages.results[key] = parsed;
+    const assembled = sgmpAssembleStagedAnalysisPayload();
+    const normalized = normalizeAnalysisPayload(assembled);
+    normalized.improvements = assembled.improvements || normalized.improvements || [];
+    if(!normalized.improvements.length) normalized.improvements = sgmpBuildCandidateImprovementsFromFindings(normalized.findings, 12);
+    qs('iaResponseEditor').value = JSON.stringify(normalized, null, 2);
+    processIAResponse();
+    const order = ['B1','B2','B3','B4','B5','B6'];
+    const next = order[order.indexOf(key) + 1];
+    if(next){
+      state.analysisStages.current = next;
+      showMsg('iaMsg','ok','Etapa ' + key + ' procesada. Siguiente sugerida: ' + next + '.');
+    }else{
+      showMsg('iaMsg','ok','Todas las etapas fueron procesadas. Puedes aplicar al LMP y continuar.');
+    }
+  }catch(error){
+    showMsg('iaMsg','err','No fue posible procesar la etapa. Detalle: ' + error.message);
+  }
+}
+
 function getSbInputFromAnalysisPayload(parsed){
   return firstObject(
     parsed?.sb_contract?.sipoc_input,
@@ -7901,7 +8189,7 @@ function normalizeAnalysisPayload(parsed){
     finalActivities = sourceActivities.map(a => ({...a}));
   }
 
-  return {
+  const normalized = {
     raw_original: parsed,
     context,
     brief_reference: parsed.brief_reference || state.briefReview?.raw || {},
@@ -7960,6 +8248,7 @@ function normalizeAnalysisPayload(parsed){
     indicators: safeArray(parsed.indicators || parsed.control_indicators),
     validation: parsed.validation || {}
   };
+  return sgmpEnrichAnalysisModel(normalized);
 }
 
 function processIAResponse(){
@@ -8002,6 +8291,8 @@ if(recoveredActs.length){
   data.sb_contract.sipoc_input = data.sb_contract.sipoc_input || {};
   data.sb_contract.sipoc_input.activities = recoveredActs;
 }
+
+sgmpEnrichAnalysisModel(data);
 
 console.log('[LMP Analysis] parsed:', parsed);
 console.log('[LMP Analysis] recovered activities:', recoveredActs.length);
