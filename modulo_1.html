@@ -2004,6 +2004,338 @@ function gatherContext(prefix){
 
 ${script}
 <\/script>
+
+
+<!-- SGMP LMP · Análisis por pantallas tipo Prompt A · Override final -->
+<script id="sgmp-lmp-analysis-prompt-a-style-final">
+(function(){
+  'use strict';
+  const STAGES = ['B1','B2','B3','B4','B5','B6'];
+  const SECTION_BY_STAGE = {B1:'analisis_b1',B2:'analisis_b2',B3:'analisis_b3',B4:'analisis_b4',B5:'analisis_b5',B6:'analisis_b6'};
+  const STAGE_BY_SECTION = {analisis_b1:'B1',analisis_b2:'B2',analisis_b3:'B3',analisis_b4:'B4',analisis_b5:'B5',analisis_b6:'B6'};
+  const SCREEN_ORDER = ['inicio','preparacion','documentacion_existente','carga','asis','analisis_b1','analisis_b2','analisis_b3','analisis_b4','analisis_b5','analisis_b6','decision','tobe','resultados'];
+  function $(id){ return document.getElementById(id); }
+  function arr(v){ return Array.isArray(v) ? v : (v == null || v === '' ? [] : [v]); }
+  function text(v){ return String(v == null ? '' : v).trim(); }
+  function getState(){ window.state = window.state || {}; window.state.analysisStages = window.state.analysisStages || {current:'B1', results:{}}; window.state.analysisStages.results = window.state.analysisStages.results || {}; return window.state; }
+  function show(id,type,msg){ if(typeof window.showMsg === 'function') window.showMsg(id,type,msg); else { const el=$(id); if(el){ el.className='msg show '+(type||'ok'); el.textContent=msg; } } }
+  function safeJsonStringify(obj){ try{return JSON.stringify(obj,null,2);}catch(e){return String(obj||'');} }
+  function robustParseJSON(raw){
+    if(!raw || !text(raw)) throw new Error('No hay contenido JSON para procesar.');
+    if(typeof window.extractJsonFromText === 'function'){
+      try { return window.extractJsonFromText(raw); } catch(e) {}
+    }
+    let s = text(raw).replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
+    try { return JSON.parse(s); } catch(e) {}
+    const first = s.indexOf('{'), last = s.lastIndexOf('}');
+    if(first >= 0 && last > first){ return JSON.parse(s.slice(first,last+1)); }
+    throw new Error('La respuesta no contiene JSON válido.');
+  }
+  function copyValue(value,msgId,okMsg){
+    const v = String(value == null ? '' : value);
+    if(!v.trim()){ show(msgId,'warn','No hay contenido para copiar.'); return; }
+    const done = () => show(msgId,'ok',okMsg || 'Contenido copiado.');
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(v).then(done).catch(()=>fallback());
+    else fallback();
+    function fallback(){ const ta=document.createElement('textarea'); ta.value=v; ta.style.position='fixed'; ta.style.left='-9999px'; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); done(); }
+  }
+  window.copyTextFromId = function(id,msgId,okMsg){ const el=$(id); copyValue(el ? el.value || el.textContent || '' : '', msgId, okMsg); };
+  function isBlankActivity(a){
+    if(!a || typeof a !== 'object') return true;
+    const id = text(a.id), name = text(a.name || a.activity || a.actividad), actor = text(a.actor || a.responsible || a.rol);
+    if(id.toUpperCase()==='A1' && !name && !actor) return true;
+    return !name && !actor;
+  }
+  function normalizeActivity(a, idx){
+    const id = text(a.id) || ('ACT-' + String(idx+1).padStart(2,'0'));
+    const name = text(a.name || a.activity || a.actividad) || ('Actividad ' + String(idx+1));
+    return Object.assign({}, a, {
+      id, name,
+      type: text(a.type || a.tipo) || 'operation',
+      actor: text(a.actor || a.responsible || a.rol),
+      document: text(a.document || a.documento),
+      previous: arr(a.previous || a.prev || a.anterior).map(text).filter(Boolean),
+      next: arr(a.next || a.siguiente).map(text).filter(Boolean),
+      is_start: !!(a.is_start || a.isStart),
+      is_end: !!(a.is_end || a.isEnd),
+      note: text(a.note || a.notes || a.nota)
+    });
+  }
+  function cleanActivities(list){
+    const src = arr(list), out = [], seen = new Set();
+    src.forEach((a)=>{
+      if(isBlankActivity(a)) return;
+      const normalized = normalizeActivity(a, out.length);
+      const key = (text(normalized.id) || text(normalized.name)).toLowerCase();
+      if(seen.has(key)) return;
+      seen.add(key); out.push(normalized);
+    });
+    out.forEach((a,i)=>{ a.is_start = i===0; a.is_end = i===out.length-1; });
+    out.forEach((a,i)=>{
+      if(i===0) a.previous = [];
+      else if(!arr(a.previous).length) a.previous = [out[i-1].name];
+      if(i===out.length-1) a.next = [];
+      else if(!arr(a.next).length) a.next = [out[i+1].name];
+    });
+    return out;
+  }
+  window.sgmpCleanAnalysisActivities = cleanActivities;
+  function briefRaw(){ const s=getState(); return (s.briefReview && s.briefReview.raw) || s.brief || s.briefEditable || {}; }
+  function masterRaw(){ const s=getState(); try{return s.master || (typeof window.mergeMaster==='function' ? window.mergeMaster() : {}) || {};}catch(e){return s.master || {};}}
+  function structuralActivities(){
+    const s=getState(), b=briefRaw(), m=masterRaw();
+    const candidates = [
+      s.asis && s.asis.activities,
+      b.as_is && b.as_is.activities,
+      b.activities_preliminary,
+      b.brief && b.brief.as_is && b.brief.as_is.activities,
+      b.brief && b.brief.activities_preliminary,
+      s.brief && s.brief.as_is && s.brief.as_is.activities,
+      s.brief && s.brief.activities_preliminary,
+      m.proceso && m.proceso.actividades,
+      m.activities,
+      m.sipoc_input && m.sipoc_input.activities,
+      typeof window.sgmpGetStructuralSourceActivities === 'function' ? window.sgmpGetStructuralSourceActivities() : []
+    ];
+    let best=[];
+    candidates.forEach(c=>{ const cleaned=cleanActivities(c); if(cleaned.length > best.length) best=cleaned; });
+    return best;
+  }
+  function stageActivitiesFor(stage){
+    const s=getState(), r=s.analysisStages.results || {};
+    const b1 = cleanActivities(r.B1 && r.B1.as_is && r.B1.as_is.activities);
+    const b2 = cleanActivities(r.B2 && r.B2.as_is && r.B2.as_is.activities);
+    if(stage === 'B1') return structuralActivities();
+    return b2.length ? b2 : (b1.length ? b1 : structuralActivities());
+  }
+  window.sgmpGetBestAnalysisSourceActivities = structuralActivities;
+  function stageDefinitions(){
+    return {
+      B1:{label:'B1 · Validación AS IS', stageCode:'lmp_analysis_b1', instruction:`ACTÚA COMO consultor senior en procesos y modelador AS IS.\n\nOBJETIVO B1:\nValidar, limpiar y estructurar el AS IS usando como fuente principal source_activities.\n\nREGLAS:\n- No hagas análisis de mejoras todavía.\n- No hagas AVA todavía.\n- No reduzcas ni agrupes actividades.\n- Conserva todas las actividades estructurales.\n- Corrige continuidad previous/next si hay vacíos.\n- Marca una sola actividad inicial y una sola actividad final.\n- Si source_activity_count > 1, la salida debe conservar esa misma cantidad de actividades.\n\nSALIDA JSON ESTRICTA:\n{\n  "as_is": {"activities": []},\n  "validation": {"valid": true, "activity_count": 0, "warnings": [], "blockingIssues": []}\n}`},
+      B2:{label:'B2 · Análisis AVA', stageCode:'lmp_analysis_b2', instruction:`ACTÚA COMO especialista Lean Six Sigma.\n\nOBJETIVO B2:\nClasificar cada actividad AS IS en VA, NNVA o NVA, con evidencia breve.\n\nREGLAS:\n- Usa solo las actividades recibidas.\n- No elimines ni renombres actividades.\n- No propongas mejoras todavía.\n- Devuelve distribución porcentual y detalle por actividad.\n\nSALIDA JSON ESTRICTA:\n{\n  "as_is": {"activities": []},\n  "ava": {"distribution": {"VA": 0, "NNVA": 0, "NVA": 0}, "activityAnalysis": [], "evidence": []}\n}`},
+      B3:{label:'B3 · Desperdicios y problemas', stageCode:'lmp_analysis_b3', instruction:`ACTÚA COMO experto Lean, análisis de desperdicios y diagnóstico operativo.\n\nOBJETIVO B3:\nDetectar desperdicios, problemas, riesgos, dependencias manuales, controles ocultos y evidencias desde el AS IS, el brief y el análisis AVA.\n\nREGLAS:\n- No diseñes TO BE.\n- No hagas contrato SB.\n- Cada hallazgo debe tener evidencia o actividad relacionada cuando sea posible.\n- Usa listas estructuradas, no párrafos sueltos.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "wastes": [],\n    "problems": [],\n    "risks": [],\n    "evidence_highlights": [],\n    "manual_dependencies": [],\n    "hidden_controls": [],\n    "contradictions_detected": []\n  }\n}`},
+      B4:{label:'B4 · Restricciones y causa probable', stageCode:'lmp_analysis_b4', instruction:`ACTÚA COMO especialista TOC, causa raíz y flujo operativo.\n\nOBJETIVO B4:\nIdentificar restricciones, cuellos de botella, causas probables y puntos de bloqueo del proceso.\n\nREGLAS:\n- Diferencia restricción real de problema general.\n- No propongas aún el plan TO BE completo.\n- Relaciona restricciones con actividades cuando aplique.\n- Declara brevemente la evidencia o supuesto utilizado.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "restrictions": [],\n    "suspected_constraints": [],\n    "bottlenecks": [],\n    "rootCauseHypotheses": [],\n    "controlIssues": [],\n    "dataGaps": []\n  }\n}`},
+      B5:{label:'B5 · Mejoras candidatas para TO BE', stageCode:'lmp_analysis_b5', instruction:`ACTÚA COMO consultor senior de mejora continua.\n\nOBJETIVO B5:\nConvertir hallazgos, problemas, desperdicios y restricciones en mejoras candidatas para que el usuario las apruebe, ajuste o rechace en TO BE.\n\nREGLAS:\n- No generes mejoras genéricas.\n- Cada mejora debe estar conectada a un problema, desperdicio o restricción detectada.\n- Distingue quick win, mejora gradual y proyecto estructural.\n- La salida debe alimentar directamente la pantalla TO BE.\n- Genera mejoras suficientes si existen hallazgos; no devuelvas improvements vacío salvo que no exista evidencia.\n\nSALIDA JSON ESTRICTA:\n{\n  "quickWins": [],\n  "improvements": [\n    {\n      "title": "",\n      "summary": "",\n      "problem": "",\n      "currentState": "",\n      "proposedState": "",\n      "support": "",\n      "impact": "",\n      "justification": "",\n      "type": "quick_win|gradual|strategic",\n      "status": "pending"\n    }\n  ]\n}`},
+      B6:{label:'B6 · Contrato para SIPOC Builder', stageCode:'lmp_analysis_b6', instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder.\n\nOBJETIVO B6:\nConstruir el bloque sipoc_input usando el AS IS validado y los datos SIPOC disponibles.\n\nREGLAS:\n- Devuelve SOLO sipoc_input.\n- No incluyas análisis, métricas ni mejoras.\n- previous y next deben ser arrays.\n- activities debe conservar todas las actividades AS IS.\n\nSALIDA JSON ESTRICTA:\n{\n  "sipoc_input": {\n    "process_code": "",\n    "process_name": "",\n    "purpose": "",\n    "start_event": "",\n    "end_event": "",\n    "notes": "",\n    "suppliers": [],\n    "inputs": [],\n    "outputs": [],\n    "customers": [],\n    "actors": [],\n    "documents": [],\n    "activities": []\n  }\n}`}
+    };
+  }
+  window.sgmpGetAnalysisStageDefinitions = stageDefinitions;
+  function contextPayload(){
+    const s=getState(), m=masterRaw();
+    return Object.assign({}, s.context || {}, (m && m.context) || {});
+  }
+  function masterSipoc(){
+    const s=getState(), b=briefRaw(), m=masterRaw();
+    return m.sipoc || m.sipoc_preliminary || b.sipoc || (b.brief && b.brief.sipoc_preliminary) || {};
+  }
+  function buildStagePayload(stage){
+    const s=getState(), results=s.analysisStages.results || {};
+    const payload = {
+      context: contextPayload(),
+      brief: briefRaw(),
+      current_stage: stage,
+      previous_stage_results: results,
+      source_activity_count: stageActivitiesFor(stage).length,
+      source_activities: stageActivitiesFor(stage),
+      master_sipoc: masterSipoc(),
+      rules: {
+        source_activities_are_mandatory: true,
+        do_not_reduce_activities: true,
+        return_only_valid_json: true,
+        prompt_chain_mode: 'one_screen_one_prompt_one_result'
+      }
+    };
+    if(stage === 'B5') payload.findings_for_improvement = Object.assign({}, (results.B3 && results.B3.findings) || {}, (results.B4 && results.B4.findings) || {});
+    if(stage === 'B6') payload.analysis_summary = assembleAnalysis();
+    return payload;
+  }
+  window.sgmpBuildAnalysisStagePrompt = function(stage){
+    const def=stageDefinitions()[stage] || stageDefinitions().B1;
+    const payload=buildStagePayload(stage);
+    return def.instruction + '\n\nREGLAS GLOBALES SGMP:\n- Responde SOLO JSON válido.\n- No uses markdown.\n- No inventes evidencia.\n- Si falta información, registra warnings o dataGaps.\n- Mantén nombres de campos exactamente como se solicita.\n\nINSUMOS:\n' + safeJsonStringify(payload);
+  };
+  window.generateAnalysisScreenPrompt = function(stage){
+    const s=getState(); s.analysisStages.current=stage;
+    const box=$('analysisPrompt_'+stage); if(!box) return '';
+    const prompt=window.sgmpBuildAnalysisStagePrompt(stage);
+    box.value=prompt;
+    show('analysisMsg_'+stage,'ok','Prompt '+stage+' generado. Revísalo o ejecuta con IA.');
+    return prompt;
+  };
+  async function callAI(stage,prompt){
+    const def=stageDefinitions()[stage] || {};
+    if(typeof window.sgmpCallAI !== 'function') throw new Error('No existe función sgmpCallAI. Usa modo manual: copia el prompt y pega la respuesta.');
+    const raw = await window.sgmpCallAI(def.stageCode || ('lmp_analysis_'+stage.toLowerCase()), prompt);
+    if(typeof window.sgmpAIResultText === 'function') return window.sgmpAIResultText(raw);
+    if(raw && typeof raw === 'object') return raw.text || raw.content || raw.response || JSON.stringify(raw,null,2);
+    return String(raw || '');
+  }
+  window.runAnalysisScreenStage = async function(stage){
+    const msg='analysisMsg_'+stage;
+    try{
+      const promptBox=$('analysisPrompt_'+stage);
+      let prompt=promptBox && text(promptBox.value) ? promptBox.value : window.generateAnalysisScreenPrompt(stage);
+      if(!prompt) return;
+      show(msg,'ok','Ejecutando '+stage+' con IA. La respuesta se pegará automáticamente.');
+      if(typeof window.showLoader==='function') window.showLoader('Ejecutando '+stage+' con IA...', 'Pantalla '+stage+': prompt → API → respuesta automática.');
+      if(typeof window.sgmpV3StartStage==='function') window.sgmpV3StartStage('analisis_'+stage.toLowerCase(),'api');
+      const aiText = await callAI(stage,prompt);
+      const responseBox=$('analysisResponse_'+stage); if(responseBox) responseBox.value=aiText;
+      show(msg,'ok','Respuesta IA '+stage+' recibida. Procesando automáticamente...');
+      window.processAnalysisScreenStage(stage);
+      if(typeof window.sgmpV3StopStage==='function') window.sgmpV3StopStage('analisis_'+stage.toLowerCase(),'completed');
+    }catch(e){
+      console.error('[SGMP '+stage+']',e);
+      show(msg,'err','No se pudo conectar/procesar por API. Usa modo manual: copia el prompt, ejecútalo fuera y pega la respuesta. Detalle: '+(e.message||e));
+      if(typeof window.sgmpV3StopStage==='function') window.sgmpV3StopStage('analisis_'+stage.toLowerCase(),'error',e.message||String(e));
+    }finally{ if(typeof window.hideLoader==='function') window.hideLoader(); }
+  };
+  function mergeAvaIntoActivities(activities, avaItems){
+    const items=arr(avaItems);
+    return activities.map(a=>{
+      const hit=items.find(x=>text(x.id).toLowerCase()===text(a.id).toLowerCase() || text(x.name).toLowerCase()===text(a.name).toLowerCase() || text(x.activity).toLowerCase()===text(a.name).toLowerCase());
+      if(!hit) return a;
+      return Object.assign({}, a, { ava_classification: text(hit.ava_classification || hit.avaClassification || hit.ava || hit.classification).toUpperCase() || a.ava_classification || a.ava, ava_reason: text(hit.reason || hit.justification || hit.evidence || hit.note) });
+    });
+  }
+  function calcAva(activities){
+    const total=activities.length || 0, counts={VA:0,NNVA:0,NVA:0};
+    activities.forEach(a=>{ const c=text(a.ava_classification || a.ava || a.classification).toUpperCase(); if(counts[c] != null) counts[c]++; });
+    return { VA: total?Math.round(counts.VA*100/total):0, NNVA: total?Math.round(counts.NNVA*100/total):0, NVA: total?Math.round(counts.NVA*100/total):0, counts, total };
+  }
+  function normalizeImprovements(list){
+    return arr(list).filter(Boolean).map((x,i)=>{
+      if(typeof x === 'string') x={title:x, summary:x};
+      return Object.assign({ id:'MEJ-'+String(i+1).padStart(2,'0'), title:text(x.title||x.name)||('Mejora '+(i+1)), summary:text(x.summary||x.description), problem:text(x.problem), currentState:text(x.currentState||x.current_state), proposedState:text(x.proposedState||x.proposed_state), support:text(x.support||x.evidence), impact:text(x.impact), justification:text(x.justification), type:text(x.type)||'gradual', status:text(x.status)||'pending' }, x);
+    });
+  }
+  function assembleAnalysis(){
+    const s=getState(), r=s.analysisStages.results || {};
+    let activities=cleanActivities((r.B2 && r.B2.as_is && r.B2.as_is.activities) || (r.B1 && r.B1.as_is && r.B1.as_is.activities) || stageActivitiesFor('B1'));
+    const avaItems = arr(r.B2 && (r.B2.ava && (r.B2.ava.activityAnalysis || r.B2.ava.activities) || r.B2.activityAnalysis));
+    if(avaItems.length) activities=mergeAvaIntoActivities(activities,avaItems);
+    const b3find=(r.B3 && r.B3.findings) || {}, b4find=(r.B4 && r.B4.findings) || {};
+    const findings=Object.assign({}, b3find, b4find, {
+      wastes: arr(b3find.wastes), problems: arr(b3find.problems), risks: arr(b3find.risks),
+      evidence_highlights: arr(b3find.evidence_highlights), manual_dependencies: arr(b3find.manual_dependencies),
+      restrictions: arr(b4find.restrictions), suspected_constraints: arr(b4find.suspected_constraints), bottlenecks: arr(b4find.bottlenecks)
+    });
+    const quickWins=arr((r.B5 && (r.B5.quickWins || r.B5.quick_wins)) || []);
+    const improvements=normalizeImprovements((r.B5 && r.B5.improvements) || []);
+    const avaDist=(r.B2 && r.B2.ava && r.B2.ava.distribution) || calcAva(activities);
+    return { context: contextPayload(), as_is:{activities}, ava:{distribution:avaDist}, findings, quickWins, improvements, sb_contract: (r.B6 && (r.B6.sipoc_input ? {sipoc_input:r.B6.sipoc_input} : r.B6.sb_contract)) || {} };
+  }
+  window.sgmpAssembleStagedAnalysisPayload = assembleAnalysis;
+  window.processAnalysisScreenStage = function(stage){
+    const msg='analysisMsg_'+stage, responseBox=$('analysisResponse_'+stage);
+    const raw=responseBox ? responseBox.value : '';
+    try{
+      const parsed=robustParseJSON(raw);
+      saveParsedStage(stage, parsed);
+      show(msg,'ok','Respuesta '+stage+' procesada y guardada.');
+    }catch(e){ console.error('[process '+stage+']',e); show(msg,'err','No fue posible procesar '+stage+'. '+(e.message||e)); }
+  };
+  function saveParsedStage(stage, parsed){
+    const s=getState(); s.analysisStages.current=stage; s.analysisStages.results[stage]=parsed;
+    const resultBox=$('analysisResult_'+stage); if(resultBox) resultBox.value=safeJsonStringify(parsed);
+    if(stage==='B1'){
+      const acts=cleanActivities(parsed.as_is && parsed.as_is.activities || parsed.activities);
+      if(acts.length){ s.asis=s.asis||{}; s.asis.activities=acts; if(typeof window.renderAsIsActivities==='function') window.renderAsIsActivities(); }
+    }
+    const assembled=assembleAnalysis();
+    s.analysis = (typeof window.sgmpEnrichAnalysisModel==='function') ? window.sgmpEnrichAnalysisModel(assembled) : assembled;
+    if(stage==='B5'){
+      s.tobe=s.tobe||{}; s.tobe.improvements=normalizeImprovements(parsed.improvements || (s.analysis && s.analysis.improvements));
+      if(typeof window.renderImprovements==='function') window.renderImprovements();
+    }
+    if(stage==='B6'){
+      const sipoc=parsed.sipoc_input || (parsed.sb_contract && parsed.sb_contract.sipoc_input);
+      if(sipoc){ s.sb_contract={sipoc_input:sipoc}; s.sbContractBuilder=s.sbContractBuilder||{}; s.sbContractBuilder.raw={sipoc_input:sipoc}; s.sbContractBuilder.approved=true; }
+    }
+    renderAccum(stage);
+    if(typeof window.renderAnalysisFromState==='function') window.renderAnalysisFromState();
+    if(typeof window.updateTopStatus==='function') window.updateTopStatus();
+  }
+  window.applyAnalysisResultEdit = function(stage){
+    const box=$('analysisResult_'+stage), msg='analysisMsg_'+stage;
+    if(!box || !text(box.value)){ show(msg,'warn','No hay resultado editado para aplicar.'); return; }
+    try{ const parsed=robustParseJSON(box.value); saveParsedStage(stage, parsed); show(msg,'ok','Resultado editado '+stage+' aplicado al estado del módulo.'); }
+    catch(e){ show(msg,'err','El resultado editado no es JSON válido. '+(e.message||e)); }
+  };
+  function renderAccum(stage){
+    const assembled=assembleAnalysis(), acts=arr(assembled.as_is && assembled.as_is.activities), f=assembled.findings||{}, imps=arr(assembled.improvements), qws=arr(assembled.quickWins);
+    const ava=assembled.ava && assembled.ava.distribution || calcAva(acts);
+    const restrictions=arr(f.restrictions).concat(arr(f.suspected_constraints), arr(f.bottlenecks));
+    const map={stageActsKpi_:acts.length, stageImpKpi_:imps.length, stageQwKpi_:qws.length, stageResKpi_:restrictions.length, stageNvaKpi_:(ava.NVA||0)+'%'};
+    Object.keys(map).forEach(prefix=>{ const node=$(prefix+stage); if(node) node.textContent=map[prefix]; });
+    const prev=$('analysisAccumPreview_'+stage); if(prev) prev.textContent=safeJsonStringify(assembled);
+  }
+  window.renderAnalysisScreenAccumulated = renderAccum;
+  window.downloadAnalysisStageJson = function(stage){
+    const txt = ($('analysisResult_'+stage) && $('analysisResult_'+stage).value) || ($('analysisResponse_'+stage) && $('analysisResponse_'+stage).value) || '';
+    if(!text(txt)){ show('analysisMsg_'+stage,'warn','No hay resultado para descargar.'); return; }
+    const blob=new Blob([txt],{type:'application/json;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='LMP_'+stage+'_resultado.json'; a.click(); URL.revokeObjectURL(a.href);
+  };
+  function installStageButtons(){
+    STAGES.forEach(stage=>{
+      const response=$('analysisResponse_'+stage), result=$('analysisResult_'+stage);
+      if(response && !document.querySelector('[data-copy-response="'+stage+'"]')){
+        const target=response.nextElementSibling && response.nextElementSibling.classList.contains('actions') ? response.nextElementSibling.querySelector('.actions-left') : null;
+        if(target){
+          const btn=document.createElement('button'); btn.type='button'; btn.className='btn-ghost'; btn.dataset.copyResponse=stage; btn.textContent='Copiar respuesta'; btn.onclick=function(){ window.copyTextFromId('analysisResponse_'+stage,'analysisMsg_'+stage,'Respuesta '+stage+' copiada.'); }; target.appendChild(btn);
+        }
+      }
+      if(result && !document.querySelector('[data-result-actions="'+stage+'"]')){
+        const wrap=document.createElement('div'); wrap.className='actions'; wrap.dataset.resultActions=stage;
+        wrap.innerHTML='<div class="actions-left"><button class="btn-warn" type="button" data-apply-result="'+stage+'">Aplicar resultado editado</button><button class="btn-ghost" type="button" data-copy-result="'+stage+'">Copiar resultado</button></div><div class="actions-right"><button class="btn-ok" type="button" data-next-from-result="'+stage+'">Guardar y continuar</button></div>';
+        result.parentNode.appendChild(wrap);
+        wrap.querySelector('[data-apply-result]').onclick=function(){ window.applyAnalysisResultEdit(stage); };
+        wrap.querySelector('[data-copy-result]').onclick=function(){ window.copyTextFromId('analysisResult_'+stage,'analysisMsg_'+stage,'Resultado '+stage+' copiado.'); };
+        wrap.querySelector('[data-next-from-result]').onclick=function(){ window.applyAnalysisResultEdit(stage); window.goToNext(SECTION_BY_STAGE[stage]); };
+      }
+    });
+    STAGES.forEach(stage=>renderAccum(stage));
+  }
+  function hookNavigation(){
+    const originalShow=window.showSection;
+    window.showSection=function(id){
+      if(id==='analisis') id='analisis_b1';
+      if(typeof originalShow === 'function' && originalShow !== window.showSection) originalShow(id);
+      else { document.querySelectorAll('.section').forEach(s=>s.classList.toggle('active',s.id===id)); document.querySelectorAll('.step-btn').forEach(b=>b.classList.toggle('active',b.dataset.target===id)); }
+      const stage=STAGE_BY_SECTION[id];
+      if(stage){ getState().analysisStages.current=stage; if(!$('analysisPrompt_'+stage)?.value) window.generateAnalysisScreenPrompt(stage); renderAccum(stage); }
+    };
+    window.goToNext=function(current){
+      if(typeof window.syncVisibleStage==='function') window.syncVisibleStage();
+      if(current==='preparacion'){ if(getState().metadata && getState().metadata.route==='doc') return window.showSection('documentacion_existente'); return window.showSection('carga'); }
+      if(current==='documentacion_existente') return window.showSection('carga');
+      if(current==='carga') return window.showSection('asis');
+      if(current==='asis') return window.showSection('analisis_b1');
+      if(STAGE_BY_SECTION[current]){ const idx=SCREEN_ORDER.indexOf(current); if(idx>=0 && SCREEN_ORDER[idx+1]) return window.showSection(SCREEN_ORDER[idx+1]); }
+      if(current==='analisis_b6') return window.showSection('decision');
+      if(current==='decision'){ if(typeof window.continueFromDecision==='function') return window.continueFromDecision(); return window.showSection('tobe'); }
+      if(current==='tobe') return window.showSection('resultados');
+      const idx=SCREEN_ORDER.indexOf(current); if(idx>=0 && SCREEN_ORDER[idx+1]) window.showSection(SCREEN_ORDER[idx+1]);
+    };
+    window.goToPrev=function(current){
+      if(typeof window.syncVisibleStage==='function') window.syncVisibleStage();
+      if(current==='documentacion_existente') return window.showSection('preparacion');
+      if(current==='carga' && getState().metadata && getState().metadata.route==='doc') return window.showSection('documentacion_existente');
+      if(current==='carga') return window.showSection('preparacion');
+      if(current==='analisis_b1') return window.showSection('asis');
+      const idx=SCREEN_ORDER.indexOf(current); if(idx>0) window.showSection(SCREEN_ORDER[idx-1]);
+    };
+    window.labelStage=function(id){ return {inicio:'Inicio',documentacion_existente:'Documentación existente',preparacion:'Preparación y contexto',carga:'Carga y consolidación',asis:'AS IS',analisis:'B1 · Validación AS IS',analisis_b1:'B1 · Validación AS IS',analisis_b2:'B2 · AVA',analisis_b3:'B3 · Desperdicios',analisis_b4:'B4 · Restricciones',analisis_b5:'B5 · Mejoras',analisis_b6:'B6 · Builder SB',decision:'Decisión',tobe:'TO BE',resultados:'Resultados'}[id] || id; };
+  }
+  function install(){
+    installStageButtons();
+    hookNavigation();
+    STAGES.forEach(stage=>{ if(!$('analysisPrompt_'+stage)?.value && document.getElementById(SECTION_BY_STAGE[stage])) { try{ window.generateAnalysisScreenPrompt(stage); }catch(e){} } });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', install); else install();
+})();
+</script>
+
 </body>
 </html>`;
       }
@@ -3776,7 +4108,339 @@ function printDoc(id, title){
           th{background:#eef4ff}
         </style>
       </head>
-      <body>${html}</body>
+      <body>${html}
+
+<!-- SGMP LMP · Análisis por pantallas tipo Prompt A · Override final -->
+<script id="sgmp-lmp-analysis-prompt-a-style-final">
+(function(){
+  'use strict';
+  const STAGES = ['B1','B2','B3','B4','B5','B6'];
+  const SECTION_BY_STAGE = {B1:'analisis_b1',B2:'analisis_b2',B3:'analisis_b3',B4:'analisis_b4',B5:'analisis_b5',B6:'analisis_b6'};
+  const STAGE_BY_SECTION = {analisis_b1:'B1',analisis_b2:'B2',analisis_b3:'B3',analisis_b4:'B4',analisis_b5:'B5',analisis_b6:'B6'};
+  const SCREEN_ORDER = ['inicio','preparacion','documentacion_existente','carga','asis','analisis_b1','analisis_b2','analisis_b3','analisis_b4','analisis_b5','analisis_b6','decision','tobe','resultados'];
+  function $(id){ return document.getElementById(id); }
+  function arr(v){ return Array.isArray(v) ? v : (v == null || v === '' ? [] : [v]); }
+  function text(v){ return String(v == null ? '' : v).trim(); }
+  function getState(){ window.state = window.state || {}; window.state.analysisStages = window.state.analysisStages || {current:'B1', results:{}}; window.state.analysisStages.results = window.state.analysisStages.results || {}; return window.state; }
+  function show(id,type,msg){ if(typeof window.showMsg === 'function') window.showMsg(id,type,msg); else { const el=$(id); if(el){ el.className='msg show '+(type||'ok'); el.textContent=msg; } } }
+  function safeJsonStringify(obj){ try{return JSON.stringify(obj,null,2);}catch(e){return String(obj||'');} }
+  function robustParseJSON(raw){
+    if(!raw || !text(raw)) throw new Error('No hay contenido JSON para procesar.');
+    if(typeof window.extractJsonFromText === 'function'){
+      try { return window.extractJsonFromText(raw); } catch(e) {}
+    }
+    let s = text(raw).replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
+    try { return JSON.parse(s); } catch(e) {}
+    const first = s.indexOf('{'), last = s.lastIndexOf('}');
+    if(first >= 0 && last > first){ return JSON.parse(s.slice(first,last+1)); }
+    throw new Error('La respuesta no contiene JSON válido.');
+  }
+  function copyValue(value,msgId,okMsg){
+    const v = String(value == null ? '' : value);
+    if(!v.trim()){ show(msgId,'warn','No hay contenido para copiar.'); return; }
+    const done = () => show(msgId,'ok',okMsg || 'Contenido copiado.');
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(v).then(done).catch(()=>fallback());
+    else fallback();
+    function fallback(){ const ta=document.createElement('textarea'); ta.value=v; ta.style.position='fixed'; ta.style.left='-9999px'; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); done(); }
+  }
+  window.copyTextFromId = function(id,msgId,okMsg){ const el=$(id); copyValue(el ? el.value || el.textContent || '' : '', msgId, okMsg); };
+  function isBlankActivity(a){
+    if(!a || typeof a !== 'object') return true;
+    const id = text(a.id), name = text(a.name || a.activity || a.actividad), actor = text(a.actor || a.responsible || a.rol);
+    if(id.toUpperCase()==='A1' && !name && !actor) return true;
+    return !name && !actor;
+  }
+  function normalizeActivity(a, idx){
+    const id = text(a.id) || ('ACT-' + String(idx+1).padStart(2,'0'));
+    const name = text(a.name || a.activity || a.actividad) || ('Actividad ' + String(idx+1));
+    return Object.assign({}, a, {
+      id, name,
+      type: text(a.type || a.tipo) || 'operation',
+      actor: text(a.actor || a.responsible || a.rol),
+      document: text(a.document || a.documento),
+      previous: arr(a.previous || a.prev || a.anterior).map(text).filter(Boolean),
+      next: arr(a.next || a.siguiente).map(text).filter(Boolean),
+      is_start: !!(a.is_start || a.isStart),
+      is_end: !!(a.is_end || a.isEnd),
+      note: text(a.note || a.notes || a.nota)
+    });
+  }
+  function cleanActivities(list){
+    const src = arr(list), out = [], seen = new Set();
+    src.forEach((a)=>{
+      if(isBlankActivity(a)) return;
+      const normalized = normalizeActivity(a, out.length);
+      const key = (text(normalized.id) || text(normalized.name)).toLowerCase();
+      if(seen.has(key)) return;
+      seen.add(key); out.push(normalized);
+    });
+    out.forEach((a,i)=>{ a.is_start = i===0; a.is_end = i===out.length-1; });
+    out.forEach((a,i)=>{
+      if(i===0) a.previous = [];
+      else if(!arr(a.previous).length) a.previous = [out[i-1].name];
+      if(i===out.length-1) a.next = [];
+      else if(!arr(a.next).length) a.next = [out[i+1].name];
+    });
+    return out;
+  }
+  window.sgmpCleanAnalysisActivities = cleanActivities;
+  function briefRaw(){ const s=getState(); return (s.briefReview && s.briefReview.raw) || s.brief || s.briefEditable || {}; }
+  function masterRaw(){ const s=getState(); try{return s.master || (typeof window.mergeMaster==='function' ? window.mergeMaster() : {}) || {};}catch(e){return s.master || {};}}
+  function structuralActivities(){
+    const s=getState(), b=briefRaw(), m=masterRaw();
+    const candidates = [
+      s.asis && s.asis.activities,
+      b.as_is && b.as_is.activities,
+      b.activities_preliminary,
+      b.brief && b.brief.as_is && b.brief.as_is.activities,
+      b.brief && b.brief.activities_preliminary,
+      s.brief && s.brief.as_is && s.brief.as_is.activities,
+      s.brief && s.brief.activities_preliminary,
+      m.proceso && m.proceso.actividades,
+      m.activities,
+      m.sipoc_input && m.sipoc_input.activities,
+      typeof window.sgmpGetStructuralSourceActivities === 'function' ? window.sgmpGetStructuralSourceActivities() : []
+    ];
+    let best=[];
+    candidates.forEach(c=>{ const cleaned=cleanActivities(c); if(cleaned.length > best.length) best=cleaned; });
+    return best;
+  }
+  function stageActivitiesFor(stage){
+    const s=getState(), r=s.analysisStages.results || {};
+    const b1 = cleanActivities(r.B1 && r.B1.as_is && r.B1.as_is.activities);
+    const b2 = cleanActivities(r.B2 && r.B2.as_is && r.B2.as_is.activities);
+    if(stage === 'B1') return structuralActivities();
+    return b2.length ? b2 : (b1.length ? b1 : structuralActivities());
+  }
+  window.sgmpGetBestAnalysisSourceActivities = structuralActivities;
+  function stageDefinitions(){
+    return {
+      B1:{label:'B1 · Validación AS IS', stageCode:'lmp_analysis_b1', instruction:`ACTÚA COMO consultor senior en procesos y modelador AS IS.\n\nOBJETIVO B1:\nValidar, limpiar y estructurar el AS IS usando como fuente principal source_activities.\n\nREGLAS:\n- No hagas análisis de mejoras todavía.\n- No hagas AVA todavía.\n- No reduzcas ni agrupes actividades.\n- Conserva todas las actividades estructurales.\n- Corrige continuidad previous/next si hay vacíos.\n- Marca una sola actividad inicial y una sola actividad final.\n- Si source_activity_count > 1, la salida debe conservar esa misma cantidad de actividades.\n\nSALIDA JSON ESTRICTA:\n{\n  "as_is": {"activities": []},\n  "validation": {"valid": true, "activity_count": 0, "warnings": [], "blockingIssues": []}\n}`},
+      B2:{label:'B2 · Análisis AVA', stageCode:'lmp_analysis_b2', instruction:`ACTÚA COMO especialista Lean Six Sigma.\n\nOBJETIVO B2:\nClasificar cada actividad AS IS en VA, NNVA o NVA, con evidencia breve.\n\nREGLAS:\n- Usa solo las actividades recibidas.\n- No elimines ni renombres actividades.\n- No propongas mejoras todavía.\n- Devuelve distribución porcentual y detalle por actividad.\n\nSALIDA JSON ESTRICTA:\n{\n  "as_is": {"activities": []},\n  "ava": {"distribution": {"VA": 0, "NNVA": 0, "NVA": 0}, "activityAnalysis": [], "evidence": []}\n}`},
+      B3:{label:'B3 · Desperdicios y problemas', stageCode:'lmp_analysis_b3', instruction:`ACTÚA COMO experto Lean, análisis de desperdicios y diagnóstico operativo.\n\nOBJETIVO B3:\nDetectar desperdicios, problemas, riesgos, dependencias manuales, controles ocultos y evidencias desde el AS IS, el brief y el análisis AVA.\n\nREGLAS:\n- No diseñes TO BE.\n- No hagas contrato SB.\n- Cada hallazgo debe tener evidencia o actividad relacionada cuando sea posible.\n- Usa listas estructuradas, no párrafos sueltos.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "wastes": [],\n    "problems": [],\n    "risks": [],\n    "evidence_highlights": [],\n    "manual_dependencies": [],\n    "hidden_controls": [],\n    "contradictions_detected": []\n  }\n}`},
+      B4:{label:'B4 · Restricciones y causa probable', stageCode:'lmp_analysis_b4', instruction:`ACTÚA COMO especialista TOC, causa raíz y flujo operativo.\n\nOBJETIVO B4:\nIdentificar restricciones, cuellos de botella, causas probables y puntos de bloqueo del proceso.\n\nREGLAS:\n- Diferencia restricción real de problema general.\n- No propongas aún el plan TO BE completo.\n- Relaciona restricciones con actividades cuando aplique.\n- Declara brevemente la evidencia o supuesto utilizado.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "restrictions": [],\n    "suspected_constraints": [],\n    "bottlenecks": [],\n    "rootCauseHypotheses": [],\n    "controlIssues": [],\n    "dataGaps": []\n  }\n}`},
+      B5:{label:'B5 · Mejoras candidatas para TO BE', stageCode:'lmp_analysis_b5', instruction:`ACTÚA COMO consultor senior de mejora continua.\n\nOBJETIVO B5:\nConvertir hallazgos, problemas, desperdicios y restricciones en mejoras candidatas para que el usuario las apruebe, ajuste o rechace en TO BE.\n\nREGLAS:\n- No generes mejoras genéricas.\n- Cada mejora debe estar conectada a un problema, desperdicio o restricción detectada.\n- Distingue quick win, mejora gradual y proyecto estructural.\n- La salida debe alimentar directamente la pantalla TO BE.\n- Genera mejoras suficientes si existen hallazgos; no devuelvas improvements vacío salvo que no exista evidencia.\n\nSALIDA JSON ESTRICTA:\n{\n  "quickWins": [],\n  "improvements": [\n    {\n      "title": "",\n      "summary": "",\n      "problem": "",\n      "currentState": "",\n      "proposedState": "",\n      "support": "",\n      "impact": "",\n      "justification": "",\n      "type": "quick_win|gradual|strategic",\n      "status": "pending"\n    }\n  ]\n}`},
+      B6:{label:'B6 · Contrato para SIPOC Builder', stageCode:'lmp_analysis_b6', instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder.\n\nOBJETIVO B6:\nConstruir el bloque sipoc_input usando el AS IS validado y los datos SIPOC disponibles.\n\nREGLAS:\n- Devuelve SOLO sipoc_input.\n- No incluyas análisis, métricas ni mejoras.\n- previous y next deben ser arrays.\n- activities debe conservar todas las actividades AS IS.\n\nSALIDA JSON ESTRICTA:\n{\n  "sipoc_input": {\n    "process_code": "",\n    "process_name": "",\n    "purpose": "",\n    "start_event": "",\n    "end_event": "",\n    "notes": "",\n    "suppliers": [],\n    "inputs": [],\n    "outputs": [],\n    "customers": [],\n    "actors": [],\n    "documents": [],\n    "activities": []\n  }\n}`}
+    };
+  }
+  window.sgmpGetAnalysisStageDefinitions = stageDefinitions;
+  function contextPayload(){
+    const s=getState(), m=masterRaw();
+    return Object.assign({}, s.context || {}, (m && m.context) || {});
+  }
+  function masterSipoc(){
+    const s=getState(), b=briefRaw(), m=masterRaw();
+    return m.sipoc || m.sipoc_preliminary || b.sipoc || (b.brief && b.brief.sipoc_preliminary) || {};
+  }
+  function buildStagePayload(stage){
+    const s=getState(), results=s.analysisStages.results || {};
+    const payload = {
+      context: contextPayload(),
+      brief: briefRaw(),
+      current_stage: stage,
+      previous_stage_results: results,
+      source_activity_count: stageActivitiesFor(stage).length,
+      source_activities: stageActivitiesFor(stage),
+      master_sipoc: masterSipoc(),
+      rules: {
+        source_activities_are_mandatory: true,
+        do_not_reduce_activities: true,
+        return_only_valid_json: true,
+        prompt_chain_mode: 'one_screen_one_prompt_one_result'
+      }
+    };
+    if(stage === 'B5') payload.findings_for_improvement = Object.assign({}, (results.B3 && results.B3.findings) || {}, (results.B4 && results.B4.findings) || {});
+    if(stage === 'B6') payload.analysis_summary = assembleAnalysis();
+    return payload;
+  }
+  window.sgmpBuildAnalysisStagePrompt = function(stage){
+    const def=stageDefinitions()[stage] || stageDefinitions().B1;
+    const payload=buildStagePayload(stage);
+    return def.instruction + '\n\nREGLAS GLOBALES SGMP:\n- Responde SOLO JSON válido.\n- No uses markdown.\n- No inventes evidencia.\n- Si falta información, registra warnings o dataGaps.\n- Mantén nombres de campos exactamente como se solicita.\n\nINSUMOS:\n' + safeJsonStringify(payload);
+  };
+  window.generateAnalysisScreenPrompt = function(stage){
+    const s=getState(); s.analysisStages.current=stage;
+    const box=$('analysisPrompt_'+stage); if(!box) return '';
+    const prompt=window.sgmpBuildAnalysisStagePrompt(stage);
+    box.value=prompt;
+    show('analysisMsg_'+stage,'ok','Prompt '+stage+' generado. Revísalo o ejecuta con IA.');
+    return prompt;
+  };
+  async function callAI(stage,prompt){
+    const def=stageDefinitions()[stage] || {};
+    if(typeof window.sgmpCallAI !== 'function') throw new Error('No existe función sgmpCallAI. Usa modo manual: copia el prompt y pega la respuesta.');
+    const raw = await window.sgmpCallAI(def.stageCode || ('lmp_analysis_'+stage.toLowerCase()), prompt);
+    if(typeof window.sgmpAIResultText === 'function') return window.sgmpAIResultText(raw);
+    if(raw && typeof raw === 'object') return raw.text || raw.content || raw.response || JSON.stringify(raw,null,2);
+    return String(raw || '');
+  }
+  window.runAnalysisScreenStage = async function(stage){
+    const msg='analysisMsg_'+stage;
+    try{
+      const promptBox=$('analysisPrompt_'+stage);
+      let prompt=promptBox && text(promptBox.value) ? promptBox.value : window.generateAnalysisScreenPrompt(stage);
+      if(!prompt) return;
+      show(msg,'ok','Ejecutando '+stage+' con IA. La respuesta se pegará automáticamente.');
+      if(typeof window.showLoader==='function') window.showLoader('Ejecutando '+stage+' con IA...', 'Pantalla '+stage+': prompt → API → respuesta automática.');
+      if(typeof window.sgmpV3StartStage==='function') window.sgmpV3StartStage('analisis_'+stage.toLowerCase(),'api');
+      const aiText = await callAI(stage,prompt);
+      const responseBox=$('analysisResponse_'+stage); if(responseBox) responseBox.value=aiText;
+      show(msg,'ok','Respuesta IA '+stage+' recibida. Procesando automáticamente...');
+      window.processAnalysisScreenStage(stage);
+      if(typeof window.sgmpV3StopStage==='function') window.sgmpV3StopStage('analisis_'+stage.toLowerCase(),'completed');
+    }catch(e){
+      console.error('[SGMP '+stage+']',e);
+      show(msg,'err','No se pudo conectar/procesar por API. Usa modo manual: copia el prompt, ejecútalo fuera y pega la respuesta. Detalle: '+(e.message||e));
+      if(typeof window.sgmpV3StopStage==='function') window.sgmpV3StopStage('analisis_'+stage.toLowerCase(),'error',e.message||String(e));
+    }finally{ if(typeof window.hideLoader==='function') window.hideLoader(); }
+  };
+  function mergeAvaIntoActivities(activities, avaItems){
+    const items=arr(avaItems);
+    return activities.map(a=>{
+      const hit=items.find(x=>text(x.id).toLowerCase()===text(a.id).toLowerCase() || text(x.name).toLowerCase()===text(a.name).toLowerCase() || text(x.activity).toLowerCase()===text(a.name).toLowerCase());
+      if(!hit) return a;
+      return Object.assign({}, a, { ava_classification: text(hit.ava_classification || hit.avaClassification || hit.ava || hit.classification).toUpperCase() || a.ava_classification || a.ava, ava_reason: text(hit.reason || hit.justification || hit.evidence || hit.note) });
+    });
+  }
+  function calcAva(activities){
+    const total=activities.length || 0, counts={VA:0,NNVA:0,NVA:0};
+    activities.forEach(a=>{ const c=text(a.ava_classification || a.ava || a.classification).toUpperCase(); if(counts[c] != null) counts[c]++; });
+    return { VA: total?Math.round(counts.VA*100/total):0, NNVA: total?Math.round(counts.NNVA*100/total):0, NVA: total?Math.round(counts.NVA*100/total):0, counts, total };
+  }
+  function normalizeImprovements(list){
+    return arr(list).filter(Boolean).map((x,i)=>{
+      if(typeof x === 'string') x={title:x, summary:x};
+      return Object.assign({ id:'MEJ-'+String(i+1).padStart(2,'0'), title:text(x.title||x.name)||('Mejora '+(i+1)), summary:text(x.summary||x.description), problem:text(x.problem), currentState:text(x.currentState||x.current_state), proposedState:text(x.proposedState||x.proposed_state), support:text(x.support||x.evidence), impact:text(x.impact), justification:text(x.justification), type:text(x.type)||'gradual', status:text(x.status)||'pending' }, x);
+    });
+  }
+  function assembleAnalysis(){
+    const s=getState(), r=s.analysisStages.results || {};
+    let activities=cleanActivities((r.B2 && r.B2.as_is && r.B2.as_is.activities) || (r.B1 && r.B1.as_is && r.B1.as_is.activities) || stageActivitiesFor('B1'));
+    const avaItems = arr(r.B2 && (r.B2.ava && (r.B2.ava.activityAnalysis || r.B2.ava.activities) || r.B2.activityAnalysis));
+    if(avaItems.length) activities=mergeAvaIntoActivities(activities,avaItems);
+    const b3find=(r.B3 && r.B3.findings) || {}, b4find=(r.B4 && r.B4.findings) || {};
+    const findings=Object.assign({}, b3find, b4find, {
+      wastes: arr(b3find.wastes), problems: arr(b3find.problems), risks: arr(b3find.risks),
+      evidence_highlights: arr(b3find.evidence_highlights), manual_dependencies: arr(b3find.manual_dependencies),
+      restrictions: arr(b4find.restrictions), suspected_constraints: arr(b4find.suspected_constraints), bottlenecks: arr(b4find.bottlenecks)
+    });
+    const quickWins=arr((r.B5 && (r.B5.quickWins || r.B5.quick_wins)) || []);
+    const improvements=normalizeImprovements((r.B5 && r.B5.improvements) || []);
+    const avaDist=(r.B2 && r.B2.ava && r.B2.ava.distribution) || calcAva(activities);
+    return { context: contextPayload(), as_is:{activities}, ava:{distribution:avaDist}, findings, quickWins, improvements, sb_contract: (r.B6 && (r.B6.sipoc_input ? {sipoc_input:r.B6.sipoc_input} : r.B6.sb_contract)) || {} };
+  }
+  window.sgmpAssembleStagedAnalysisPayload = assembleAnalysis;
+  window.processAnalysisScreenStage = function(stage){
+    const msg='analysisMsg_'+stage, responseBox=$('analysisResponse_'+stage);
+    const raw=responseBox ? responseBox.value : '';
+    try{
+      const parsed=robustParseJSON(raw);
+      saveParsedStage(stage, parsed);
+      show(msg,'ok','Respuesta '+stage+' procesada y guardada.');
+    }catch(e){ console.error('[process '+stage+']',e); show(msg,'err','No fue posible procesar '+stage+'. '+(e.message||e)); }
+  };
+  function saveParsedStage(stage, parsed){
+    const s=getState(); s.analysisStages.current=stage; s.analysisStages.results[stage]=parsed;
+    const resultBox=$('analysisResult_'+stage); if(resultBox) resultBox.value=safeJsonStringify(parsed);
+    if(stage==='B1'){
+      const acts=cleanActivities(parsed.as_is && parsed.as_is.activities || parsed.activities);
+      if(acts.length){ s.asis=s.asis||{}; s.asis.activities=acts; if(typeof window.renderAsIsActivities==='function') window.renderAsIsActivities(); }
+    }
+    const assembled=assembleAnalysis();
+    s.analysis = (typeof window.sgmpEnrichAnalysisModel==='function') ? window.sgmpEnrichAnalysisModel(assembled) : assembled;
+    if(stage==='B5'){
+      s.tobe=s.tobe||{}; s.tobe.improvements=normalizeImprovements(parsed.improvements || (s.analysis && s.analysis.improvements));
+      if(typeof window.renderImprovements==='function') window.renderImprovements();
+    }
+    if(stage==='B6'){
+      const sipoc=parsed.sipoc_input || (parsed.sb_contract && parsed.sb_contract.sipoc_input);
+      if(sipoc){ s.sb_contract={sipoc_input:sipoc}; s.sbContractBuilder=s.sbContractBuilder||{}; s.sbContractBuilder.raw={sipoc_input:sipoc}; s.sbContractBuilder.approved=true; }
+    }
+    renderAccum(stage);
+    if(typeof window.renderAnalysisFromState==='function') window.renderAnalysisFromState();
+    if(typeof window.updateTopStatus==='function') window.updateTopStatus();
+  }
+  window.applyAnalysisResultEdit = function(stage){
+    const box=$('analysisResult_'+stage), msg='analysisMsg_'+stage;
+    if(!box || !text(box.value)){ show(msg,'warn','No hay resultado editado para aplicar.'); return; }
+    try{ const parsed=robustParseJSON(box.value); saveParsedStage(stage, parsed); show(msg,'ok','Resultado editado '+stage+' aplicado al estado del módulo.'); }
+    catch(e){ show(msg,'err','El resultado editado no es JSON válido. '+(e.message||e)); }
+  };
+  function renderAccum(stage){
+    const assembled=assembleAnalysis(), acts=arr(assembled.as_is && assembled.as_is.activities), f=assembled.findings||{}, imps=arr(assembled.improvements), qws=arr(assembled.quickWins);
+    const ava=assembled.ava && assembled.ava.distribution || calcAva(acts);
+    const restrictions=arr(f.restrictions).concat(arr(f.suspected_constraints), arr(f.bottlenecks));
+    const map={stageActsKpi_:acts.length, stageImpKpi_:imps.length, stageQwKpi_:qws.length, stageResKpi_:restrictions.length, stageNvaKpi_:(ava.NVA||0)+'%'};
+    Object.keys(map).forEach(prefix=>{ const node=$(prefix+stage); if(node) node.textContent=map[prefix]; });
+    const prev=$('analysisAccumPreview_'+stage); if(prev) prev.textContent=safeJsonStringify(assembled);
+  }
+  window.renderAnalysisScreenAccumulated = renderAccum;
+  window.downloadAnalysisStageJson = function(stage){
+    const txt = ($('analysisResult_'+stage) && $('analysisResult_'+stage).value) || ($('analysisResponse_'+stage) && $('analysisResponse_'+stage).value) || '';
+    if(!text(txt)){ show('analysisMsg_'+stage,'warn','No hay resultado para descargar.'); return; }
+    const blob=new Blob([txt],{type:'application/json;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='LMP_'+stage+'_resultado.json'; a.click(); URL.revokeObjectURL(a.href);
+  };
+  function installStageButtons(){
+    STAGES.forEach(stage=>{
+      const response=$('analysisResponse_'+stage), result=$('analysisResult_'+stage);
+      if(response && !document.querySelector('[data-copy-response="'+stage+'"]')){
+        const target=response.nextElementSibling && response.nextElementSibling.classList.contains('actions') ? response.nextElementSibling.querySelector('.actions-left') : null;
+        if(target){
+          const btn=document.createElement('button'); btn.type='button'; btn.className='btn-ghost'; btn.dataset.copyResponse=stage; btn.textContent='Copiar respuesta'; btn.onclick=function(){ window.copyTextFromId('analysisResponse_'+stage,'analysisMsg_'+stage,'Respuesta '+stage+' copiada.'); }; target.appendChild(btn);
+        }
+      }
+      if(result && !document.querySelector('[data-result-actions="'+stage+'"]')){
+        const wrap=document.createElement('div'); wrap.className='actions'; wrap.dataset.resultActions=stage;
+        wrap.innerHTML='<div class="actions-left"><button class="btn-warn" type="button" data-apply-result="'+stage+'">Aplicar resultado editado</button><button class="btn-ghost" type="button" data-copy-result="'+stage+'">Copiar resultado</button></div><div class="actions-right"><button class="btn-ok" type="button" data-next-from-result="'+stage+'">Guardar y continuar</button></div>';
+        result.parentNode.appendChild(wrap);
+        wrap.querySelector('[data-apply-result]').onclick=function(){ window.applyAnalysisResultEdit(stage); };
+        wrap.querySelector('[data-copy-result]').onclick=function(){ window.copyTextFromId('analysisResult_'+stage,'analysisMsg_'+stage,'Resultado '+stage+' copiado.'); };
+        wrap.querySelector('[data-next-from-result]').onclick=function(){ window.applyAnalysisResultEdit(stage); window.goToNext(SECTION_BY_STAGE[stage]); };
+      }
+    });
+    STAGES.forEach(stage=>renderAccum(stage));
+  }
+  function hookNavigation(){
+    const originalShow=window.showSection;
+    window.showSection=function(id){
+      if(id==='analisis') id='analisis_b1';
+      if(typeof originalShow === 'function' && originalShow !== window.showSection) originalShow(id);
+      else { document.querySelectorAll('.section').forEach(s=>s.classList.toggle('active',s.id===id)); document.querySelectorAll('.step-btn').forEach(b=>b.classList.toggle('active',b.dataset.target===id)); }
+      const stage=STAGE_BY_SECTION[id];
+      if(stage){ getState().analysisStages.current=stage; if(!$('analysisPrompt_'+stage)?.value) window.generateAnalysisScreenPrompt(stage); renderAccum(stage); }
+    };
+    window.goToNext=function(current){
+      if(typeof window.syncVisibleStage==='function') window.syncVisibleStage();
+      if(current==='preparacion'){ if(getState().metadata && getState().metadata.route==='doc') return window.showSection('documentacion_existente'); return window.showSection('carga'); }
+      if(current==='documentacion_existente') return window.showSection('carga');
+      if(current==='carga') return window.showSection('asis');
+      if(current==='asis') return window.showSection('analisis_b1');
+      if(STAGE_BY_SECTION[current]){ const idx=SCREEN_ORDER.indexOf(current); if(idx>=0 && SCREEN_ORDER[idx+1]) return window.showSection(SCREEN_ORDER[idx+1]); }
+      if(current==='analisis_b6') return window.showSection('decision');
+      if(current==='decision'){ if(typeof window.continueFromDecision==='function') return window.continueFromDecision(); return window.showSection('tobe'); }
+      if(current==='tobe') return window.showSection('resultados');
+      const idx=SCREEN_ORDER.indexOf(current); if(idx>=0 && SCREEN_ORDER[idx+1]) window.showSection(SCREEN_ORDER[idx+1]);
+    };
+    window.goToPrev=function(current){
+      if(typeof window.syncVisibleStage==='function') window.syncVisibleStage();
+      if(current==='documentacion_existente') return window.showSection('preparacion');
+      if(current==='carga' && getState().metadata && getState().metadata.route==='doc') return window.showSection('documentacion_existente');
+      if(current==='carga') return window.showSection('preparacion');
+      if(current==='analisis_b1') return window.showSection('asis');
+      const idx=SCREEN_ORDER.indexOf(current); if(idx>0) window.showSection(SCREEN_ORDER[idx-1]);
+    };
+    window.labelStage=function(id){ return {inicio:'Inicio',documentacion_existente:'Documentación existente',preparacion:'Preparación y contexto',carga:'Carga y consolidación',asis:'AS IS',analisis:'B1 · Validación AS IS',analisis_b1:'B1 · Validación AS IS',analisis_b2:'B2 · AVA',analisis_b3:'B3 · Desperdicios',analisis_b4:'B4 · Restricciones',analisis_b5:'B5 · Mejoras',analisis_b6:'B6 · Builder SB',decision:'Decisión',tobe:'TO BE',resultados:'Resultados'}[id] || id; };
+  }
+  function install(){
+    installStageButtons();
+    hookNavigation();
+    STAGES.forEach(stage=>{ if(!$('analysisPrompt_'+stage)?.value && document.getElementById(SECTION_BY_STAGE[stage])) { try{ window.generateAnalysisScreenPrompt(stage); }catch(e){} } });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', install); else install();
+})();
+</script>
+
+</body>
     </html>
   `);
   win.document.close();
@@ -9688,5 +10352,337 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
   window.saveAnalysisAndContinue = function(){ showSection('decision'); };
 })();
 </script>
+
+
+<!-- SGMP LMP · Análisis por pantallas tipo Prompt A · Override final -->
+<script id="sgmp-lmp-analysis-prompt-a-style-final">
+(function(){
+  'use strict';
+  const STAGES = ['B1','B2','B3','B4','B5','B6'];
+  const SECTION_BY_STAGE = {B1:'analisis_b1',B2:'analisis_b2',B3:'analisis_b3',B4:'analisis_b4',B5:'analisis_b5',B6:'analisis_b6'};
+  const STAGE_BY_SECTION = {analisis_b1:'B1',analisis_b2:'B2',analisis_b3:'B3',analisis_b4:'B4',analisis_b5:'B5',analisis_b6:'B6'};
+  const SCREEN_ORDER = ['inicio','preparacion','documentacion_existente','carga','asis','analisis_b1','analisis_b2','analisis_b3','analisis_b4','analisis_b5','analisis_b6','decision','tobe','resultados'];
+  function $(id){ return document.getElementById(id); }
+  function arr(v){ return Array.isArray(v) ? v : (v == null || v === '' ? [] : [v]); }
+  function text(v){ return String(v == null ? '' : v).trim(); }
+  function getState(){ window.state = window.state || {}; window.state.analysisStages = window.state.analysisStages || {current:'B1', results:{}}; window.state.analysisStages.results = window.state.analysisStages.results || {}; return window.state; }
+  function show(id,type,msg){ if(typeof window.showMsg === 'function') window.showMsg(id,type,msg); else { const el=$(id); if(el){ el.className='msg show '+(type||'ok'); el.textContent=msg; } } }
+  function safeJsonStringify(obj){ try{return JSON.stringify(obj,null,2);}catch(e){return String(obj||'');} }
+  function robustParseJSON(raw){
+    if(!raw || !text(raw)) throw new Error('No hay contenido JSON para procesar.');
+    if(typeof window.extractJsonFromText === 'function'){
+      try { return window.extractJsonFromText(raw); } catch(e) {}
+    }
+    let s = text(raw).replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
+    try { return JSON.parse(s); } catch(e) {}
+    const first = s.indexOf('{'), last = s.lastIndexOf('}');
+    if(first >= 0 && last > first){ return JSON.parse(s.slice(first,last+1)); }
+    throw new Error('La respuesta no contiene JSON válido.');
+  }
+  function copyValue(value,msgId,okMsg){
+    const v = String(value == null ? '' : value);
+    if(!v.trim()){ show(msgId,'warn','No hay contenido para copiar.'); return; }
+    const done = () => show(msgId,'ok',okMsg || 'Contenido copiado.');
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(v).then(done).catch(()=>fallback());
+    else fallback();
+    function fallback(){ const ta=document.createElement('textarea'); ta.value=v; ta.style.position='fixed'; ta.style.left='-9999px'; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); done(); }
+  }
+  window.copyTextFromId = function(id,msgId,okMsg){ const el=$(id); copyValue(el ? el.value || el.textContent || '' : '', msgId, okMsg); };
+  function isBlankActivity(a){
+    if(!a || typeof a !== 'object') return true;
+    const id = text(a.id), name = text(a.name || a.activity || a.actividad), actor = text(a.actor || a.responsible || a.rol);
+    if(id.toUpperCase()==='A1' && !name && !actor) return true;
+    return !name && !actor;
+  }
+  function normalizeActivity(a, idx){
+    const id = text(a.id) || ('ACT-' + String(idx+1).padStart(2,'0'));
+    const name = text(a.name || a.activity || a.actividad) || ('Actividad ' + String(idx+1));
+    return Object.assign({}, a, {
+      id, name,
+      type: text(a.type || a.tipo) || 'operation',
+      actor: text(a.actor || a.responsible || a.rol),
+      document: text(a.document || a.documento),
+      previous: arr(a.previous || a.prev || a.anterior).map(text).filter(Boolean),
+      next: arr(a.next || a.siguiente).map(text).filter(Boolean),
+      is_start: !!(a.is_start || a.isStart),
+      is_end: !!(a.is_end || a.isEnd),
+      note: text(a.note || a.notes || a.nota)
+    });
+  }
+  function cleanActivities(list){
+    const src = arr(list), out = [], seen = new Set();
+    src.forEach((a)=>{
+      if(isBlankActivity(a)) return;
+      const normalized = normalizeActivity(a, out.length);
+      const key = (text(normalized.id) || text(normalized.name)).toLowerCase();
+      if(seen.has(key)) return;
+      seen.add(key); out.push(normalized);
+    });
+    out.forEach((a,i)=>{ a.is_start = i===0; a.is_end = i===out.length-1; });
+    out.forEach((a,i)=>{
+      if(i===0) a.previous = [];
+      else if(!arr(a.previous).length) a.previous = [out[i-1].name];
+      if(i===out.length-1) a.next = [];
+      else if(!arr(a.next).length) a.next = [out[i+1].name];
+    });
+    return out;
+  }
+  window.sgmpCleanAnalysisActivities = cleanActivities;
+  function briefRaw(){ const s=getState(); return (s.briefReview && s.briefReview.raw) || s.brief || s.briefEditable || {}; }
+  function masterRaw(){ const s=getState(); try{return s.master || (typeof window.mergeMaster==='function' ? window.mergeMaster() : {}) || {};}catch(e){return s.master || {};}}
+  function structuralActivities(){
+    const s=getState(), b=briefRaw(), m=masterRaw();
+    const candidates = [
+      s.asis && s.asis.activities,
+      b.as_is && b.as_is.activities,
+      b.activities_preliminary,
+      b.brief && b.brief.as_is && b.brief.as_is.activities,
+      b.brief && b.brief.activities_preliminary,
+      s.brief && s.brief.as_is && s.brief.as_is.activities,
+      s.brief && s.brief.activities_preliminary,
+      m.proceso && m.proceso.actividades,
+      m.activities,
+      m.sipoc_input && m.sipoc_input.activities,
+      typeof window.sgmpGetStructuralSourceActivities === 'function' ? window.sgmpGetStructuralSourceActivities() : []
+    ];
+    let best=[];
+    candidates.forEach(c=>{ const cleaned=cleanActivities(c); if(cleaned.length > best.length) best=cleaned; });
+    return best;
+  }
+  function stageActivitiesFor(stage){
+    const s=getState(), r=s.analysisStages.results || {};
+    const b1 = cleanActivities(r.B1 && r.B1.as_is && r.B1.as_is.activities);
+    const b2 = cleanActivities(r.B2 && r.B2.as_is && r.B2.as_is.activities);
+    if(stage === 'B1') return structuralActivities();
+    return b2.length ? b2 : (b1.length ? b1 : structuralActivities());
+  }
+  window.sgmpGetBestAnalysisSourceActivities = structuralActivities;
+  function stageDefinitions(){
+    return {
+      B1:{label:'B1 · Validación AS IS', stageCode:'lmp_analysis_b1', instruction:`ACTÚA COMO consultor senior en procesos y modelador AS IS.\n\nOBJETIVO B1:\nValidar, limpiar y estructurar el AS IS usando como fuente principal source_activities.\n\nREGLAS:\n- No hagas análisis de mejoras todavía.\n- No hagas AVA todavía.\n- No reduzcas ni agrupes actividades.\n- Conserva todas las actividades estructurales.\n- Corrige continuidad previous/next si hay vacíos.\n- Marca una sola actividad inicial y una sola actividad final.\n- Si source_activity_count > 1, la salida debe conservar esa misma cantidad de actividades.\n\nSALIDA JSON ESTRICTA:\n{\n  "as_is": {"activities": []},\n  "validation": {"valid": true, "activity_count": 0, "warnings": [], "blockingIssues": []}\n}`},
+      B2:{label:'B2 · Análisis AVA', stageCode:'lmp_analysis_b2', instruction:`ACTÚA COMO especialista Lean Six Sigma.\n\nOBJETIVO B2:\nClasificar cada actividad AS IS en VA, NNVA o NVA, con evidencia breve.\n\nREGLAS:\n- Usa solo las actividades recibidas.\n- No elimines ni renombres actividades.\n- No propongas mejoras todavía.\n- Devuelve distribución porcentual y detalle por actividad.\n\nSALIDA JSON ESTRICTA:\n{\n  "as_is": {"activities": []},\n  "ava": {"distribution": {"VA": 0, "NNVA": 0, "NVA": 0}, "activityAnalysis": [], "evidence": []}\n}`},
+      B3:{label:'B3 · Desperdicios y problemas', stageCode:'lmp_analysis_b3', instruction:`ACTÚA COMO experto Lean, análisis de desperdicios y diagnóstico operativo.\n\nOBJETIVO B3:\nDetectar desperdicios, problemas, riesgos, dependencias manuales, controles ocultos y evidencias desde el AS IS, el brief y el análisis AVA.\n\nREGLAS:\n- No diseñes TO BE.\n- No hagas contrato SB.\n- Cada hallazgo debe tener evidencia o actividad relacionada cuando sea posible.\n- Usa listas estructuradas, no párrafos sueltos.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "wastes": [],\n    "problems": [],\n    "risks": [],\n    "evidence_highlights": [],\n    "manual_dependencies": [],\n    "hidden_controls": [],\n    "contradictions_detected": []\n  }\n}`},
+      B4:{label:'B4 · Restricciones y causa probable', stageCode:'lmp_analysis_b4', instruction:`ACTÚA COMO especialista TOC, causa raíz y flujo operativo.\n\nOBJETIVO B4:\nIdentificar restricciones, cuellos de botella, causas probables y puntos de bloqueo del proceso.\n\nREGLAS:\n- Diferencia restricción real de problema general.\n- No propongas aún el plan TO BE completo.\n- Relaciona restricciones con actividades cuando aplique.\n- Declara brevemente la evidencia o supuesto utilizado.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "restrictions": [],\n    "suspected_constraints": [],\n    "bottlenecks": [],\n    "rootCauseHypotheses": [],\n    "controlIssues": [],\n    "dataGaps": []\n  }\n}`},
+      B5:{label:'B5 · Mejoras candidatas para TO BE', stageCode:'lmp_analysis_b5', instruction:`ACTÚA COMO consultor senior de mejora continua.\n\nOBJETIVO B5:\nConvertir hallazgos, problemas, desperdicios y restricciones en mejoras candidatas para que el usuario las apruebe, ajuste o rechace en TO BE.\n\nREGLAS:\n- No generes mejoras genéricas.\n- Cada mejora debe estar conectada a un problema, desperdicio o restricción detectada.\n- Distingue quick win, mejora gradual y proyecto estructural.\n- La salida debe alimentar directamente la pantalla TO BE.\n- Genera mejoras suficientes si existen hallazgos; no devuelvas improvements vacío salvo que no exista evidencia.\n\nSALIDA JSON ESTRICTA:\n{\n  "quickWins": [],\n  "improvements": [\n    {\n      "title": "",\n      "summary": "",\n      "problem": "",\n      "currentState": "",\n      "proposedState": "",\n      "support": "",\n      "impact": "",\n      "justification": "",\n      "type": "quick_win|gradual|strategic",\n      "status": "pending"\n    }\n  ]\n}`},
+      B6:{label:'B6 · Contrato para SIPOC Builder', stageCode:'lmp_analysis_b6', instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder.\n\nOBJETIVO B6:\nConstruir el bloque sipoc_input usando el AS IS validado y los datos SIPOC disponibles.\n\nREGLAS:\n- Devuelve SOLO sipoc_input.\n- No incluyas análisis, métricas ni mejoras.\n- previous y next deben ser arrays.\n- activities debe conservar todas las actividades AS IS.\n\nSALIDA JSON ESTRICTA:\n{\n  "sipoc_input": {\n    "process_code": "",\n    "process_name": "",\n    "purpose": "",\n    "start_event": "",\n    "end_event": "",\n    "notes": "",\n    "suppliers": [],\n    "inputs": [],\n    "outputs": [],\n    "customers": [],\n    "actors": [],\n    "documents": [],\n    "activities": []\n  }\n}`}
+    };
+  }
+  window.sgmpGetAnalysisStageDefinitions = stageDefinitions;
+  function contextPayload(){
+    const s=getState(), m=masterRaw();
+    return Object.assign({}, s.context || {}, (m && m.context) || {});
+  }
+  function masterSipoc(){
+    const s=getState(), b=briefRaw(), m=masterRaw();
+    return m.sipoc || m.sipoc_preliminary || b.sipoc || (b.brief && b.brief.sipoc_preliminary) || {};
+  }
+  function buildStagePayload(stage){
+    const s=getState(), results=s.analysisStages.results || {};
+    const payload = {
+      context: contextPayload(),
+      brief: briefRaw(),
+      current_stage: stage,
+      previous_stage_results: results,
+      source_activity_count: stageActivitiesFor(stage).length,
+      source_activities: stageActivitiesFor(stage),
+      master_sipoc: masterSipoc(),
+      rules: {
+        source_activities_are_mandatory: true,
+        do_not_reduce_activities: true,
+        return_only_valid_json: true,
+        prompt_chain_mode: 'one_screen_one_prompt_one_result'
+      }
+    };
+    if(stage === 'B5') payload.findings_for_improvement = Object.assign({}, (results.B3 && results.B3.findings) || {}, (results.B4 && results.B4.findings) || {});
+    if(stage === 'B6') payload.analysis_summary = assembleAnalysis();
+    return payload;
+  }
+  window.sgmpBuildAnalysisStagePrompt = function(stage){
+    const def=stageDefinitions()[stage] || stageDefinitions().B1;
+    const payload=buildStagePayload(stage);
+    return def.instruction + '\n\nREGLAS GLOBALES SGMP:\n- Responde SOLO JSON válido.\n- No uses markdown.\n- No inventes evidencia.\n- Si falta información, registra warnings o dataGaps.\n- Mantén nombres de campos exactamente como se solicita.\n\nINSUMOS:\n' + safeJsonStringify(payload);
+  };
+  window.generateAnalysisScreenPrompt = function(stage){
+    const s=getState(); s.analysisStages.current=stage;
+    const box=$('analysisPrompt_'+stage); if(!box) return '';
+    const prompt=window.sgmpBuildAnalysisStagePrompt(stage);
+    box.value=prompt;
+    show('analysisMsg_'+stage,'ok','Prompt '+stage+' generado. Revísalo o ejecuta con IA.');
+    return prompt;
+  };
+  async function callAI(stage,prompt){
+    const def=stageDefinitions()[stage] || {};
+    if(typeof window.sgmpCallAI !== 'function') throw new Error('No existe función sgmpCallAI. Usa modo manual: copia el prompt y pega la respuesta.');
+    const raw = await window.sgmpCallAI(def.stageCode || ('lmp_analysis_'+stage.toLowerCase()), prompt);
+    if(typeof window.sgmpAIResultText === 'function') return window.sgmpAIResultText(raw);
+    if(raw && typeof raw === 'object') return raw.text || raw.content || raw.response || JSON.stringify(raw,null,2);
+    return String(raw || '');
+  }
+  window.runAnalysisScreenStage = async function(stage){
+    const msg='analysisMsg_'+stage;
+    try{
+      const promptBox=$('analysisPrompt_'+stage);
+      let prompt=promptBox && text(promptBox.value) ? promptBox.value : window.generateAnalysisScreenPrompt(stage);
+      if(!prompt) return;
+      show(msg,'ok','Ejecutando '+stage+' con IA. La respuesta se pegará automáticamente.');
+      if(typeof window.showLoader==='function') window.showLoader('Ejecutando '+stage+' con IA...', 'Pantalla '+stage+': prompt → API → respuesta automática.');
+      if(typeof window.sgmpV3StartStage==='function') window.sgmpV3StartStage('analisis_'+stage.toLowerCase(),'api');
+      const aiText = await callAI(stage,prompt);
+      const responseBox=$('analysisResponse_'+stage); if(responseBox) responseBox.value=aiText;
+      show(msg,'ok','Respuesta IA '+stage+' recibida. Procesando automáticamente...');
+      window.processAnalysisScreenStage(stage);
+      if(typeof window.sgmpV3StopStage==='function') window.sgmpV3StopStage('analisis_'+stage.toLowerCase(),'completed');
+    }catch(e){
+      console.error('[SGMP '+stage+']',e);
+      show(msg,'err','No se pudo conectar/procesar por API. Usa modo manual: copia el prompt, ejecútalo fuera y pega la respuesta. Detalle: '+(e.message||e));
+      if(typeof window.sgmpV3StopStage==='function') window.sgmpV3StopStage('analisis_'+stage.toLowerCase(),'error',e.message||String(e));
+    }finally{ if(typeof window.hideLoader==='function') window.hideLoader(); }
+  };
+  function mergeAvaIntoActivities(activities, avaItems){
+    const items=arr(avaItems);
+    return activities.map(a=>{
+      const hit=items.find(x=>text(x.id).toLowerCase()===text(a.id).toLowerCase() || text(x.name).toLowerCase()===text(a.name).toLowerCase() || text(x.activity).toLowerCase()===text(a.name).toLowerCase());
+      if(!hit) return a;
+      return Object.assign({}, a, { ava_classification: text(hit.ava_classification || hit.avaClassification || hit.ava || hit.classification).toUpperCase() || a.ava_classification || a.ava, ava_reason: text(hit.reason || hit.justification || hit.evidence || hit.note) });
+    });
+  }
+  function calcAva(activities){
+    const total=activities.length || 0, counts={VA:0,NNVA:0,NVA:0};
+    activities.forEach(a=>{ const c=text(a.ava_classification || a.ava || a.classification).toUpperCase(); if(counts[c] != null) counts[c]++; });
+    return { VA: total?Math.round(counts.VA*100/total):0, NNVA: total?Math.round(counts.NNVA*100/total):0, NVA: total?Math.round(counts.NVA*100/total):0, counts, total };
+  }
+  function normalizeImprovements(list){
+    return arr(list).filter(Boolean).map((x,i)=>{
+      if(typeof x === 'string') x={title:x, summary:x};
+      return Object.assign({ id:'MEJ-'+String(i+1).padStart(2,'0'), title:text(x.title||x.name)||('Mejora '+(i+1)), summary:text(x.summary||x.description), problem:text(x.problem), currentState:text(x.currentState||x.current_state), proposedState:text(x.proposedState||x.proposed_state), support:text(x.support||x.evidence), impact:text(x.impact), justification:text(x.justification), type:text(x.type)||'gradual', status:text(x.status)||'pending' }, x);
+    });
+  }
+  function assembleAnalysis(){
+    const s=getState(), r=s.analysisStages.results || {};
+    let activities=cleanActivities((r.B2 && r.B2.as_is && r.B2.as_is.activities) || (r.B1 && r.B1.as_is && r.B1.as_is.activities) || stageActivitiesFor('B1'));
+    const avaItems = arr(r.B2 && (r.B2.ava && (r.B2.ava.activityAnalysis || r.B2.ava.activities) || r.B2.activityAnalysis));
+    if(avaItems.length) activities=mergeAvaIntoActivities(activities,avaItems);
+    const b3find=(r.B3 && r.B3.findings) || {}, b4find=(r.B4 && r.B4.findings) || {};
+    const findings=Object.assign({}, b3find, b4find, {
+      wastes: arr(b3find.wastes), problems: arr(b3find.problems), risks: arr(b3find.risks),
+      evidence_highlights: arr(b3find.evidence_highlights), manual_dependencies: arr(b3find.manual_dependencies),
+      restrictions: arr(b4find.restrictions), suspected_constraints: arr(b4find.suspected_constraints), bottlenecks: arr(b4find.bottlenecks)
+    });
+    const quickWins=arr((r.B5 && (r.B5.quickWins || r.B5.quick_wins)) || []);
+    const improvements=normalizeImprovements((r.B5 && r.B5.improvements) || []);
+    const avaDist=(r.B2 && r.B2.ava && r.B2.ava.distribution) || calcAva(activities);
+    return { context: contextPayload(), as_is:{activities}, ava:{distribution:avaDist}, findings, quickWins, improvements, sb_contract: (r.B6 && (r.B6.sipoc_input ? {sipoc_input:r.B6.sipoc_input} : r.B6.sb_contract)) || {} };
+  }
+  window.sgmpAssembleStagedAnalysisPayload = assembleAnalysis;
+  window.processAnalysisScreenStage = function(stage){
+    const msg='analysisMsg_'+stage, responseBox=$('analysisResponse_'+stage);
+    const raw=responseBox ? responseBox.value : '';
+    try{
+      const parsed=robustParseJSON(raw);
+      saveParsedStage(stage, parsed);
+      show(msg,'ok','Respuesta '+stage+' procesada y guardada.');
+    }catch(e){ console.error('[process '+stage+']',e); show(msg,'err','No fue posible procesar '+stage+'. '+(e.message||e)); }
+  };
+  function saveParsedStage(stage, parsed){
+    const s=getState(); s.analysisStages.current=stage; s.analysisStages.results[stage]=parsed;
+    const resultBox=$('analysisResult_'+stage); if(resultBox) resultBox.value=safeJsonStringify(parsed);
+    if(stage==='B1'){
+      const acts=cleanActivities(parsed.as_is && parsed.as_is.activities || parsed.activities);
+      if(acts.length){ s.asis=s.asis||{}; s.asis.activities=acts; if(typeof window.renderAsIsActivities==='function') window.renderAsIsActivities(); }
+    }
+    const assembled=assembleAnalysis();
+    s.analysis = (typeof window.sgmpEnrichAnalysisModel==='function') ? window.sgmpEnrichAnalysisModel(assembled) : assembled;
+    if(stage==='B5'){
+      s.tobe=s.tobe||{}; s.tobe.improvements=normalizeImprovements(parsed.improvements || (s.analysis && s.analysis.improvements));
+      if(typeof window.renderImprovements==='function') window.renderImprovements();
+    }
+    if(stage==='B6'){
+      const sipoc=parsed.sipoc_input || (parsed.sb_contract && parsed.sb_contract.sipoc_input);
+      if(sipoc){ s.sb_contract={sipoc_input:sipoc}; s.sbContractBuilder=s.sbContractBuilder||{}; s.sbContractBuilder.raw={sipoc_input:sipoc}; s.sbContractBuilder.approved=true; }
+    }
+    renderAccum(stage);
+    if(typeof window.renderAnalysisFromState==='function') window.renderAnalysisFromState();
+    if(typeof window.updateTopStatus==='function') window.updateTopStatus();
+  }
+  window.applyAnalysisResultEdit = function(stage){
+    const box=$('analysisResult_'+stage), msg='analysisMsg_'+stage;
+    if(!box || !text(box.value)){ show(msg,'warn','No hay resultado editado para aplicar.'); return; }
+    try{ const parsed=robustParseJSON(box.value); saveParsedStage(stage, parsed); show(msg,'ok','Resultado editado '+stage+' aplicado al estado del módulo.'); }
+    catch(e){ show(msg,'err','El resultado editado no es JSON válido. '+(e.message||e)); }
+  };
+  function renderAccum(stage){
+    const assembled=assembleAnalysis(), acts=arr(assembled.as_is && assembled.as_is.activities), f=assembled.findings||{}, imps=arr(assembled.improvements), qws=arr(assembled.quickWins);
+    const ava=assembled.ava && assembled.ava.distribution || calcAva(acts);
+    const restrictions=arr(f.restrictions).concat(arr(f.suspected_constraints), arr(f.bottlenecks));
+    const map={stageActsKpi_:acts.length, stageImpKpi_:imps.length, stageQwKpi_:qws.length, stageResKpi_:restrictions.length, stageNvaKpi_:(ava.NVA||0)+'%'};
+    Object.keys(map).forEach(prefix=>{ const node=$(prefix+stage); if(node) node.textContent=map[prefix]; });
+    const prev=$('analysisAccumPreview_'+stage); if(prev) prev.textContent=safeJsonStringify(assembled);
+  }
+  window.renderAnalysisScreenAccumulated = renderAccum;
+  window.downloadAnalysisStageJson = function(stage){
+    const txt = ($('analysisResult_'+stage) && $('analysisResult_'+stage).value) || ($('analysisResponse_'+stage) && $('analysisResponse_'+stage).value) || '';
+    if(!text(txt)){ show('analysisMsg_'+stage,'warn','No hay resultado para descargar.'); return; }
+    const blob=new Blob([txt],{type:'application/json;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='LMP_'+stage+'_resultado.json'; a.click(); URL.revokeObjectURL(a.href);
+  };
+  function installStageButtons(){
+    STAGES.forEach(stage=>{
+      const response=$('analysisResponse_'+stage), result=$('analysisResult_'+stage);
+      if(response && !document.querySelector('[data-copy-response="'+stage+'"]')){
+        const target=response.nextElementSibling && response.nextElementSibling.classList.contains('actions') ? response.nextElementSibling.querySelector('.actions-left') : null;
+        if(target){
+          const btn=document.createElement('button'); btn.type='button'; btn.className='btn-ghost'; btn.dataset.copyResponse=stage; btn.textContent='Copiar respuesta'; btn.onclick=function(){ window.copyTextFromId('analysisResponse_'+stage,'analysisMsg_'+stage,'Respuesta '+stage+' copiada.'); }; target.appendChild(btn);
+        }
+      }
+      if(result && !document.querySelector('[data-result-actions="'+stage+'"]')){
+        const wrap=document.createElement('div'); wrap.className='actions'; wrap.dataset.resultActions=stage;
+        wrap.innerHTML='<div class="actions-left"><button class="btn-warn" type="button" data-apply-result="'+stage+'">Aplicar resultado editado</button><button class="btn-ghost" type="button" data-copy-result="'+stage+'">Copiar resultado</button></div><div class="actions-right"><button class="btn-ok" type="button" data-next-from-result="'+stage+'">Guardar y continuar</button></div>';
+        result.parentNode.appendChild(wrap);
+        wrap.querySelector('[data-apply-result]').onclick=function(){ window.applyAnalysisResultEdit(stage); };
+        wrap.querySelector('[data-copy-result]').onclick=function(){ window.copyTextFromId('analysisResult_'+stage,'analysisMsg_'+stage,'Resultado '+stage+' copiado.'); };
+        wrap.querySelector('[data-next-from-result]').onclick=function(){ window.applyAnalysisResultEdit(stage); window.goToNext(SECTION_BY_STAGE[stage]); };
+      }
+    });
+    STAGES.forEach(stage=>renderAccum(stage));
+  }
+  function hookNavigation(){
+    const originalShow=window.showSection;
+    window.showSection=function(id){
+      if(id==='analisis') id='analisis_b1';
+      if(typeof originalShow === 'function' && originalShow !== window.showSection) originalShow(id);
+      else { document.querySelectorAll('.section').forEach(s=>s.classList.toggle('active',s.id===id)); document.querySelectorAll('.step-btn').forEach(b=>b.classList.toggle('active',b.dataset.target===id)); }
+      const stage=STAGE_BY_SECTION[id];
+      if(stage){ getState().analysisStages.current=stage; if(!$('analysisPrompt_'+stage)?.value) window.generateAnalysisScreenPrompt(stage); renderAccum(stage); }
+    };
+    window.goToNext=function(current){
+      if(typeof window.syncVisibleStage==='function') window.syncVisibleStage();
+      if(current==='preparacion'){ if(getState().metadata && getState().metadata.route==='doc') return window.showSection('documentacion_existente'); return window.showSection('carga'); }
+      if(current==='documentacion_existente') return window.showSection('carga');
+      if(current==='carga') return window.showSection('asis');
+      if(current==='asis') return window.showSection('analisis_b1');
+      if(STAGE_BY_SECTION[current]){ const idx=SCREEN_ORDER.indexOf(current); if(idx>=0 && SCREEN_ORDER[idx+1]) return window.showSection(SCREEN_ORDER[idx+1]); }
+      if(current==='analisis_b6') return window.showSection('decision');
+      if(current==='decision'){ if(typeof window.continueFromDecision==='function') return window.continueFromDecision(); return window.showSection('tobe'); }
+      if(current==='tobe') return window.showSection('resultados');
+      const idx=SCREEN_ORDER.indexOf(current); if(idx>=0 && SCREEN_ORDER[idx+1]) window.showSection(SCREEN_ORDER[idx+1]);
+    };
+    window.goToPrev=function(current){
+      if(typeof window.syncVisibleStage==='function') window.syncVisibleStage();
+      if(current==='documentacion_existente') return window.showSection('preparacion');
+      if(current==='carga' && getState().metadata && getState().metadata.route==='doc') return window.showSection('documentacion_existente');
+      if(current==='carga') return window.showSection('preparacion');
+      if(current==='analisis_b1') return window.showSection('asis');
+      const idx=SCREEN_ORDER.indexOf(current); if(idx>0) window.showSection(SCREEN_ORDER[idx-1]);
+    };
+    window.labelStage=function(id){ return {inicio:'Inicio',documentacion_existente:'Documentación existente',preparacion:'Preparación y contexto',carga:'Carga y consolidación',asis:'AS IS',analisis:'B1 · Validación AS IS',analisis_b1:'B1 · Validación AS IS',analisis_b2:'B2 · AVA',analisis_b3:'B3 · Desperdicios',analisis_b4:'B4 · Restricciones',analisis_b5:'B5 · Mejoras',analisis_b6:'B6 · Builder SB',decision:'Decisión',tobe:'TO BE',resultados:'Resultados'}[id] || id; };
+  }
+  function install(){
+    installStageButtons();
+    hookNavigation();
+    STAGES.forEach(stage=>{ if(!$('analysisPrompt_'+stage)?.value && document.getElementById(SECTION_BY_STAGE[stage])) { try{ window.generateAnalysisScreenPrompt(stage); }catch(e){} } });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', install); else install();
+})();
+</script>
+
 </body>
 </html>
