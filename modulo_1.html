@@ -6263,9 +6263,25 @@ function evaluateAnalysisCompleteness(data){
     state.briefReview?.raw
   ];
   const acts = candidates.flatMap(candidate => extractAsIsActivitiesFromPayload(candidate));
+  const sourceActs = [
+    state.master,
+    ...(state.loads?.pre || []),
+    ...(state.loads?.interview || []),
+    ...(state.loads?.brief || [])
+  ].flatMap(candidate => sgmpCollectActivitiesFromPayload(candidate));
+  const expectedCount = Math.max(
+    safeArray(state.master?.activities).length,
+    sourceActs.length
+  );
 
   if(!acts.length) {
     issues.push('No se detectaron actividades AS IS.');
+  }
+  if(expectedCount > 10 && acts.length < 10){
+    issues.push(`Validación dura: se detectaron ${expectedCount} actividades fuente, pero el análisis/AS IS solo contiene ${acts.length}. Reprocesa el análisis o revisa el JSON antes de avanzar.`);
+  }
+  if(expectedCount > 0 && acts.length > 0 && acts.length < Math.min(expectedCount, 10)){
+    issues.push(`Cobertura insuficiente de actividades: AS IS contiene ${acts.length} de ${expectedCount} actividades detectadas en fuente.`);
   }
 
   return issues;
@@ -6919,15 +6935,7 @@ function downloadSbContractBuilderJson(){
 function normalizeSipocJsonAsInterview(parsed){
   const source = parsed || {};
   const draft = source.lmpSipocDraft || source.sipocDraft || source.sipoc_input || source.sipoc || source.documented_as_is || source.lmp_load_input?.brief_seed || source;
-  const activities = safeArray(
-    source.activities ||
-    source.documented_as_is?.activities ||
-    source.lmpSipocDraft?.activities ||
-    source.sipoc_input?.activities ||
-    source.lmp_load_input?.brief_seed?.activities ||
-    draft.activities ||
-    []
-  );
+  const activities = sgmpCollectActivitiesFromPayload(source);
   const suppliers = safeArray(source.sipocStructured?.suppliers || draft.suppliers).map(item => typeof item === 'string' ? {name:item,input:''} : item);
   const customers = safeArray(source.sipocStructured?.customers || draft.customers).map(item => typeof item === 'string' ? {name:item,output:''} : item);
   const internalActors = safeArray(source.sipocStructured?.internalActors || draft.actors || draft.internalActors);
@@ -7104,6 +7112,212 @@ function mergeContextSources(){
   return out;
 }
 
+
+/* =========================
+   SGMP FIX · EXTRACCIÓN ROBUSTA DE ACTIVIDADES FUENTE
+   Objetivo: no perder actividades cuando los insumos vienen como JSON maestro
+   con estructuras tipo proceso.actividades, entrevista.actividades_referenciadas,
+   documentos_por_actividad o cuestionarios con respuestas narrativas.
+========================= */
+function sgmpTextFromAny(value){
+  if(value === undefined || value === null) return '';
+  if(Array.isArray(value)) return value.map(sgmpTextFromAny).filter(Boolean).join('; ');
+  if(typeof value === 'object'){
+    return value.nombre || value.name || value.titulo || value.title || value.codigo || value.id || value.descripcion || value.description || JSON.stringify(value);
+  }
+  return String(value);
+}
+
+function sgmpActorLookupFromPayload(payload){
+  const map = {};
+  const roots = [payload?.proceso, payload?.process, payload?.entrevista, payload?.cuestionario, payload];
+  roots.forEach(root => {
+    safeArray(root?.actores || root?.actors || root?.internalActors).forEach(actor => {
+      if(!actor || typeof actor !== 'object') return;
+      const id = normalizeContractString(actor.id || actor.codigo || actor.code || '');
+      const label = normalizeCatalogValue(actor.nombre || actor.name || actor.rol || actor.role || actor.cargo || actor.position || id);
+      if(id && label) map[id] = label;
+    });
+  });
+  return map;
+}
+
+function sgmpParseReferencedActivity(value){
+  const txt = normalizeContractString(sgmpTextFromAny(value));
+  if(!txt) return null;
+  const m = txt.match(/^([A-Z]{2,4}-?\d{1,3}|DEC-?\d{1,3})\s*[:\-–]\s*(.+)$/i);
+  if(m){ return { id:m[1].trim(), name:m[2].trim(), note:txt, type:/^DEC/i.test(m[1]) || /decisi[oó]n/i.test(m[2]) ? 'decision' : 'operation' }; }
+  return { name:txt, note:txt, type:/decisi[oó]n/i.test(txt) ? 'decision' : 'operation' };
+}
+
+function sgmpNormalizeSourceActivity(raw, index = 0, list = [], actorMap = {}){
+  if(raw === undefined || raw === null) return null;
+  if(typeof raw === 'string') raw = sgmpParseReferencedActivity(raw);
+  if(!raw || typeof raw !== 'object') return null;
+
+  const id = normalizeContractString(raw.id || raw.codigo || raw.code || raw.activity_id || raw.actividad || '');
+  const name = normalizeContractString(raw.name || raw.nombre || raw.activity || raw.activity_name || raw.titulo || raw.title || raw.step || raw.stage || '');
+  if(!name) return null;
+
+  const actorRaw = raw.actor || raw.responsable || raw.role || raw.owner || raw.executor || raw.area || '';
+  const actor = normalizeCatalogValue(actorMap[actorRaw] || actorRaw || raw.rol || raw.cargo || '');
+  const documents = dedupeCatalog(raw.document || raw.documento || raw.documentos || raw.documents || raw.formato || raw.form || []);
+  const inputs = dedupeCatalog(raw.ext_inputs || raw.external_inputs || raw.entradas || raw.inputs || []);
+  const outputs = dedupeCatalog(raw.ext_outputs || raw.external_outputs || raw.salidas || raw.outputs || []);
+  const suppliers = dedupeCatalog(raw.ext_suppliers || raw.external_suppliers || raw.proveedores || raw.suppliers || []);
+  const customers = dedupeCatalog(raw.ext_customers || raw.external_customers || raw.clientes || raw.customers || []);
+
+  let next = normalizeRelationList(raw.next || raw.siguiente || raw.successors || raw.after);
+  let previous = normalizeRelationList(raw.previous || raw.prev || raw.predecessors || raw.before || raw.anterior);
+  const optionNext = safeArray(raw.opciones || raw.options || raw.branches).map(o => o?.siguiente || o?.next || o?.target || o?.actividad).filter(Boolean);
+  if(optionNext.length) next = normalizeRelationList(optionNext);
+
+  if(!previous.length && index > 0){
+    const prev = list[index - 1];
+    previous = [normalizeContractString(prev?.id || prev?.codigo || prev?.name || prev?.nombre || '')].filter(Boolean);
+  }
+  if(!next.length && index < list.length - 1){
+    const nx = list[index + 1];
+    next = [normalizeContractString(nx?.id || nx?.codigo || nx?.name || nx?.nombre || '')].filter(Boolean);
+  }
+
+  const problems = sgmpTextFromAny(raw.problems || raw.problemas || raw.issue || raw.issues || '');
+  const noteParts = [
+    id ? 'ID fuente: ' + id : '',
+    raw.descripcion || raw.description || raw.detalle || raw.detail || raw.note || raw.notes || '',
+    raw.uso ? 'Uso: ' + raw.uso : '',
+    problems ? 'Problemas: ' + problems : ''
+  ].filter(Boolean);
+
+  return {
+    id,
+    name,
+    actor,
+    type: canonicalActivityType(raw.type || raw.tipo || raw.activity_type || ''),
+    document: documents.join('; '),
+    previous,
+    next,
+    ext_suppliers: suppliers,
+    ext_inputs: inputs,
+    ext_outputs: outputs,
+    ext_customers: customers,
+    time: raw.time || raw.tiempo || raw.duration || raw.tiempo_estimado_horas || '',
+    ava: raw.ava || raw.tipo_ava || raw.classification || raw.clasificacion || raw.value_classification || 'NNVA',
+    problems,
+    wastes: sgmpTextFromAny(raw.wastes || raw.desperdicios || raw.waste || ''),
+    quickWin: raw.quickWin || raw.quick_win || 'No',
+    constraint: raw.constraint || raw.restriction || raw.restriccion || 'No',
+    is_start: !!(raw.is_start || raw.start || raw.isStart || (list.length && index === 0)),
+    is_end: !!(raw.is_end || raw.end || raw.isEnd || (list.length && index === list.length - 1)),
+    note: normalizeContractString(noteParts.join(' | '))
+  };
+}
+
+function sgmpCollectActivitiesFromPayload(payload){
+  const p = payload || {};
+  const actorMap = sgmpActorLookupFromPayload(p);
+  const rawGroups = [
+    p.proceso?.actividades,
+    p.process?.activities,
+    p.entrevista?.actividades,
+    p.entrevista?.actividades_referenciadas,
+    p.actividades_referenciadas,
+    p.documentos_por_actividad,
+    p.entrevista?.documentos_por_actividad,
+    p.activities,
+    p.as_is?.activities,
+    p.activities_preliminary,
+    p.sipoc_input?.activities,
+    p.structured_process?.activities,
+    p.lmpSipocDraft?.activities,
+    p.sipocDraft?.activities,
+    p.documented_as_is?.activities,
+    p.lmp_load_input?.brief_seed?.activities
+  ];
+
+  const out = [];
+  rawGroups.forEach(group => {
+    const arr = safeArray(group);
+    arr.forEach((item, idx) => {
+      let normalized;
+      if(item && typeof item === 'object' && item.actividad && item.documento && !item.nombre && !item.name){
+        // documentos_por_actividad: convertirlo en actividad documental si no existe aún.
+        normalized = sgmpNormalizeSourceActivity({
+          id:item.actividad,
+          nombre:item.actividad,
+          tipo:'document',
+          documento:item.documento,
+          descripcion:item.uso || ''
+        }, idx, arr, actorMap);
+      } else {
+        normalized = sgmpNormalizeSourceActivity(item, idx, arr, actorMap);
+      }
+      if(normalized && normalized.name) out.push(normalized);
+    });
+  });
+
+  // Extrae actividades narrativas desde respuestas de cuestionarios sin reemplazar las estructuradas.
+  safeArray(p.cuestionario?.preguntas || p.questions).forEach(q => {
+    const category = normalizeContractString(q.categoria || q.category || '');
+    const answer = normalizeContractString(q.respuesta || q.answer || '');
+    if(!answer) return;
+    if(/actividades|paso a paso|responsabilidades|recepci[oó]n|generaci[oó]n|clasifica/i.test(category + ' ' + (q.pregunta || q.question || ''))){
+      out.push(sgmpNormalizeSourceActivity({
+        nombre: category || 'Actividad narrada en cuestionario',
+        actor: p.cuestionario?.actor || p.actor || '',
+        tipo:'operation',
+        descripcion: answer
+      }, out.length, out, actorMap));
+    }
+  });
+
+  return out.filter(Boolean);
+}
+
+function sgmpActivityKey(activity){
+  const a = activity || {};
+  return [a.id, a.name, a.actor, a.type].map(v => normalizeContractString(v).toLowerCase()).join('|');
+}
+
+function sgmpPushMasterActivity(master, seenAct, rawActivity){
+  const a = sgmpNormalizeSourceActivity(rawActivity) || normalizeActivity(rawActivity || {});
+  if(!a || !a.name) return false;
+  const key = sgmpActivityKey(a);
+  if(seenAct.has(key)) return false;
+  seenAct.add(key);
+  master.activities.push({
+    id: a.id || '',
+    name: a.name || '',
+    actor: a.actor || '',
+    type: a.type || 'operation',
+    document: a.document || '',
+    previous: a.previous || [],
+    next: a.next || [],
+    ext_suppliers: a.ext_suppliers || [],
+    ext_inputs: a.ext_inputs || [],
+    ext_outputs: a.ext_outputs || [],
+    ext_customers: a.ext_customers || [],
+    time: a.time || '',
+    ava: a.ava || 'NNVA',
+    problems: a.problems || '',
+    wastes: a.wastes || '',
+    quickWin: a.quickWin || 'No',
+    constraint: a.constraint || 'No',
+    is_start: !!a.is_start,
+    is_end: !!a.is_end,
+    note: a.note || ''
+  });
+  splitItems(a.actor).forEach(v => uniquePush(master.sipoc.actors, v));
+  splitItems(a.document).forEach(v => uniquePush(master.sipoc.documentsSystems, v));
+  safeArray(a.ext_suppliers).forEach(v => uniquePush(master.sipoc.suppliers, v));
+  safeArray(a.ext_inputs).forEach(v => uniquePush(master.sipoc.inputs, v));
+  safeArray(a.ext_outputs).forEach(v => uniquePush(master.sipoc.outputs, v));
+  safeArray(a.ext_customers).forEach(v => uniquePush(master.sipoc.customers, v));
+  splitItems(a.problems).forEach(v => uniquePush(master.issues.keyIssues, v));
+  splitItems(a.wastes).forEach(v => uniquePush(master.issues.wastes, v));
+  return true;
+}
+
 function mergeMaster(){
   const allPre = [...state.loads.pre]; if(state.preInterview) allPre.push(state.preInterview);
   const allInterview = [...state.loads.interview]; if(state.interview) allInterview.push(state.interview);
@@ -7130,6 +7344,7 @@ function mergeMaster(){
     splitItems(item.discovery?.outputsDelivered).forEach(v => uniquePush(master.notes.preInterviewNotes, v));
     splitItems(item.discovery?.problemsRestrictions).forEach(v => uniquePush(master.issues.keyIssues, v));
     splitItems(item.discovery?.idealProcess).forEach(v => uniquePush(master.issues.futureVision, v));
+    sgmpCollectActivitiesFromPayload(item).forEach(a => sgmpPushMasterActivity(master, seenAct, a));
   });
   allInterview.forEach(item => {
     safeArray(item.sipocStructured?.suppliers).forEach(s => {
@@ -7153,13 +7368,7 @@ function mergeMaster(){
     splitItems(item.sipoc?.outputs).forEach(v => uniquePush(master.sipoc.outputs, v));
     splitItems(item.sipoc?.customers).forEach(v => uniquePush(master.sipoc.customers, v));
     splitItems(item.sipoc?.actors).forEach(v => uniquePush(master.sipoc.actors, v));
-    (item.activities || []).forEach(a => {
-      const key = [a.name, a.actor, a.type, a.previous, a.next].join('|').toLowerCase();
-      if(!seenAct.has(key) && a.name){
-        seenAct.add(key);
-        master.activities.push({ name:a.name||'', actor:a.actor||'', type:a.type||'operation', document:a.document||'', previous:a.previous||'', next:a.next||'', ext_suppliers:a.ext_suppliers||[], ext_inputs:a.ext_inputs||[], ext_outputs:a.ext_outputs||[], ext_customers:a.ext_customers||[], time:'', ava:'NNVA', problems:'', wastes:'', quickWin:'No', constraint:'No', note:[a.note, a.observations].filter(Boolean).join(' | ') });
-      }
-    });
+    sgmpCollectActivitiesFromPayload(item).forEach(a => sgmpPushMasterActivity(master, seenAct, a));
     splitItems(item.painPoints?.problems).forEach(v => uniquePush(master.issues.keyIssues, v));
     splitItems(item.painPoints?.constraints).forEach(v => uniquePush(master.issues.constraints, v));
     splitItems(item.painPoints?.currentIndicators).forEach(v => uniquePush(master.indicators, v));
@@ -7178,6 +7387,7 @@ function mergeMaster(){
     splitItems(item.insights?.constraints).forEach(v => uniquePush(master.issues.constraints, v));
     splitItems(item.futureState?.futureVision).forEach(v => uniquePush(master.issues.futureVision, v));
     splitItems(item.indicators).forEach(v => uniquePush(master.indicators, v));
+    sgmpCollectActivitiesFromPayload(item).forEach(a => sgmpPushMasterActivity(master, seenAct, a));
   });
   state.master = master;
   if(qs('masterEditor')) qs('masterEditor').value = JSON.stringify(master, null, 2);
@@ -7202,6 +7412,11 @@ Finalidad: ${c.purpose || ''}
 
 CONSOLIDADO_MAESTRO:
 ${JSON.stringify(master, null, 2)}
+
+VALIDACIÓN DURA DE ACTIVIDADES:
+- Si CONSOLIDADO_MAESTRO.activities contiene más de 10 actividades, tu salida as_is.activities debe contener al menos 10 actividades y preferiblemente conservarlas todas.
+- No agrupes, no resumas y no elimines actividades del flujo fuente.
+- Si devuelves menos actividades que las detectadas en CONSOLIDADO_MAESTRO.activities, corrige internamente antes de responder.
 
 DOCUMENTOS ADICIONALES:
 ${docs}`;
@@ -7299,9 +7514,10 @@ function normalizeRelationList(value){
   
 function normalizeActivity(item){
   item = item || {};
+  const id = item.id || item.codigo || item.code || item.activity_id || '';
   const name = item.name || item.activity || item.activity_name || item.nombre || item.step || item.stage || item.title || '';
   const actor = item.actor || item.role || item.responsable || item.owner || item.executor || item.area || '';
-  const documentName = item.document || item.documento || item.record || item.form || item.formato || '';
+  const documentName = item.document || item.documento || item.documentos || item.documents || item.record || item.form || item.formato || '';
   const previous = normalizeRelationList(item.previous || item.prev || item.predecessors || item.before);
   const next = normalizeRelationList(item.next || item.successors || item.after);
   const controls = safeArray(item.controls || item.controles).join('; ');
@@ -7313,14 +7529,15 @@ function normalizeActivity(item){
   const quickRaw = item.quickWin || item.quick_win || item.quickwin || item.quick_win_candidate || item.quickWinCandidate || 'No';
   const resRaw = item.constraint || item.restriction || item.restriccion || item.is_constraint || 'No';
   return {
+    id: normalizeContractString(id),
     name: normalizeContractString(name),
     actor: normalizeCatalogValue(actor),
     type: canonicalActivityType(item.type || item.tipo || item.activity_type || ''),
-    document: normalizeCatalogValue(documentName),
+    document: dedupeCatalog(documentName).join('; ') || normalizeCatalogValue(documentName),
     previous,
     next,
-    time:item.time || item.tiempo || item.duration || '',
-    ava:item.ava || item.classification || item.clasificacion || item.value_classification || 'NNVA',
+    time:item.time || item.tiempo || item.duration || item.tiempo_estimado_horas || '',
+    ava:item.ava || item.tipo_ava || item.classification || item.clasificacion || item.value_classification || 'NNVA',
     problems: normalizeContractString(problems),
     wastes: normalizeContractString(wastes),
     quickWin: (String(quickRaw).toLowerCase().includes('s') || quickRaw === true) ? 'Sí' : (quickRaw === true ? 'Sí' : 'No'),
@@ -7328,10 +7545,10 @@ function normalizeActivity(item){
     controls: normalizeContractString(controls),
     handoff: normalizeContractString(handoff),
     exceptions: normalizeContractString(exceptions),
-    ext_suppliers: dedupeCatalog(item.ext_suppliers || item.external_suppliers || item.suppliers || []),
-    ext_inputs: dedupeCatalog(item.ext_inputs || item.external_inputs || item.inputs || []),
-    ext_outputs: dedupeCatalog(item.ext_outputs || item.external_outputs || item.outputs || []),
-    ext_customers: dedupeCatalog(item.ext_customers || item.external_customers || item.customers || []),
+    ext_suppliers: dedupeCatalog(item.ext_suppliers || item.external_suppliers || item.proveedores || item.suppliers || []),
+    ext_inputs: dedupeCatalog(item.ext_inputs || item.external_inputs || item.entradas || item.inputs || []),
+    ext_outputs: dedupeCatalog(item.ext_outputs || item.external_outputs || item.salidas || item.outputs || []),
+    ext_customers: dedupeCatalog(item.ext_customers || item.external_customers || item.clientes || item.customers || []),
     is_start: !!(item.is_start || item.start || item.isStart),
     is_end: !!(item.is_end || item.end || item.isEnd),
     note: normalizeContractString([description, controls ? 'Controles: ' + controls : '', handoff ? 'Handoff: ' + handoff : '', exceptions ? 'Criterios/excepciones: ' + exceptions : ''].filter(Boolean).join(' | '))
@@ -7341,6 +7558,12 @@ function normalizeActivity(item){
 function extractAsIsActivitiesFromPayload(payload){
   const p = payload || {};
   const candidates = [
+    p.proceso?.actividades,
+    p.process?.activities,
+    p.entrevista?.actividades_referenciadas,
+    p.actividades_referenciadas,
+    p.documentos_por_actividad,
+    p.entrevista?.documentos_por_actividad,
     p.sb_contract?.sipoc_input?.activities,
     p.sipoc_builder_ready?.sipoc_input?.activities,
     p.sbContract?.sipoc_input?.activities,
