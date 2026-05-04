@@ -1335,7 +1335,7 @@
 /*
 (function() {
   var SESSION_KEY = 'sgmp_session_v1';
-  var LAUNCHER_URL = 'https://enginesgmp.github.io/sgmp/index.html';
+  var LAUNCHER_URL = 'https://sgmp-lab.github.io/-sgmp-lab-ui/';
   try {
     var raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) { window.location.replace(LAUNCHER_URL); return; }
@@ -2893,6 +2893,7 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 <button class="btn-ghost" onclick="copySBJson()" type="button">Copiar JSON SB</button>
 </div>
 <div class="actions-right">
+<button class="btn-ok" onclick="openSBFromLMP()" type="button">Abrir en SIPOC Builder</button>
 <button class="btn-ok" onclick="downloadSBJson()" type="button">Descargar JSON SB</button>
 </div>
 </div>
@@ -5450,6 +5451,87 @@ function downloadSBJson(){
   }
   downloadText('LMP_TO_SB.json', JSON.stringify(state.results.sbJson, null, 2), 'application/json;charset=utf-8');
   showMsg('resultsMsg','ok','JSON SB descargado correctamente.');
+}
+
+
+/* =========================
+   HANDOFF LMP -> SB
+========================= */
+const SGMP_SB_HANDOFF_URL = './modulo_2.html?handoff_key=SGMP_SB_INPUT';
+
+function getSBContractForHandoff(){
+  syncVisibleStage();
+
+  let contract = state.results && state.results.sbJson ? state.results.sbJson : null;
+
+  if(!contract){
+    contract = buildSBJson();
+    const validation = validateSipocContract(contract.sipoc_input);
+
+    if(validation.errors.length){
+      showMsg('resultsMsg','err','No se puede abrir SIPOC Builder porque el contrato LMP_TO_SB tiene errores:\n- ' + validation.errors.join('\n- '));
+      return null;
+    }
+
+    state.results.sbJson = contract;
+    state.results.sbValidation = validation;
+
+    if(qs('sbJsonView')) qs('sbJsonView').textContent = JSON.stringify(contract, null, 2);
+
+    if(validation.warnings.length){
+      showMsg('resultsMsg','warn','Contrato LMP_TO_SB generado con advertencias. Se puede abrir SB, pero revisa:\n- ' + validation.warnings.join('\n- '));
+    }
+  }
+
+  return contract;
+}
+
+function buildSBHandoffPayload(contract){
+  const sp = contract && contract.sipoc_input ? contract.sipoc_input : null;
+  if(!sp){
+    throw new Error('El contrato no contiene sipoc_input.');
+  }
+
+  return {
+    sipoc_input: sp,
+    _handoff_meta: {
+      contract_code: 'LMP_TO_SB',
+      source_module: 'LMP',
+      target_module: 'SB',
+      source_page: 'modulo_1',
+      generated_at: new Date().toISOString(),
+      process_code: sp.process_code || '',
+      process_name: sp.process_name || '',
+      storage_keys: ['SGMP_SB_INPUT','SGMP_LMP_TO_SB','SGMP_LMP_TO_SB_CONTRACT']
+    }
+  };
+}
+
+function openSBFromLMP(){
+  try{
+    const contract = getSBContractForHandoff();
+    if(!contract) return;
+
+    const payload = buildSBHandoffPayload(contract);
+    const text = JSON.stringify(payload);
+
+    localStorage.setItem('SGMP_SB_INPUT', text);
+    localStorage.setItem('SGMP_LMP_TO_SB', text);
+    localStorage.setItem('SGMP_LMP_TO_SB_CONTRACT', text);
+
+    try{
+      sessionStorage.setItem('SGMP_SB_INPUT', text);
+      sessionStorage.setItem('SGMP_LMP_TO_SB', text);
+      sessionStorage.setItem('SGMP_LMP_TO_SB_CONTRACT', text);
+    }catch(_){ }
+
+    const targetUrl = window.SGMP_SB_URL || SGMP_SB_HANDOFF_URL;
+    window.open(targetUrl, '_blank', 'noopener');
+
+    showMsg('resultsMsg','ok','Contrato LMP_TO_SB enviado a SIPOC Builder. Si SB no carga automáticamente, descarga el JSON SB y cárgalo manualmente.');
+  }catch(error){
+    showMsg('resultsMsg','err','No fue posible abrir SIPOC Builder: ' + error.message);
+  }
 }
 
 function copyDocumentProposalJson(){
