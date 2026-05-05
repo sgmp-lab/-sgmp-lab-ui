@@ -1460,6 +1460,14 @@ body .app .layout > aside.sidebar .step-list::-webkit-scrollbar-thumb:hover{
 }
 </style>
 
+
+<style id="sgmp-hide-legacy-carga-analysis-ui">
+  /* Oculta visualmente la UI antigua de análisis dentro de Carga sin eliminar IDs ni funciones JS. */
+  .legacy-carga-analysis-ui{
+    display:none !important;
+  }
+</style>
+
 </head>
 <body>
 <div class="app">
@@ -2678,7 +2686,7 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 <div class="section-head">
 <div>
 <h2>Carga y consolidación</h2>
-<p>Consolida los archivos JSON según la ruta: proceso nuevo con cuestionarios/entrevista, o proceso existente con SIPOC estructurado.</p>
+<p>Consolida los archivos JSON según la ruta seleccionada. Esta sección solo prepara insumos, consolidado y Brief; el análisis se ejecuta exclusivamente en las etapas B1–B6 del menú lateral.</p>
 </div>
 <div class="step-pill">Paso 3</div>
 </div>
@@ -2773,7 +2781,7 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 <textarea id="briefEditor" placeholder="Aquí aparecerá el Brief estructurado y editable." style="width:100%;min-height:240px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
 </article>
 
-<article class="card half">
+<article class="card half legacy-carga-analysis-ui" aria-hidden="true">
 <h3>Prompt B · Análisis del Brief</h3>
 <p>Se habilita cuando el Brief fue aprobado. Usa el brief oficial y los complementos cargados para generar cada bloque de análisis por separado.</p>
 <div class="actions" style="border-top:none;padding-top:0;margin-top:0">
@@ -2796,7 +2804,7 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 </div>
 </article>
 
-<article class="card half">
+<article class="card half legacy-carga-analysis-ui" aria-hidden="true">
 <h3>Respuesta JSON de la etapa actual</h3>
 <p>Pega aquí la respuesta del bloque seleccionado (B1, B2, B3, B4, B5 o B6). El flujo trabaja por etapas; se eliminó el procesamiento global para evitar validaciones cruzadas prematuras.</p>
 <textarea id="iaResponseEditor" placeholder="Pega aquí la respuesta JSON de la etapa actual..." style="width:100%;min-height:300px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
@@ -2806,7 +2814,7 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 <div class="msg" id="iaMsg"></div><div class="msg" id="analysisValidationMsg"></div>
 </article>
 
-<article class="card">
+<article class="card legacy-carga-analysis-ui" aria-hidden="true">
 <h3>Contrato final LMP -> SB</h3>
 <p>Genera el prompt builder dedicado, pega la respuesta IA y aprueba el contrato final que consumira SIPOC Builder.</p>
 <div class="actions" style="border-top:none;padding-top:0;margin-top:0">
@@ -2830,7 +2838,7 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 <div class="pre" id="sbContractPreview" style="margin-top:14px;min-height:180px"></div>
 </article>
 
-<article class="card">
+<article class="card legacy-carga-analysis-ui" aria-hidden="true">
 <h3>Resumen detectado</h3>
 <div class="kpi-wrap">
 <div class="kpi-card"><h4>AS IS</h4><div class="big" id="iaActsKpi">0</div><small>actividades</small></div>
