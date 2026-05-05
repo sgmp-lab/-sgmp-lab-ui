@@ -1468,91 +1468,6 @@ body .app .layout > aside.sidebar .step-list::-webkit-scrollbar-thumb:hover{
   }
 </style>
 
-
-<style id="sgmp-human-readable-result-sections">
-  /* Resultados humanos: el informe y el plan no deben mostrar JSON crudo.
-     Las cajas JSON técnicas se mantienen separadas. */
-  .human-output-card{
-    border:1px solid #d7e3f3;
-    border-left:4px solid #1A56DB;
-    border-radius:14px;
-    padding:12px 14px;
-    margin:10px 0;
-    background:#F8FBFF;
-  }
-  .human-output-card h4{
-    margin:0 0 8px;
-    color:#0B2E59;
-  }
-  .human-output-card p{
-    margin:5px 0;
-  }
-  .human-output-card ul{
-    margin:6px 0 0 20px;
-  }
-  .human-output-table{
-    width:100%;
-    border-collapse:collapse;
-    margin:10px 0 12px;
-    font-size:.92rem;
-  }
-  .human-output-table th,
-  .human-output-table td{
-    border:1px solid #d7e3f3;
-    padding:8px 10px;
-    text-align:left;
-    vertical-align:top;
-  }
-  .human-output-table th{
-    background:#eef4ff;
-    color:#0B2E59;
-  }
-  .human-readable-note{
-    background:#F0F9FF;
-    border:1px solid #BAE6FD;
-    color:#075985;
-    border-radius:12px;
-    padding:10px 12px;
-    margin:8px 0 12px;
-  }
-  .sgmp-results-box{
-    width:100%;
-    max-width:100%;
-    overflow:hidden;
-  }
-  .sgmp-results-scroll{
-    width:100%;
-    max-width:100%;
-    overflow-x:auto;
-    overflow-y:visible;
-    padding-bottom:4px;
-  }
-  .indicator-review-card{
-    border:1px solid #d7e3f3;
-    border-left:4px solid #00C2FF;
-    border-radius:14px;
-    padding:12px 14px;
-    margin:10px 0;
-    background:#FFFFFF;
-    color:#0A1F44;
-    box-shadow:0 6px 16px rgba(11,46,89,.045);
-  }
-  .indicator-review-card[data-status="approved"]{border-left-color:#27AE60;background:#F0FFF7;}
-  .indicator-review-card[data-status="rejected"]{border-left-color:#C0392B;background:#FFF7F7;}
-  .indicator-review-card[data-status="custom"]{border-left-color:#F2994A;background:#FFFBF2;}
-  .indicator-review-card h4{margin:0 0 8px;color:#0B2E59;}
-  .indicator-review-card p{margin:5px 0;color:#36536F;}
-  .indicator-action-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
-  .status-pill{display:inline-block;padding:5px 9px;border-radius:999px;font-size:.78rem;font-weight:800;background:#eef4ff;color:#0B2E59;border:1px solid #d7e3f3;}
-  .status-pill.approved{background:#EAFBF2;color:#176B3A;border-color:#BDECCF;}
-  .status-pill.rejected{background:#FDEDED;color:#A93226;border-color:#F3C7C1;}
-  .status-pill.custom{background:#FFF4DE;color:#8A570D;border-color:#F9D8A3;}
-  .ava-class-pill{display:inline-block;min-width:54px;text-align:center;padding:4px 7px;border-radius:999px;font-weight:900;font-size:.78rem;background:#eef4ff;color:#0B2E59;}
-  .ava-class-pill.VA{background:#EAFBF2;color:#176B3A;}
-  .ava-class-pill.NNVA{background:#FFF4DE;color:#8A570D;}
-  .ava-class-pill.NVA{background:#FDEDED;color:#A93226;}
-</style>
-
 </head>
 <body>
 <div class="app">
@@ -3367,16 +3282,6 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 <article class="card half">
 <h3>Plan de implementación</h3>
 <div class="doc-box" id="implementationView"></div>
-</article>
-<article class="card">
-<h3>Detalle AVA por actividad</h3>
-<p>Clasificación de valor agregado por actividad con justificación técnica.</p>
-<div class="sgmp-results-box" id="avaTableResult"></div>
-</article>
-<article class="card">
-<h3>Indicadores propuestos para aprobación</h3>
-<p>Indicadores de gestión, proceso y control sugeridos con sustento, trazabilidad y aprobación/rechazo.</p>
-<div class="sgmp-results-box" id="indicatorsResult"></div>
 </article>
 <article class="card half">
 <h3>Informe ejecutivo</h3>
@@ -5860,296 +5765,8 @@ function buildImpactText(){
 }
 
 
-
-function renderDocumentProposalHuman(documentProposal){
-  const docs = safeArray(documentProposal);
-  if(!docs.length){
-    return '<p>No se generó propuesta documental porque no hay mejoras aprobadas o no se identificaron documentos requeridos.</p>';
-  }
-  return `
-    <div class="human-readable-note">
-      Esta sección está redactada para lectura humana. La caja JSON para el Evaluador Documental se mantiene como entregable técnico independiente en Resultados.
-    </div>
-    ${docs.map((d, i) => {
-      const name = firstText(d.document_name, d.documentName, d.name, d.title, `Documento ${i+1}`);
-      const type = firstText(d.document_type, d.documentType, d.type, 'Documento de soporte');
-      const purpose = firstText(d.purpose, d.objective, d.objetivo, 'Definir propósito y uso del documento.');
-      const reason = firstText(d.reason_for_existence, d.reasonForExistence, d.reason, d.justification, 'Soportar la estandarización, trazabilidad y control de la mejora.');
-      const required = safeArray(d.required_contents || d.requiredContents || d.contents || d.contenidos);
-      const support = d.support_basis || d.supportBasis || {};
-      const supportItems = [
-        firstText(support.logical_need, support.logicalNeed, support.need),
-        firstText(support.industry_practice, support.industryPractice),
-        firstText(support.normative_reference, support.normativeReference),
-        firstText(support.cross_industry_practice, support.crossIndustryPractice)
-      ].filter(Boolean);
-      return `
-        <div class="human-output-card">
-          <h4>${i+1}. ${escapeHtml(name)}</h4>
-          <p><strong>Tipo documental:</strong> ${escapeHtml(type)}</p>
-          <p><strong>Propósito:</strong> ${escapeHtml(purpose)}</p>
-          <p><strong>Razón de ser:</strong> ${escapeHtml(reason)}</p>
-          ${required.length ? `<p><strong>Contenido mínimo sugerido:</strong></p><ul>${required.map(x => `<li>${escapeHtml(sgmpTextOf(x))}</li>`).join('')}</ul>` : ''}
-          ${supportItems.length ? `<p><strong>Sustento:</strong></p><ul>${supportItems.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : ''}
-        </div>
-      `;
-    }).join('')}
-  `;
-}
-
-function renderIntegrationInputHuman(payload){
-  const integrationInput = payload?.integration_input || payload?.integrationInput || payload || {};
-  const analysisBase = payload?.integration_analysis_base || payload?.integrationAnalysisBase || {};
-  const activities = safeArray(integrationInput.activities);
-  const inputs = safeArray(integrationInput.inputs);
-  const outputs = safeArray(integrationInput.outputs);
-  const actors = safeArray(integrationInput.actors);
-  const dependencies = safeArray(analysisBase.detected_dependencies || analysisBase.detectedDependencies);
-  const impacts = safeArray(analysisBase.cross_impacts || analysisBase.crossImpacts);
-  const missing = safeArray(analysisBase.missing_elements || analysisBase.missingElements);
-  const activityRows = activities.length
-    ? activities.map((a, i) => `
-        <tr>
-          <td>${i+1}</td>
-          <td>${escapeHtml(firstText(a.name, a.activity, a.title, '-'))}</td>
-          <td>${escapeHtml(firstText(a.actor, a.owner, '-'))}</td>
-          <td>${escapeHtml(firstText(a.type, a.category, '-'))}</td>
-          <td>${escapeHtml(firstText(a.note, a.notes, '-'))}</td>
-        </tr>`).join('')
-    : '<tr><td colspan="5">No se registraron actividades para el Integrador.</td></tr>';
-  const list = arr => arr.length ? `<ul>${arr.map(x => `<li>${escapeHtml(sgmpTextOf(x))}</li>`).join('')}</ul>` : '<p>-</p>';
-
-  return `
-    <div class="human-readable-note">
-      Esta sección resume para una persona qué debe revisar el Integrador. La caja JSON para el Integrador se mantiene como entregable técnico independiente en Resultados.
-    </div>
-    <div class="human-output-card">
-      <h4>Resumen de integración</h4>
-      <p><strong>Proceso:</strong> ${escapeHtml(firstText(integrationInput.process_name, integrationInput.processName, state.context?.processName, '-'))}</p>
-      <p><strong>Modo:</strong> ${escapeHtml(firstText(integrationInput.mode, '-'))}</p>
-      <p><strong>Actores involucrados:</strong> ${escapeHtml(actors.join(', ') || '-')}</p>
-      <p><strong>Entradas principales:</strong> ${escapeHtml(inputs.join(', ') || '-')}</p>
-      <p><strong>Salidas principales:</strong> ${escapeHtml(outputs.join(', ') || '-')}</p>
-    </div>
-    <h3>Actividades que deben revisarse en integración</h3>
-    <table class="human-output-table">
-      <thead><tr><th>#</th><th>Actividad</th><th>Actor</th><th>Tipo</th><th>Nota</th></tr></thead>
-      <tbody>${activityRows}</tbody>
-    </table>
-    <h3>Dependencias detectadas</h3>
-    ${list(dependencies)}
-    <h3>Impactos cruzados posibles</h3>
-    ${list(impacts)}
-    <h3>Elementos pendientes de validar</h3>
-    ${list(missing)}
-  `;
-}
-
-
-/* =========================
-   RESULTADOS · AVA + INDICADORES
-   Mantiene JSON técnicos separados y renderiza lectura humana encuadrada.
-========================= */
-function getAvaDistributionSafe(){
-  const raw = state.analysis?.summary?.ava || state.analysis?.ava?.distribution || state.ava?.distribution || {};
-  const total = Number(raw.total || raw.VA + raw.NNVA + raw.NVA || raw.counts?.VA + raw.counts?.NNVA + raw.counts?.NVA || safeArray(state.asis?.activities).length || 0);
-  const va = Number(raw.VA || raw.counts?.VA || 0);
-  const nnva = Number(raw.NNVA || raw.counts?.NNVA || 0);
-  const nva = Number(raw.NVA || raw.counts?.NVA || 0);
-  const pct = (v)=> total ? Math.round((Number(v||0) / total) * 100) : 0;
-  return {
-    VA: va,
-    NNVA: nnva,
-    NVA: nva,
-    total,
-    VA_pct: raw.VA_pct || pct(va),
-    NNVA_pct: raw.NNVA_pct || pct(nnva),
-    NVA_pct: raw.NVA_pct || pct(nva)
-  };
-}
-
-function getAvaActivityAnalysisSafe(){
-  return safeArray(
-    state.analysis?.activityAnalysis ||
-    state.analysis?.ava?.activityAnalysis ||
-    state.ava?.activityAnalysis ||
-    state.analysisRun?.raw?.ava?.activityAnalysis ||
-    []
-  );
-}
-
-function buildAVAActivityTableHtml(){
-  const activities = safeArray(state.asis?.activities);
-  const analysis = getAvaActivityAnalysisSafe();
-  const findAva = (act, idx)=>{
-    return analysis.find(x => normalizeContractString(x.activity || x.name || x.activity_name).toLowerCase() === normalizeContractString(act.name).toLowerCase()) || analysis[idx] || {};
-  };
-  if(!activities.length){
-    return '<p>No hay actividades AS IS para clasificar.</p>';
-  }
-  const rows = activities.map((act, i)=>{
-    const item = findAva(act, i);
-    const cls = normalizeContractString(item.classification || item.ava || item.type_ava || act.type_ava || 'NA').toUpperCase();
-    const reason = item.justification || item.evidence || item.reason || act.justification || act.note || 'Sin justificación registrada.';
-    return `<tr>
-      <td>${escapeHtml(act.id || 'ACT-' + String(i+1).padStart(2,'0'))}</td>
-      <td>${escapeHtml(act.name || '-')}</td>
-      <td>${escapeHtml(act.actor || '-')}</td>
-      <td><span class="ava-class-pill ${escapeHtml(cls)}">${escapeHtml(cls)}</span></td>
-      <td>${escapeHtml(reason)}</td>
-    </tr>`;
-  }).join('');
-  return `<div class="sgmp-results-scroll"><table class="human-output-table">
-    <thead><tr><th>ID</th><th>Actividad</th><th>Actor</th><th>AVA</th><th>Justificación</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table></div>`;
-}
-
-function getFindingsArray(key){
-  const sources = [
-    state.analysis?.findings?.[key],
-    state.analysis?.[key],
-    state.findings?.[key],
-    state.analysisRun?.raw?.findings?.[key]
-  ];
-  const out = [];
-  sources.forEach(src => safeArray(src).forEach(x => out.push(x)));
-  const seen = new Set();
-  return out.filter(x => {
-    const txt = (typeof x === 'string' ? x : (x.description || x.problem || x.title || sgmpTextOf(x))).trim();
-    if(!txt || seen.has(txt.toLowerCase())) return false;
-    seen.add(txt.toLowerCase());
-    return true;
-  });
-}
-
-function compactFindingText(x){
-  if(!x) return '';
-  if(typeof x === 'string') return x;
-  return x.description || x.problem || x.title || x.evidence || sgmpTextOf(x);
-}
-
-function pushUniqueIndicator(list, item){
-  const key = normalizeContractString(item.name + '|' + item.formula).toLowerCase();
-  if(list.some(x => normalizeContractString(x.name + '|' + x.formula).toLowerCase() === key)) return;
-  item.id = item.id || 'IND-' + String(list.length + 1).padStart(2,'0');
-  item.status = item.status || 'pending';
-  item.approval_comment = item.approval_comment || '';
-  list.push(item);
-}
-
-function generateIndicatorsFromFindings(currentState){
-  const ctx = currentState || state;
-  const indicators = [];
-  const add = (name, type, formula, justification, linked_findings, linked_activities, frequency, target, owner)=>{
-    pushUniqueIndicator(indicators, {
-      name,
-      type,
-      formula,
-      justification,
-      linked_findings: safeArray(linked_findings),
-      linked_activities: safeArray(linked_activities),
-      frequency: frequency || 'Mensual',
-      target: target || 'Definir línea base y meta',
-      owner: owner || ctx.context?.owner || 'Dueño del proceso'
-    });
-  };
-
-  add('Lead Time total de compra', 'proceso', 'Fecha de ingreso de material - Fecha de generación del requerimiento', 'Mide el desempeño integral del proceso desde la solicitud hasta el ingreso del insumo. Se propone por las demoras detectadas en cotización, aprobación, despacho y recepción.', ['Demoras en cotizaciones', 'Retrasos de proveedor', 'Aprobaciones tardías'], ['ACT-01','ACT-06','ACT-08','ACT-11','ACT-14'], 'Semanal', '<= 8 días hábiles', 'Jefe de Compras');
-  add('Tiempo de respuesta de cotizaciones', 'proceso', 'Promedio de horas entre solicitud de cotización y recepción de oferta', 'Controla el principal tiempo muerto del proceso y permite gestionar proveedores lentos o categorías críticas.', ['Demoras en la recepción de cotizaciones'], ['ACT-05','ACT-06'], 'Semanal', '<= 48 horas hábiles', 'Asistente de Compras');
-  add('% requerimientos completos al primer envío', 'control', 'Requerimientos completos / total de requerimientos recibidos', 'Controla la calidad de entrada del proceso y reduce reprocesos por falta de código, especificación o datos técnicos.', ['Requerimientos incompletos', 'Validación técnica inconsistente'], ['ACT-01','ACT-02','ACT-03'], 'Mensual', '>= 95%', 'Jefe de Almacén');
-  add('% OC entregadas a tiempo', 'gestión', 'OC entregadas en plazo / total de OC cerradas', 'Mide cumplimiento logístico de proveedores y permite gestionar acuerdos de servicio o penalizaciones.', ['Retrasos de proveedor', 'Falta de visibilidad de estados'], ['ACT-10','ACT-11','ACT-12'], 'Mensual', '>= 85%', 'Coordinador Logístico');
-  add('% compras urgentes fuera de flujo normal', 'control', 'Compras urgentes / total de compras', 'Controla el abuso del flujo de emergencia y su impacto en interrupciones, costo y carga operativa.', ['Interrupciones por urgencias', 'Sobrecarga del asistente'], ['ACT-02','ACT-05','ACT-08'], 'Mensual', '<= 10%', 'Jefe de Compras');
-  add('% material rechazado en recepción', 'control', 'Recepciones rechazadas o en cuarentena / total recepciones', 'Controla fallas de especificación, proveedor o recepción y justifica formalizar devoluciones de material no conforme.', ['Material no conforme', 'Ausencia de protocolo de devolución'], ['ACT-12','ACT-13'], 'Mensual', '<= 3%', 'Jefe de Almacén');
-
-  getFindingsArray('wastes').forEach((w)=>{
-    const txt = compactFindingText(w);
-    if(!txt || txt.length > 260) return;
-    add('Control de desperdicio detectado', 'proceso', 'Frecuencia del desperdicio / total de casos observados', 'Se propone para medir y reducir el desperdicio identificado: ' + txt, [txt], [w.activity || w.applies_to_activity || ''], 'Mensual', 'Tendencia decreciente', 'Dueño del proceso');
-  });
-
-  getFindingsArray('restrictions').concat(getFindingsArray('constraints')).concat(getFindingsArray('bottlenecks')).forEach((r)=>{
-    const txt = compactFindingText(r);
-    if(!txt || txt.length > 260) return;
-    add('Impacto de restricción operativa', 'gestión', 'Casos impactados por la restricción / total de casos', 'Se propone para monitorear la restricción identificada y evaluar si las mejoras eliminan el cuello de botella: ' + txt, [txt], [r.activity || r.applies_to_activity || ''], 'Mensual', 'Tendencia decreciente', 'Dueño del proceso');
-  });
-
-  return indicators.map((x,i)=>({...x, id:'IND-' + String(i+1).padStart(2,'0')}));
-}
-
-function ensureGeneratedIndicators(){
-  state.indicators = safeArray(state.indicators);
-  if(!state.indicators.length){
-    state.indicators = generateIndicatorsFromFindings(state);
-  }
-  return state.indicators;
-}
-
-function setIndicatorStatus(index, status){
-  const indicators = ensureGeneratedIndicators();
-  if(!indicators[index]) return;
-  indicators[index].status = status;
-  renderIndicatorsHuman();
-  state.results.technicalHtml = buildTechnicalHtml();
-  state.results.implementationHtml = buildImplementationHtml();
-  if(qs('technicalDoc')) qs('technicalDoc').innerHTML = state.results.technicalHtml;
-  if(qs('implementationView')) qs('implementationView').innerHTML = state.results.implementationHtml;
-  if(qs('technicalText')) qs('technicalText').value = stripHtml(state.results.technicalHtml);
-}
-
-function renderIndicatorsReportHtml(indicators){
-  indicators = safeArray(indicators);
-  if(!indicators.length) return '';
-  return `<div class="sgmp-results-scroll"><table class="human-output-table">
-    <thead><tr><th>ID</th><th>Indicador</th><th>Tipo</th><th>Fórmula</th><th>Justificación</th><th>Meta</th><th>Frecuencia</th><th>Estado</th></tr></thead>
-    <tbody>${indicators.map(ind => `<tr>
-      <td>${escapeHtml(ind.id || '')}</td>
-      <td>${escapeHtml(ind.name || '')}</td>
-      <td>${escapeHtml(ind.type || '')}</td>
-      <td>${escapeHtml(ind.formula || '')}</td>
-      <td>${escapeHtml(ind.justification || '')}</td>
-      <td>${escapeHtml(ind.target || '')}</td>
-      <td>${escapeHtml(ind.frequency || '')}</td>
-      <td>${escapeHtml(ind.status || 'pending')}</td>
-    </tr>`).join('')}</tbody>
-  </table></div>`;
-}
-
-function renderIndicatorsHuman(){
-  const container = qs('indicatorsResult');
-  if(!container) return;
-  const indicators = ensureGeneratedIndicators();
-  if(!indicators.length){
-    container.innerHTML = '<p>No hay indicadores propuestos.</p>';
-    return;
-  }
-  container.innerHTML = indicators.map((ind, i)=>{
-    const status = ind.status || 'pending';
-    return `<div class="indicator-review-card" data-status="${escapeHtml(status)}">
-      <h4>${escapeHtml(ind.id || '')} · ${escapeHtml(ind.name || 'Indicador')}</h4>
-      <p><strong>Tipo:</strong> ${escapeHtml(ind.type || '-')} · <strong>Frecuencia:</strong> ${escapeHtml(ind.frequency || '-')} · <strong>Meta:</strong> ${escapeHtml(ind.target || '-')}</p>
-      <p><strong>Fórmula:</strong> ${escapeHtml(ind.formula || '-')}</p>
-      <p><strong>Justificación / sustento:</strong> ${escapeHtml(ind.justification || '-')}</p>
-      <p><strong>Hallazgos vinculados:</strong> ${escapeHtml(safeArray(ind.linked_findings).join(' | ') || '-')}</p>
-      <p><strong>Actividades vinculadas:</strong> ${escapeHtml(safeArray(ind.linked_activities).filter(Boolean).join(', ') || '-')}</p>
-      <p><strong>Estado:</strong> <span class="status-pill ${escapeHtml(status)}">${escapeHtml(status)}</span></p>
-      <div class="indicator-action-row">
-        <button class="btn-ok" onclick="setIndicatorStatus(${i}, 'approved')" type="button">Aprobar</button>
-        <button class="btn-warn" onclick="setIndicatorStatus(${i}, 'custom')" type="button">Ajustar</button>
-        <button class="btn-danger" onclick="setIndicatorStatus(${i}, 'rejected')" type="button">Rechazar</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function renderAVAReport(){
-  const container = qs('avaTableResult');
-  if(!container) return;
-  container.innerHTML = buildAVAActivityTableHtml();
-}
-
 function buildTechnicalHtml(){
-  const acts = safeArray(state.asis?.activities);
+  const acts = state.asis.activities.map((a,i)=>`<li><strong>${i+1}. ${escapeHtml(a.name)}</strong> · ${escapeHtml(a.actor)} · ${escapeHtml(a.type)}${a.problems ? ` · ${escapeHtml(a.problems)}`:''}</li>`).join('');
   const listHtml = arr => safeArray(arr).length ? `<ul>${safeArray(arr).map(x=>`<li>${escapeHtml(typeof x === 'string' ? x : sgmpTextOf(x))}</li>`).join('')}</ul>` : '<p>-</p>';
   const improvements = safeArray(state.tobe?.improvements?.length ? state.tobe.improvements : state.analysis?.improvements);
   const improvementsHtml = improvements.length
@@ -6169,48 +5786,33 @@ function buildTechnicalHtml(){
   const rejectedHtml = rejected.length
     ? `<ul>${rejected.map(x => `<li><strong>${escapeHtml(x.title)}</strong>: ${escapeHtml(x.problem || x.summary || 'Rechazada por decisión del usuario')}</li>`).join('')}</ul>`
     : '<p>-</p>';
-  const ava = getAvaDistributionSafe();
-  const indicators = ensureGeneratedIndicators();
-  const approvedIndicators = indicators.filter(x => (x.status || 'pending') === 'approved');
-  const pendingIndicators = indicators.filter(x => (x.status || 'pending') !== 'approved' && (x.status || 'pending') !== 'rejected');
+  const ava = state.analysis?.summary?.ava || {};
   return `
     <h1>Informe Técnico</h1>
     <p><strong>Proceso:</strong> ${escapeHtml(state.context.processName || '-')}</p>
 
     <h2>Proceso</h2>
-    <ul>${acts.map((a,i)=>`<li><strong>${i+1}. ${escapeHtml(a.name)}</strong> · ${escapeHtml(a.actor || '-')} · ${escapeHtml(a.type || '-')} ${a.problems ? ` · ${escapeHtml(a.problems)}`:''}</li>`).join('') || '<li>-</li>'}</ul>
+    <ul>${acts || '<li>-</li>'}</ul>
 
-    <h2>Análisis AVA</h2>
-    <p><strong>VA:</strong> ${escapeHtml(ava.VA_pct)}% ·
-       <strong>NNVA:</strong> ${escapeHtml(ava.NNVA_pct)}% ·
-       <strong>NVA:</strong> ${escapeHtml(ava.NVA_pct)}%</p>
-
-    <h3>Detalle AVA por actividad</h3>
-    ${buildAVAActivityTableHtml()}
+    <h2>Análisis</h2>
+    <p><strong>AVA:</strong> ${ava.VA_pct || 0}% ·
+       <strong>NNVA:</strong> ${ava.NNVA_pct || 0}% ·
+       <strong>NVA:</strong> ${ava.NVA_pct || 0}%</p>
 
     <h3>Desperdicios</h3>
-    ${listHtml(getFindingsArray('wastes'))}
+    ${listHtml(state.analysis?.wastes)}
 
     <h3>Problemas</h3>
-    ${listHtml(getFindingsArray('problems'))}
+    ${listHtml(state.analysis?.problems)}
 
     <h3>Restricciones / cuellos de botella</h3>
-    ${listHtml([...getFindingsArray('constraints'), ...getFindingsArray('restrictions'), ...getFindingsArray('bottlenecks')])}
+    ${listHtml(state.analysis?.constraints)}
 
     <h3>Riesgos</h3>
-    ${listHtml(getFindingsArray('risks'))}
+    ${listHtml(state.analysis?.risks)}
 
     <h2>Propuestas de mejora generadas</h2>
     ${improvementsHtml}
-
-    <h2>Indicadores propuestos</h2>
-    ${renderIndicatorsReportHtml(indicators)}
-
-    <h3>Indicadores aprobados</h3>
-    ${approvedIndicators.length ? renderIndicatorsReportHtml(approvedIndicators) : '<p>No hay indicadores aprobados todavía.</p>'}
-
-    <h3>Indicadores pendientes de decisión / ajuste</h3>
-    ${pendingIndicators.length ? renderIndicatorsReportHtml(pendingIndicators) : '<p>No hay indicadores pendientes.</p>'}
 
     <h2>Mejoras ejecutadas</h2>
     ${executedHtml}
@@ -6229,14 +5831,14 @@ function buildTechnicalHtml(){
     <h3>Beneficios esperados</h3>
     ${artifacts.benefits}
 
-    <h2>Lectura humana para Evaluador Documental</h2>
-    ${renderDocumentProposalHuman(artifacts.documentProposal)}
+    <h2>Salida para evaluador documental</h2>
+    <pre>${escapeHtml(JSON.stringify(artifacts.documentProposal, null, 2))}</pre>
 
-    <h2>Lectura humana para Integrador</h2>
-    ${renderIntegrationInputHuman({
+    <h2>Salida para integrador</h2>
+    <pre>${escapeHtml(JSON.stringify({
       integration_input: artifacts.integrationInput,
       integration_analysis_base: artifacts.integrationAnalysisBase
-    })}
+    }, null, 2))}</pre>
   `;
 }
 
@@ -6272,17 +5874,11 @@ function buildImplementationHtml(){
     <h2>Plan Modo A y Modo B</h2>
     ${artifacts.plan}
 
-    <h2>Indicadores de seguimiento aprobados</h2>
-    ${renderIndicatorsReportHtml(ensureGeneratedIndicators().filter(x => (x.status || 'pending') === 'approved')) || '<p>No hay indicadores aprobados todavía.</p>'}
+    <h2>Salida para Evaluador Documental</h2>
+    <pre>${docJson}</pre>
 
-    <h2>Lectura humana para Evaluador Documental</h2>
-    ${renderDocumentProposalHuman(artifacts.documentProposal)}
-
-    <h2>Lectura humana para Integrador</h2>
-    ${renderIntegrationInputHuman({
-      integration_input: artifacts.integrationInput,
-      integration_analysis_base: artifacts.integrationAnalysisBase
-    })}
+    <h2>Salida para Integrador</h2>
+    <pre>${integJson}</pre>
 
     <h2>Mejoras rechazadas</h2>
     ${rejectedHtml}
@@ -6331,7 +5927,6 @@ function generateResults(){
   }
   state.results.sbJson = sbContract;
   state.results.sbValidation = sbValidation;
-  state.indicators = ensureGeneratedIndicators();
   state.results.executiveHtml = buildExecutiveHtml();
   state.results.technicalHtml = buildTechnicalHtml();
   state.results.implementationHtml = buildImplementationHtml();
@@ -6342,17 +5937,15 @@ function generateResults(){
     integration_analysis_base: artifacts.integrationAnalysisBase || {}
   };
 
-  if(qs('sbJsonView')) qs('sbJsonView').textContent = JSON.stringify(state.results.sbJson, null, 2);
-  if(qs('executiveDoc')) qs('executiveDoc').innerHTML = state.results.executiveHtml;
-  if(qs('technicalDoc')) qs('technicalDoc').innerHTML = state.results.technicalHtml;
-  if(qs('implementationView')) qs('implementationView').innerHTML = state.results.implementationHtml;
-  if(qs('documentProposalView')) qs('documentProposalView').textContent = JSON.stringify(state.results.documentProposal, null, 2);
-  if(qs('integrationInputView')) qs('integrationInputView').textContent = JSON.stringify(state.results.integrationPayload, null, 2);
-  renderAVAReport();
-  renderIndicatorsHuman();
+  qs('sbJsonView').textContent = JSON.stringify(state.results.sbJson, null, 2);
+  qs('executiveDoc').innerHTML = state.results.executiveHtml;
+  qs('technicalDoc').innerHTML = state.results.technicalHtml;
+  qs('implementationView').innerHTML = state.results.implementationHtml;
+  qs('documentProposalView').textContent = JSON.stringify(state.results.documentProposal, null, 2);
+  qs('integrationInputView').textContent = JSON.stringify(state.results.integrationPayload, null, 2);
 
-  if(qs('executiveText')) qs('executiveText').value = stripHtml(state.results.executiveHtml);
-  if(qs('technicalText')) qs('technicalText').value = stripHtml(state.results.technicalHtml);
+  qs('executiveText').value = stripHtml(state.results.executiveHtml);
+  qs('technicalText').value = stripHtml(state.results.technicalHtml);
 
   if(sbValidation.warnings.length){
     showMsg('resultsMsg','warn','Resultados generados con advertencias para SIPOC Builder:\n- ' + sbValidation.warnings.join('\n- '));
