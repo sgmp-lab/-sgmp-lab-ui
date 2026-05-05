@@ -2204,11 +2204,262 @@ ${script}
   function stageDefinitions(){
     return {
       B1:{label:'B1 · Validación AS IS', stageCode:'lmp_analysis_b1', instruction:`ACTÚA COMO consultor senior en procesos y modelador AS IS.\n\nOBJETIVO B1:\nValidar, limpiar y estructurar el AS IS usando como fuente principal source_activities.\n\nREGLAS:\n- No hagas análisis de mejoras todavía.\n- No hagas AVA todavía.\n- No reduzcas ni agrupes actividades.\n- Conserva todas las actividades estructurales.\n- Corrige continuidad previous/next si hay vacíos.\n- Marca una sola actividad inicial y una sola actividad final.\n- Si source_activity_count > 1, la salida debe conservar esa misma cantidad de actividades.\n\nSALIDA JSON ESTRICTA:\n{\n  "as_is": {"activities": []},\n  "validation": {"valid": true, "activity_count": 0, "warnings": [], "blockingIssues": []}\n}`},
-      B2:{label:'B2 · Análisis AVA', stageCode:'lmp_analysis_b2', instruction:`ACTÚA COMO especialista Lean Six Sigma.\n\nOBJETIVO B2:\nClasificar cada actividad AS IS en VA, NNVA o NVA, con evidencia breve.\n\nREGLAS:\n- Usa solo las actividades recibidas.\n- No elimines ni renombres actividades.\n- No propongas mejoras todavía.\n- Devuelve distribución porcentual y detalle por actividad.\n\nSALIDA JSON ESTRICTA:\n{\n  "as_is": {"activities": []},\n  "ava": {"distribution": {"VA": 0, "NNVA": 0, "NVA": 0}, "activityAnalysis": [], "evidence": []}\n}`},
-      B3:{label:'B3 · Desperdicios y problemas', stageCode:'lmp_analysis_b3', instruction:`ACTÚA COMO experto Lean, análisis de desperdicios y diagnóstico operativo.\n\nOBJETIVO B3:\nDetectar desperdicios, problemas, riesgos, dependencias manuales, controles ocultos y evidencias desde el AS IS, el brief y el análisis AVA.\n\nREGLAS:\n- No diseñes TO BE.\n- No hagas contrato SB.\n- Cada hallazgo debe tener evidencia o actividad relacionada cuando sea posible.\n- Usa listas estructuradas, no párrafos sueltos.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "wastes": [],\n    "problems": [],\n    "risks": [],\n    "evidence_highlights": [],\n    "manual_dependencies": [],\n    "hidden_controls": [],\n    "contradictions_detected": []\n  }\n}`},
-      B4:{label:'B4 · Restricciones y causa probable', stageCode:'lmp_analysis_b4', instruction:`ACTÚA COMO especialista TOC, causa raíz y flujo operativo.\n\nOBJETIVO B4:\nIdentificar restricciones, cuellos de botella, causas probables y puntos de bloqueo del proceso.\n\nREGLAS:\n- Diferencia restricción real de problema general.\n- No propongas aún el plan TO BE completo.\n- Relaciona restricciones con actividades cuando aplique.\n- Declara brevemente la evidencia o supuesto utilizado.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "restrictions": [],\n    "suspected_constraints": [],\n    "bottlenecks": [],\n    "rootCauseHypotheses": [],\n    "controlIssues": [],\n    "dataGaps": []\n  }\n}`},
-      B5:{label:'B5 · Mejoras candidatas para TO BE', stageCode:'lmp_analysis_b5', instruction:`ACTÚA COMO consultor senior de mejora continua.\n\nOBJETIVO B5:\nConvertir hallazgos, problemas, desperdicios y restricciones en mejoras candidatas para que el usuario las apruebe, ajuste o rechace en TO BE.\n\nREGLAS:\n- No generes mejoras genéricas.\n- Cada mejora debe estar conectada a un problema, desperdicio o restricción detectada.\n- Distingue quick win, mejora gradual y proyecto estructural.\n- La salida debe alimentar directamente la pantalla TO BE.\n- Genera mejoras suficientes si existen hallazgos; no devuelvas improvements vacío salvo que no exista evidencia.\n\nSALIDA JSON ESTRICTA:\n{\n  "quickWins": [],\n  "improvements": [\n    {\n      "title": "",\n      "summary": "",\n      "problem": "",\n      "currentState": "",\n      "proposedState": "",\n      "support": "",\n      "impact": "",\n      "justification": "",\n      "type": "quick_win|gradual|strategic",\n      "status": "pending"\n    }\n  ]\n}`},
-      B6:{label:'B6 · Prompt Builder SIPOC', stageCode:'lmp_analysis_b6', instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder.\n\nOBJETIVO B6:\nConstruir el bloque sipoc_input usando el AS IS validado y los datos SIPOC disponibles.\n\nREGLAS:\n- Devuelve SOLO sipoc_input.\n- No incluyas análisis, métricas ni mejoras.\n- previous y next deben ser arrays.\n- activities debe conservar todas las actividades AS IS.\n\nSALIDA JSON ESTRICTA:\n{\n  "sipoc_input": {\n    "process_code": "",\n    "process_name": "",\n    "purpose": "",\n    "start_event": "",\n    "end_event": "",\n    "notes": "",\n    "suppliers": [],\n    "inputs": [],\n    "outputs": [],\n    "customers": [],\n    "actors": [],\n    "documents": [],\n    "activities": []\n  }\n}`}
+      B2:{label:'B2 · Análisis AVA PRO', stageCode:'lmp_analysis_b2', instruction:`ACTÚA COMO consultor senior Lean Six Sigma y especialista en análisis de valor agregado de procesos industriales y administrativos.
+
+OBJETIVO B2:
+Clasificar cada actividad AS IS en VA, NNVA o NVA con criterio metodológico real, trazabilidad y evidencia. El objetivo no es etiquetar rápido, sino construir una base confiable para detectar desperdicios, restricciones y mejoras posteriores.
+
+CRITERIOS DE CLASIFICACIÓN:
+- VA: actividad que transforma directamente el producto, servicio, información o decisión de forma que el cliente interno/externo valora y estaría dispuesto a reconocer. Debe cambiar el estado del entregable del proceso.
+- NNVA: actividad que no agrega valor percibido por el cliente, pero hoy es necesaria por norma, control, trazabilidad, riesgo, sistema, requisito financiero, inocuidad, seguridad, aprobación o cumplimiento.
+- NVA: actividad que no agrega valor y no debería ser necesaria; incluye espera, duplicidad, búsqueda, retrabajo, traslado innecesario, captura redundante, validación repetida, aprobación sin criterio claro o seguimiento manual evitable.
+
+REGLAS:
+- Usa únicamente las actividades recibidas en source_activities o el AS IS validado de B1.
+- No elimines, no renombres y no agrupes actividades.
+- Devuelve una clasificación por cada actividad.
+- No propongas mejoras todavía. Puedes registrar oportunidades preliminares solo como señales, no como soluciones.
+- Si una actividad parece VA pero existe por falla de diseño, clasifícala como NNVA o NVA según corresponda y explica el criterio.
+- Si no hay suficiente evidencia, conserva la actividad y usa confidence menor, no inventes datos.
+- Calcula distribución por conteo de actividades, no por tiempo, salvo que existan tiempos explícitos.
+
+SALIDA JSON ESTRICTA:
+{
+  "as_is": {
+    "activities": [
+      {
+        "id": "",
+        "name": "",
+        "actor": "",
+        "type": "operation|decision|control|document",
+        "ava_classification": "VA|NNVA|NVA",
+        "ava_reason": "",
+        "customer_value_logic": "",
+        "necessity_logic": "",
+        "confidence": "high|medium|low"
+      }
+    ]
+  },
+  "ava": {
+    "distribution": {"VA": 0, "NNVA": 0, "NVA": 0},
+    "distribution_percent": {"VA": 0, "NNVA": 0, "NVA": 0},
+    "activityAnalysis": [],
+    "criticalObservations": [],
+    "dataGaps": []
+  }
+}`},
+      B3:{label:'B3 · Desperdicios y problemas PRO', stageCode:'lmp_analysis_b3', instruction:`ACTÚA COMO consultor senior Lean Manufacturing, Lean Office y diagnóstico operativo, con experiencia en procesos industriales, compras, logística, calidad, mantenimiento y administración.
+
+OBJETIVO B3:
+Detectar desperdicios Lean, problemas operativos, riesgos, dependencias manuales, controles ocultos y contradicciones usando el AS IS validado y el análisis AVA. El resultado debe servir como insumo confiable para restricciones y mejoras, no como una lista genérica.
+
+TIPOS DE DESPERDICIO A CONSIDERAR:
+- Espera
+- Sobreproceso
+- Retrabajo / defectos
+- Movimiento o traslado innecesario
+- Inventario o acumulación
+- Transporte innecesario
+- Sobreproducción / generación anticipada
+- Talento no aprovechado
+- Búsqueda de información / fragmentación documental
+- Captura manual o doble registro
+- Aprobaciones sin criterio claro
+
+REGLAS:
+- No diseñes TO BE todavía.
+- No hagas contrato SB.
+- Cada hallazgo debe conectarse con una o más actividades por id o nombre.
+- Diferencia síntoma, problema, evidencia e impacto probable.
+- No repitas el mismo hallazgo con palabras distintas. Consolida duplicados.
+- Prioriza hallazgos por impacto operacional probable: alto, medio, bajo.
+- Si el desperdicio es inferido, declara el supuesto.
+- Si no hay evidencia suficiente, registra dataGaps en lugar de inventar.
+
+SALIDA JSON ESTRICTA:
+{
+  "findings": {
+    "wastes": [
+      {
+        "id": "W-01",
+        "waste_type": "",
+        "description": "",
+        "related_activities": [],
+        "evidence": "",
+        "probable_impact": "high|medium|low",
+        "assumption": ""
+      }
+    ],
+    "problems": [
+      {
+        "id": "P-01",
+        "problem": "",
+        "symptom": "",
+        "related_activities": [],
+        "impact": "",
+        "priority": "high|medium|low"
+      }
+    ],
+    "risks": [],
+    "evidence_highlights": [],
+    "manual_dependencies": [],
+    "hidden_controls": [],
+    "contradictions_detected": [],
+    "dataGaps": []
+  }
+}`},
+      B4:{label:'B4 · Restricciones y causa probable PRO', stageCode:'lmp_analysis_b4', instruction:`ACTÚA COMO especialista senior en Teoría de Restricciones, causa raíz, gestión por procesos y flujo operativo.
+
+OBJETIVO B4:
+Identificar restricciones reales o probables, cuellos de botella, políticas limitantes, puntos de bloqueo, causas probables y efectos sobre el flujo. El resultado debe diferenciar claramente síntoma, problema, restricción y causa raíz probable.
+
+CRITERIOS TOC:
+- Restricción física: capacidad, recurso, proveedor, equipo, espacio, sistema o disponibilidad que limita el flujo.
+- Restricción de política: regla, aprobación, rol, criterio, procedimiento, autorización o gobernanza que limita decisiones o genera espera.
+- Restricción de información: dato incompleto, sistema no integrado, documento no actualizado o trazabilidad débil que impide avanzar.
+- Restricción de mercado/demanda: no aplicar salvo evidencia clara.
+- Un cuello de botella no siempre es la restricción del sistema. Declara si es restricción confirmada o sospechada.
+
+REGLAS:
+- Usa B1, B2 y B3 como insumos.
+- No propongas aún el plan TO BE completo; puedes sugerir dirección de solución, no diseño detallado.
+- Relaciona cada restricción con actividades, desperdicios o problemas previos.
+- Prioriza máximo 3 restricciones principales, salvo que exista evidencia fuerte de más.
+- Declara evidencia, supuesto, efecto en flujo y prueba de validación recomendada.
+- No confundas falta de liderazgo, falta de capacitación o sistema débil con causa raíz sin explicar el mecanismo.
+
+SALIDA JSON ESTRICTA:
+{
+  "findings": {
+    "restrictions": [
+      {
+        "id": "R-01",
+        "restriction": "",
+        "type": "physical|policy|information|capacity|supplier|system|governance",
+        "status": "confirmed|suspected",
+        "related_activities": [],
+        "linked_wastes_or_problems": [],
+        "evidence": "",
+        "flow_effect": "",
+        "root_cause_hypothesis": "",
+        "validation_test": "",
+        "priority": "high|medium|low"
+      }
+    ],
+    "suspected_constraints": [],
+    "bottlenecks": [],
+    "rootCauseHypotheses": [],
+    "controlIssues": [],
+    "dataGaps": []
+  }
+}`},
+      B5:{label:'B5 · Mejoras candidatas para TO BE PRO', stageCode:'lmp_analysis_b5', instruction:`ACTÚA COMO consultor senior de mejora continua, diseño TO BE, Lean Six Sigma, TOC y gestión por procesos, con criterio práctico de implementación.
+
+OBJETIVO B5:
+Convertir hallazgos, desperdicios, problemas, riesgos y restricciones en mejoras candidatas concretas para que el usuario las apruebe, personalice o rechace en TO BE. Cada mejora debe ser accionable, contextualizada y sustentada en una buena práctica lógica de la industria analizada o de otra industria aplicable.
+
+REGLAS CRÍTICAS:
+- Prohibido generar frases genéricas como eliminar la restricción, mejorar el control, fortalecer la gestión o reducir el problema sin explicar cómo.
+- Cada mejora debe resolver un problema, desperdicio o restricción específica.
+- Cada mejora debe explicar la práctica recomendada y cómo implementarla.
+- Distingue quick win, mejora gradual y proyecto estructural.
+- Toda mejora debe venir con defaultDecision = execute, salvo que exista evidencia para sugerir personalización o rechazo.
+- Genera mejoras suficientes si existen hallazgos; no devuelvas improvements vacío salvo ausencia total de evidencia.
+- Si una restricción es de política, propone gobernanza, RACI, dueño de proceso, regla de decisión o rediseño de aprobación.
+- Si una restricción es de información, propone catálogo, dato maestro, integración, tablero, registro único o estandarización documental.
+- Si una restricción es de capacidad, propone balanceo, redistribución, automatización, secuenciación o control de carga.
+
+SALIDA JSON ESTRICTA:
+{
+  "quickWins": [
+    {
+      "title": "",
+      "action": "",
+      "related_problem": "",
+      "expected_benefit": "",
+      "owner_suggestion": "",
+      "effort": "low|medium|high"
+    }
+  ],
+  "improvements": [
+    {
+      "title": "",
+      "summary": "",
+      "problem": "",
+      "currentState": "",
+      "proposedState": "",
+      "goodPractice": "",
+      "implementation": "",
+      "owner_suggestion": "",
+      "impact": "",
+      "justification": "",
+      "sourceFindingId": "",
+      "type": "quick_win|gradual|strategic",
+      "effort": "low|medium|high",
+      "priority": "high|medium|low",
+      "defaultDecision": "execute",
+      "status": "execute"
+    }
+  ],
+  "dataGaps": []
+}`},
+      B6:{label:'B6 · Prompt Builder SIPOC PRO', stageCode:'lmp_analysis_b6', instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder y validador de contrato JSON.
+
+OBJETIVO B6:
+Construir el bloque sipoc_input final usando el AS IS validado, el brief, el SIPOC disponible y los resultados de análisis. Este output será consumido por el módulo SB, por lo tanto debe ser estable, limpio y contractual.
+
+REGLAS CRÍTICAS:
+- Devuelve SOLO un objeto JSON con la clave sipoc_input.
+- No incluyas análisis, métricas, informes ni mejoras dentro de sipoc_input.
+- activities debe conservar todas las actividades AS IS validadas.
+- No reduzcas, no agrupes y no renombres actividades salvo corrección menor de claridad.
+- previous y next deben ser arrays de nombres exactos de actividades existentes.
+- Debe existir exactamente una actividad con is_start = true y exactamente una con is_end = true.
+- Si documents está vacío, intenta poblarlo desde brief.sipoc.documentsSystems, documentos mencionados o sistemas detectados, sin inventar códigos.
+- actors debe contener solo roles del proceso, no personas salvo que el insumo lo exija.
+- suppliers, inputs, outputs y customers deben ser arrays limpios y sin duplicados.
+- Si existe una advertencia, colócala en notes, no fuera del JSON.
+
+VALIDACIÓN INTERNA ANTES DE RESPONDER:
+- ¿Todas las actividades están conectadas o justificadas?
+- ¿previous y next apuntan a actividades existentes?
+- ¿No hay nodos duplicados por id o nombre?
+- ¿El contrato usa sipoc_input y no structured_process?
+
+SALIDA JSON ESTRICTA:
+{
+  "sipoc_input": {
+    "process_code": "",
+    "process_name": "",
+    "purpose": "",
+    "start_event": "",
+    "end_event": "",
+    "notes": "",
+    "suppliers": [],
+    "inputs": [],
+    "outputs": [],
+    "customers": [],
+    "actors": [],
+    "documents": [],
+    "activities": [
+      {
+        "name": "",
+        "type": "operation|decision|control|document",
+        "actor": "",
+        "document": "",
+        "previous": [],
+        "next": [],
+        "ext_suppliers": [],
+        "ext_inputs": [],
+        "ext_outputs": [],
+        "ext_customers": [],
+        "is_start": false,
+        "is_end": false,
+        "note": ""
+      }
+    ]
+  }
+}`}
     };
   }
   window.sgmpGetAnalysisStageDefinitions = stageDefinitions;
@@ -4555,11 +4806,262 @@ function printDoc(id, title){
   function stageDefinitions(){
     return {
       B1:{label:'B1 · Validación AS IS', stageCode:'lmp_analysis_b1', instruction:`ACTÚA COMO consultor senior en procesos y modelador AS IS.\n\nOBJETIVO B1:\nValidar, limpiar y estructurar el AS IS usando como fuente principal source_activities.\n\nREGLAS:\n- No hagas análisis de mejoras todavía.\n- No hagas AVA todavía.\n- No reduzcas ni agrupes actividades.\n- Conserva todas las actividades estructurales.\n- Corrige continuidad previous/next si hay vacíos.\n- Marca una sola actividad inicial y una sola actividad final.\n- Si source_activity_count > 1, la salida debe conservar esa misma cantidad de actividades.\n\nSALIDA JSON ESTRICTA:\n{\n  "as_is": {"activities": []},\n  "validation": {"valid": true, "activity_count": 0, "warnings": [], "blockingIssues": []}\n}`},
-      B2:{label:'B2 · Análisis AVA', stageCode:'lmp_analysis_b2', instruction:`ACTÚA COMO especialista Lean Six Sigma.\n\nOBJETIVO B2:\nClasificar cada actividad AS IS en VA, NNVA o NVA, con evidencia breve.\n\nREGLAS:\n- Usa solo las actividades recibidas.\n- No elimines ni renombres actividades.\n- No propongas mejoras todavía.\n- Devuelve distribución porcentual y detalle por actividad.\n\nSALIDA JSON ESTRICTA:\n{\n  "as_is": {"activities": []},\n  "ava": {"distribution": {"VA": 0, "NNVA": 0, "NVA": 0}, "activityAnalysis": [], "evidence": []}\n}`},
-      B3:{label:'B3 · Desperdicios y problemas', stageCode:'lmp_analysis_b3', instruction:`ACTÚA COMO experto Lean, análisis de desperdicios y diagnóstico operativo.\n\nOBJETIVO B3:\nDetectar desperdicios, problemas, riesgos, dependencias manuales, controles ocultos y evidencias desde el AS IS, el brief y el análisis AVA.\n\nREGLAS:\n- No diseñes TO BE.\n- No hagas contrato SB.\n- Cada hallazgo debe tener evidencia o actividad relacionada cuando sea posible.\n- Usa listas estructuradas, no párrafos sueltos.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "wastes": [],\n    "problems": [],\n    "risks": [],\n    "evidence_highlights": [],\n    "manual_dependencies": [],\n    "hidden_controls": [],\n    "contradictions_detected": []\n  }\n}`},
-      B4:{label:'B4 · Restricciones y causa probable', stageCode:'lmp_analysis_b4', instruction:`ACTÚA COMO especialista TOC, causa raíz y flujo operativo.\n\nOBJETIVO B4:\nIdentificar restricciones, cuellos de botella, causas probables y puntos de bloqueo del proceso.\n\nREGLAS:\n- Diferencia restricción real de problema general.\n- No propongas aún el plan TO BE completo.\n- Relaciona restricciones con actividades cuando aplique.\n- Declara brevemente la evidencia o supuesto utilizado.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "restrictions": [],\n    "suspected_constraints": [],\n    "bottlenecks": [],\n    "rootCauseHypotheses": [],\n    "controlIssues": [],\n    "dataGaps": []\n  }\n}`},
-      B5:{label:'B5 · Mejoras candidatas para TO BE', stageCode:'lmp_analysis_b5', instruction:`ACTÚA COMO consultor senior de mejora continua.\n\nOBJETIVO B5:\nConvertir hallazgos, problemas, desperdicios y restricciones en mejoras candidatas para que el usuario las apruebe, ajuste o rechace en TO BE.\n\nREGLAS:\n- No generes mejoras genéricas.\n- Cada mejora debe estar conectada a un problema, desperdicio o restricción detectada.\n- Distingue quick win, mejora gradual y proyecto estructural.\n- La salida debe alimentar directamente la pantalla TO BE.\n- Genera mejoras suficientes si existen hallazgos; no devuelvas improvements vacío salvo que no exista evidencia.\n\nSALIDA JSON ESTRICTA:\n{\n  "quickWins": [],\n  "improvements": [\n    {\n      "title": "",\n      "summary": "",\n      "problem": "",\n      "currentState": "",\n      "proposedState": "",\n      "support": "",\n      "impact": "",\n      "justification": "",\n      "type": "quick_win|gradual|strategic",\n      "status": "pending"\n    }\n  ]\n}`},
-      B6:{label:'B6 · Prompt Builder SIPOC', stageCode:'lmp_analysis_b6', instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder.\n\nOBJETIVO B6:\nConstruir el bloque sipoc_input usando el AS IS validado y los datos SIPOC disponibles.\n\nREGLAS:\n- Devuelve SOLO sipoc_input.\n- No incluyas análisis, métricas ni mejoras.\n- previous y next deben ser arrays.\n- activities debe conservar todas las actividades AS IS.\n\nSALIDA JSON ESTRICTA:\n{\n  "sipoc_input": {\n    "process_code": "",\n    "process_name": "",\n    "purpose": "",\n    "start_event": "",\n    "end_event": "",\n    "notes": "",\n    "suppliers": [],\n    "inputs": [],\n    "outputs": [],\n    "customers": [],\n    "actors": [],\n    "documents": [],\n    "activities": []\n  }\n}`}
+      B2:{label:'B2 · Análisis AVA PRO', stageCode:'lmp_analysis_b2', instruction:`ACTÚA COMO consultor senior Lean Six Sigma y especialista en análisis de valor agregado de procesos industriales y administrativos.
+
+OBJETIVO B2:
+Clasificar cada actividad AS IS en VA, NNVA o NVA con criterio metodológico real, trazabilidad y evidencia. El objetivo no es etiquetar rápido, sino construir una base confiable para detectar desperdicios, restricciones y mejoras posteriores.
+
+CRITERIOS DE CLASIFICACIÓN:
+- VA: actividad que transforma directamente el producto, servicio, información o decisión de forma que el cliente interno/externo valora y estaría dispuesto a reconocer. Debe cambiar el estado del entregable del proceso.
+- NNVA: actividad que no agrega valor percibido por el cliente, pero hoy es necesaria por norma, control, trazabilidad, riesgo, sistema, requisito financiero, inocuidad, seguridad, aprobación o cumplimiento.
+- NVA: actividad que no agrega valor y no debería ser necesaria; incluye espera, duplicidad, búsqueda, retrabajo, traslado innecesario, captura redundante, validación repetida, aprobación sin criterio claro o seguimiento manual evitable.
+
+REGLAS:
+- Usa únicamente las actividades recibidas en source_activities o el AS IS validado de B1.
+- No elimines, no renombres y no agrupes actividades.
+- Devuelve una clasificación por cada actividad.
+- No propongas mejoras todavía. Puedes registrar oportunidades preliminares solo como señales, no como soluciones.
+- Si una actividad parece VA pero existe por falla de diseño, clasifícala como NNVA o NVA según corresponda y explica el criterio.
+- Si no hay suficiente evidencia, conserva la actividad y usa confidence menor, no inventes datos.
+- Calcula distribución por conteo de actividades, no por tiempo, salvo que existan tiempos explícitos.
+
+SALIDA JSON ESTRICTA:
+{
+  "as_is": {
+    "activities": [
+      {
+        "id": "",
+        "name": "",
+        "actor": "",
+        "type": "operation|decision|control|document",
+        "ava_classification": "VA|NNVA|NVA",
+        "ava_reason": "",
+        "customer_value_logic": "",
+        "necessity_logic": "",
+        "confidence": "high|medium|low"
+      }
+    ]
+  },
+  "ava": {
+    "distribution": {"VA": 0, "NNVA": 0, "NVA": 0},
+    "distribution_percent": {"VA": 0, "NNVA": 0, "NVA": 0},
+    "activityAnalysis": [],
+    "criticalObservations": [],
+    "dataGaps": []
+  }
+}`},
+      B3:{label:'B3 · Desperdicios y problemas PRO', stageCode:'lmp_analysis_b3', instruction:`ACTÚA COMO consultor senior Lean Manufacturing, Lean Office y diagnóstico operativo, con experiencia en procesos industriales, compras, logística, calidad, mantenimiento y administración.
+
+OBJETIVO B3:
+Detectar desperdicios Lean, problemas operativos, riesgos, dependencias manuales, controles ocultos y contradicciones usando el AS IS validado y el análisis AVA. El resultado debe servir como insumo confiable para restricciones y mejoras, no como una lista genérica.
+
+TIPOS DE DESPERDICIO A CONSIDERAR:
+- Espera
+- Sobreproceso
+- Retrabajo / defectos
+- Movimiento o traslado innecesario
+- Inventario o acumulación
+- Transporte innecesario
+- Sobreproducción / generación anticipada
+- Talento no aprovechado
+- Búsqueda de información / fragmentación documental
+- Captura manual o doble registro
+- Aprobaciones sin criterio claro
+
+REGLAS:
+- No diseñes TO BE todavía.
+- No hagas contrato SB.
+- Cada hallazgo debe conectarse con una o más actividades por id o nombre.
+- Diferencia síntoma, problema, evidencia e impacto probable.
+- No repitas el mismo hallazgo con palabras distintas. Consolida duplicados.
+- Prioriza hallazgos por impacto operacional probable: alto, medio, bajo.
+- Si el desperdicio es inferido, declara el supuesto.
+- Si no hay evidencia suficiente, registra dataGaps en lugar de inventar.
+
+SALIDA JSON ESTRICTA:
+{
+  "findings": {
+    "wastes": [
+      {
+        "id": "W-01",
+        "waste_type": "",
+        "description": "",
+        "related_activities": [],
+        "evidence": "",
+        "probable_impact": "high|medium|low",
+        "assumption": ""
+      }
+    ],
+    "problems": [
+      {
+        "id": "P-01",
+        "problem": "",
+        "symptom": "",
+        "related_activities": [],
+        "impact": "",
+        "priority": "high|medium|low"
+      }
+    ],
+    "risks": [],
+    "evidence_highlights": [],
+    "manual_dependencies": [],
+    "hidden_controls": [],
+    "contradictions_detected": [],
+    "dataGaps": []
+  }
+}`},
+      B4:{label:'B4 · Restricciones y causa probable PRO', stageCode:'lmp_analysis_b4', instruction:`ACTÚA COMO especialista senior en Teoría de Restricciones, causa raíz, gestión por procesos y flujo operativo.
+
+OBJETIVO B4:
+Identificar restricciones reales o probables, cuellos de botella, políticas limitantes, puntos de bloqueo, causas probables y efectos sobre el flujo. El resultado debe diferenciar claramente síntoma, problema, restricción y causa raíz probable.
+
+CRITERIOS TOC:
+- Restricción física: capacidad, recurso, proveedor, equipo, espacio, sistema o disponibilidad que limita el flujo.
+- Restricción de política: regla, aprobación, rol, criterio, procedimiento, autorización o gobernanza que limita decisiones o genera espera.
+- Restricción de información: dato incompleto, sistema no integrado, documento no actualizado o trazabilidad débil que impide avanzar.
+- Restricción de mercado/demanda: no aplicar salvo evidencia clara.
+- Un cuello de botella no siempre es la restricción del sistema. Declara si es restricción confirmada o sospechada.
+
+REGLAS:
+- Usa B1, B2 y B3 como insumos.
+- No propongas aún el plan TO BE completo; puedes sugerir dirección de solución, no diseño detallado.
+- Relaciona cada restricción con actividades, desperdicios o problemas previos.
+- Prioriza máximo 3 restricciones principales, salvo que exista evidencia fuerte de más.
+- Declara evidencia, supuesto, efecto en flujo y prueba de validación recomendada.
+- No confundas falta de liderazgo, falta de capacitación o sistema débil con causa raíz sin explicar el mecanismo.
+
+SALIDA JSON ESTRICTA:
+{
+  "findings": {
+    "restrictions": [
+      {
+        "id": "R-01",
+        "restriction": "",
+        "type": "physical|policy|information|capacity|supplier|system|governance",
+        "status": "confirmed|suspected",
+        "related_activities": [],
+        "linked_wastes_or_problems": [],
+        "evidence": "",
+        "flow_effect": "",
+        "root_cause_hypothesis": "",
+        "validation_test": "",
+        "priority": "high|medium|low"
+      }
+    ],
+    "suspected_constraints": [],
+    "bottlenecks": [],
+    "rootCauseHypotheses": [],
+    "controlIssues": [],
+    "dataGaps": []
+  }
+}`},
+      B5:{label:'B5 · Mejoras candidatas para TO BE PRO', stageCode:'lmp_analysis_b5', instruction:`ACTÚA COMO consultor senior de mejora continua, diseño TO BE, Lean Six Sigma, TOC y gestión por procesos, con criterio práctico de implementación.
+
+OBJETIVO B5:
+Convertir hallazgos, desperdicios, problemas, riesgos y restricciones en mejoras candidatas concretas para que el usuario las apruebe, personalice o rechace en TO BE. Cada mejora debe ser accionable, contextualizada y sustentada en una buena práctica lógica de la industria analizada o de otra industria aplicable.
+
+REGLAS CRÍTICAS:
+- Prohibido generar frases genéricas como eliminar la restricción, mejorar el control, fortalecer la gestión o reducir el problema sin explicar cómo.
+- Cada mejora debe resolver un problema, desperdicio o restricción específica.
+- Cada mejora debe explicar la práctica recomendada y cómo implementarla.
+- Distingue quick win, mejora gradual y proyecto estructural.
+- Toda mejora debe venir con defaultDecision = execute, salvo que exista evidencia para sugerir personalización o rechazo.
+- Genera mejoras suficientes si existen hallazgos; no devuelvas improvements vacío salvo ausencia total de evidencia.
+- Si una restricción es de política, propone gobernanza, RACI, dueño de proceso, regla de decisión o rediseño de aprobación.
+- Si una restricción es de información, propone catálogo, dato maestro, integración, tablero, registro único o estandarización documental.
+- Si una restricción es de capacidad, propone balanceo, redistribución, automatización, secuenciación o control de carga.
+
+SALIDA JSON ESTRICTA:
+{
+  "quickWins": [
+    {
+      "title": "",
+      "action": "",
+      "related_problem": "",
+      "expected_benefit": "",
+      "owner_suggestion": "",
+      "effort": "low|medium|high"
+    }
+  ],
+  "improvements": [
+    {
+      "title": "",
+      "summary": "",
+      "problem": "",
+      "currentState": "",
+      "proposedState": "",
+      "goodPractice": "",
+      "implementation": "",
+      "owner_suggestion": "",
+      "impact": "",
+      "justification": "",
+      "sourceFindingId": "",
+      "type": "quick_win|gradual|strategic",
+      "effort": "low|medium|high",
+      "priority": "high|medium|low",
+      "defaultDecision": "execute",
+      "status": "execute"
+    }
+  ],
+  "dataGaps": []
+}`},
+      B6:{label:'B6 · Prompt Builder SIPOC PRO', stageCode:'lmp_analysis_b6', instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder y validador de contrato JSON.
+
+OBJETIVO B6:
+Construir el bloque sipoc_input final usando el AS IS validado, el brief, el SIPOC disponible y los resultados de análisis. Este output será consumido por el módulo SB, por lo tanto debe ser estable, limpio y contractual.
+
+REGLAS CRÍTICAS:
+- Devuelve SOLO un objeto JSON con la clave sipoc_input.
+- No incluyas análisis, métricas, informes ni mejoras dentro de sipoc_input.
+- activities debe conservar todas las actividades AS IS validadas.
+- No reduzcas, no agrupes y no renombres actividades salvo corrección menor de claridad.
+- previous y next deben ser arrays de nombres exactos de actividades existentes.
+- Debe existir exactamente una actividad con is_start = true y exactamente una con is_end = true.
+- Si documents está vacío, intenta poblarlo desde brief.sipoc.documentsSystems, documentos mencionados o sistemas detectados, sin inventar códigos.
+- actors debe contener solo roles del proceso, no personas salvo que el insumo lo exija.
+- suppliers, inputs, outputs y customers deben ser arrays limpios y sin duplicados.
+- Si existe una advertencia, colócala en notes, no fuera del JSON.
+
+VALIDACIÓN INTERNA ANTES DE RESPONDER:
+- ¿Todas las actividades están conectadas o justificadas?
+- ¿previous y next apuntan a actividades existentes?
+- ¿No hay nodos duplicados por id o nombre?
+- ¿El contrato usa sipoc_input y no structured_process?
+
+SALIDA JSON ESTRICTA:
+{
+  "sipoc_input": {
+    "process_code": "",
+    "process_name": "",
+    "purpose": "",
+    "start_event": "",
+    "end_event": "",
+    "notes": "",
+    "suppliers": [],
+    "inputs": [],
+    "outputs": [],
+    "customers": [],
+    "actors": [],
+    "documents": [],
+    "activities": [
+      {
+        "name": "",
+        "type": "operation|decision|control|document",
+        "actor": "",
+        "document": "",
+        "previous": [],
+        "next": [],
+        "ext_suppliers": [],
+        "ext_inputs": [],
+        "ext_outputs": [],
+        "ext_customers": [],
+        "is_start": false,
+        "is_end": false,
+        "note": ""
+      }
+    ]
+  }
+}`}
     };
   }
   window.sgmpGetAnalysisStageDefinitions = stageDefinitions;
@@ -10799,11 +11301,262 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
   function stageDefinitions(){
     return {
       B1:{label:'B1 · Validación AS IS', stageCode:'lmp_analysis_b1', instruction:`ACTÚA COMO consultor senior en procesos y modelador AS IS.\n\nOBJETIVO B1:\nValidar, limpiar y estructurar el AS IS usando como fuente principal source_activities.\n\nREGLAS:\n- No hagas análisis de mejoras todavía.\n- No hagas AVA todavía.\n- No reduzcas ni agrupes actividades.\n- Conserva todas las actividades estructurales.\n- Corrige continuidad previous/next si hay vacíos.\n- Marca una sola actividad inicial y una sola actividad final.\n- Si source_activity_count > 1, la salida debe conservar esa misma cantidad de actividades.\n\nSALIDA JSON ESTRICTA:\n{\n  "as_is": {"activities": []},\n  "validation": {"valid": true, "activity_count": 0, "warnings": [], "blockingIssues": []}\n}`},
-      B2:{label:'B2 · Análisis AVA', stageCode:'lmp_analysis_b2', instruction:`ACTÚA COMO especialista Lean Six Sigma.\n\nOBJETIVO B2:\nClasificar cada actividad AS IS en VA, NNVA o NVA, con evidencia breve.\n\nREGLAS:\n- Usa solo las actividades recibidas.\n- No elimines ni renombres actividades.\n- No propongas mejoras todavía.\n- Devuelve distribución porcentual y detalle por actividad.\n\nSALIDA JSON ESTRICTA:\n{\n  "as_is": {"activities": []},\n  "ava": {"distribution": {"VA": 0, "NNVA": 0, "NVA": 0}, "activityAnalysis": [], "evidence": []}\n}`},
-      B3:{label:'B3 · Desperdicios y problemas', stageCode:'lmp_analysis_b3', instruction:`ACTÚA COMO experto Lean, análisis de desperdicios y diagnóstico operativo.\n\nOBJETIVO B3:\nDetectar desperdicios, problemas, riesgos, dependencias manuales, controles ocultos y evidencias desde el AS IS, el brief y el análisis AVA.\n\nREGLAS:\n- No diseñes TO BE.\n- No hagas contrato SB.\n- Cada hallazgo debe tener evidencia o actividad relacionada cuando sea posible.\n- Usa listas estructuradas, no párrafos sueltos.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "wastes": [],\n    "problems": [],\n    "risks": [],\n    "evidence_highlights": [],\n    "manual_dependencies": [],\n    "hidden_controls": [],\n    "contradictions_detected": []\n  }\n}`},
-      B4:{label:'B4 · Restricciones y causa probable', stageCode:'lmp_analysis_b4', instruction:`ACTÚA COMO especialista TOC, causa raíz y flujo operativo.\n\nOBJETIVO B4:\nIdentificar restricciones, cuellos de botella, causas probables y puntos de bloqueo del proceso.\n\nREGLAS:\n- Diferencia restricción real de problema general.\n- No propongas aún el plan TO BE completo.\n- Relaciona restricciones con actividades cuando aplique.\n- Declara brevemente la evidencia o supuesto utilizado.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "restrictions": [],\n    "suspected_constraints": [],\n    "bottlenecks": [],\n    "rootCauseHypotheses": [],\n    "controlIssues": [],\n    "dataGaps": []\n  }\n}`},
-      B5:{label:'B5 · Mejoras candidatas para TO BE', stageCode:'lmp_analysis_b5', instruction:`ACTÚA COMO consultor senior de mejora continua.\n\nOBJETIVO B5:\nConvertir hallazgos, problemas, desperdicios y restricciones en mejoras candidatas para que el usuario las apruebe, ajuste o rechace en TO BE.\n\nREGLAS:\n- No generes mejoras genéricas.\n- Cada mejora debe estar conectada a un problema, desperdicio o restricción detectada.\n- Distingue quick win, mejora gradual y proyecto estructural.\n- La salida debe alimentar directamente la pantalla TO BE.\n- Genera mejoras suficientes si existen hallazgos; no devuelvas improvements vacío salvo que no exista evidencia.\n\nSALIDA JSON ESTRICTA:\n{\n  "quickWins": [],\n  "improvements": [\n    {\n      "title": "",\n      "summary": "",\n      "problem": "",\n      "currentState": "",\n      "proposedState": "",\n      "support": "",\n      "impact": "",\n      "justification": "",\n      "type": "quick_win|gradual|strategic",\n      "status": "pending"\n    }\n  ]\n}`},
-      B6:{label:'B6 · Prompt Builder SIPOC', stageCode:'lmp_analysis_b6', instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder.\n\nOBJETIVO B6:\nConstruir el bloque sipoc_input usando el AS IS validado y los datos SIPOC disponibles.\n\nREGLAS:\n- Devuelve SOLO sipoc_input.\n- No incluyas análisis, métricas ni mejoras.\n- previous y next deben ser arrays.\n- activities debe conservar todas las actividades AS IS.\n\nSALIDA JSON ESTRICTA:\n{\n  "sipoc_input": {\n    "process_code": "",\n    "process_name": "",\n    "purpose": "",\n    "start_event": "",\n    "end_event": "",\n    "notes": "",\n    "suppliers": [],\n    "inputs": [],\n    "outputs": [],\n    "customers": [],\n    "actors": [],\n    "documents": [],\n    "activities": []\n  }\n}`}
+      B2:{label:'B2 · Análisis AVA PRO', stageCode:'lmp_analysis_b2', instruction:`ACTÚA COMO consultor senior Lean Six Sigma y especialista en análisis de valor agregado de procesos industriales y administrativos.
+
+OBJETIVO B2:
+Clasificar cada actividad AS IS en VA, NNVA o NVA con criterio metodológico real, trazabilidad y evidencia. El objetivo no es etiquetar rápido, sino construir una base confiable para detectar desperdicios, restricciones y mejoras posteriores.
+
+CRITERIOS DE CLASIFICACIÓN:
+- VA: actividad que transforma directamente el producto, servicio, información o decisión de forma que el cliente interno/externo valora y estaría dispuesto a reconocer. Debe cambiar el estado del entregable del proceso.
+- NNVA: actividad que no agrega valor percibido por el cliente, pero hoy es necesaria por norma, control, trazabilidad, riesgo, sistema, requisito financiero, inocuidad, seguridad, aprobación o cumplimiento.
+- NVA: actividad que no agrega valor y no debería ser necesaria; incluye espera, duplicidad, búsqueda, retrabajo, traslado innecesario, captura redundante, validación repetida, aprobación sin criterio claro o seguimiento manual evitable.
+
+REGLAS:
+- Usa únicamente las actividades recibidas en source_activities o el AS IS validado de B1.
+- No elimines, no renombres y no agrupes actividades.
+- Devuelve una clasificación por cada actividad.
+- No propongas mejoras todavía. Puedes registrar oportunidades preliminares solo como señales, no como soluciones.
+- Si una actividad parece VA pero existe por falla de diseño, clasifícala como NNVA o NVA según corresponda y explica el criterio.
+- Si no hay suficiente evidencia, conserva la actividad y usa confidence menor, no inventes datos.
+- Calcula distribución por conteo de actividades, no por tiempo, salvo que existan tiempos explícitos.
+
+SALIDA JSON ESTRICTA:
+{
+  "as_is": {
+    "activities": [
+      {
+        "id": "",
+        "name": "",
+        "actor": "",
+        "type": "operation|decision|control|document",
+        "ava_classification": "VA|NNVA|NVA",
+        "ava_reason": "",
+        "customer_value_logic": "",
+        "necessity_logic": "",
+        "confidence": "high|medium|low"
+      }
+    ]
+  },
+  "ava": {
+    "distribution": {"VA": 0, "NNVA": 0, "NVA": 0},
+    "distribution_percent": {"VA": 0, "NNVA": 0, "NVA": 0},
+    "activityAnalysis": [],
+    "criticalObservations": [],
+    "dataGaps": []
+  }
+}`},
+      B3:{label:'B3 · Desperdicios y problemas PRO', stageCode:'lmp_analysis_b3', instruction:`ACTÚA COMO consultor senior Lean Manufacturing, Lean Office y diagnóstico operativo, con experiencia en procesos industriales, compras, logística, calidad, mantenimiento y administración.
+
+OBJETIVO B3:
+Detectar desperdicios Lean, problemas operativos, riesgos, dependencias manuales, controles ocultos y contradicciones usando el AS IS validado y el análisis AVA. El resultado debe servir como insumo confiable para restricciones y mejoras, no como una lista genérica.
+
+TIPOS DE DESPERDICIO A CONSIDERAR:
+- Espera
+- Sobreproceso
+- Retrabajo / defectos
+- Movimiento o traslado innecesario
+- Inventario o acumulación
+- Transporte innecesario
+- Sobreproducción / generación anticipada
+- Talento no aprovechado
+- Búsqueda de información / fragmentación documental
+- Captura manual o doble registro
+- Aprobaciones sin criterio claro
+
+REGLAS:
+- No diseñes TO BE todavía.
+- No hagas contrato SB.
+- Cada hallazgo debe conectarse con una o más actividades por id o nombre.
+- Diferencia síntoma, problema, evidencia e impacto probable.
+- No repitas el mismo hallazgo con palabras distintas. Consolida duplicados.
+- Prioriza hallazgos por impacto operacional probable: alto, medio, bajo.
+- Si el desperdicio es inferido, declara el supuesto.
+- Si no hay evidencia suficiente, registra dataGaps en lugar de inventar.
+
+SALIDA JSON ESTRICTA:
+{
+  "findings": {
+    "wastes": [
+      {
+        "id": "W-01",
+        "waste_type": "",
+        "description": "",
+        "related_activities": [],
+        "evidence": "",
+        "probable_impact": "high|medium|low",
+        "assumption": ""
+      }
+    ],
+    "problems": [
+      {
+        "id": "P-01",
+        "problem": "",
+        "symptom": "",
+        "related_activities": [],
+        "impact": "",
+        "priority": "high|medium|low"
+      }
+    ],
+    "risks": [],
+    "evidence_highlights": [],
+    "manual_dependencies": [],
+    "hidden_controls": [],
+    "contradictions_detected": [],
+    "dataGaps": []
+  }
+}`},
+      B4:{label:'B4 · Restricciones y causa probable PRO', stageCode:'lmp_analysis_b4', instruction:`ACTÚA COMO especialista senior en Teoría de Restricciones, causa raíz, gestión por procesos y flujo operativo.
+
+OBJETIVO B4:
+Identificar restricciones reales o probables, cuellos de botella, políticas limitantes, puntos de bloqueo, causas probables y efectos sobre el flujo. El resultado debe diferenciar claramente síntoma, problema, restricción y causa raíz probable.
+
+CRITERIOS TOC:
+- Restricción física: capacidad, recurso, proveedor, equipo, espacio, sistema o disponibilidad que limita el flujo.
+- Restricción de política: regla, aprobación, rol, criterio, procedimiento, autorización o gobernanza que limita decisiones o genera espera.
+- Restricción de información: dato incompleto, sistema no integrado, documento no actualizado o trazabilidad débil que impide avanzar.
+- Restricción de mercado/demanda: no aplicar salvo evidencia clara.
+- Un cuello de botella no siempre es la restricción del sistema. Declara si es restricción confirmada o sospechada.
+
+REGLAS:
+- Usa B1, B2 y B3 como insumos.
+- No propongas aún el plan TO BE completo; puedes sugerir dirección de solución, no diseño detallado.
+- Relaciona cada restricción con actividades, desperdicios o problemas previos.
+- Prioriza máximo 3 restricciones principales, salvo que exista evidencia fuerte de más.
+- Declara evidencia, supuesto, efecto en flujo y prueba de validación recomendada.
+- No confundas falta de liderazgo, falta de capacitación o sistema débil con causa raíz sin explicar el mecanismo.
+
+SALIDA JSON ESTRICTA:
+{
+  "findings": {
+    "restrictions": [
+      {
+        "id": "R-01",
+        "restriction": "",
+        "type": "physical|policy|information|capacity|supplier|system|governance",
+        "status": "confirmed|suspected",
+        "related_activities": [],
+        "linked_wastes_or_problems": [],
+        "evidence": "",
+        "flow_effect": "",
+        "root_cause_hypothesis": "",
+        "validation_test": "",
+        "priority": "high|medium|low"
+      }
+    ],
+    "suspected_constraints": [],
+    "bottlenecks": [],
+    "rootCauseHypotheses": [],
+    "controlIssues": [],
+    "dataGaps": []
+  }
+}`},
+      B5:{label:'B5 · Mejoras candidatas para TO BE PRO', stageCode:'lmp_analysis_b5', instruction:`ACTÚA COMO consultor senior de mejora continua, diseño TO BE, Lean Six Sigma, TOC y gestión por procesos, con criterio práctico de implementación.
+
+OBJETIVO B5:
+Convertir hallazgos, desperdicios, problemas, riesgos y restricciones en mejoras candidatas concretas para que el usuario las apruebe, personalice o rechace en TO BE. Cada mejora debe ser accionable, contextualizada y sustentada en una buena práctica lógica de la industria analizada o de otra industria aplicable.
+
+REGLAS CRÍTICAS:
+- Prohibido generar frases genéricas como eliminar la restricción, mejorar el control, fortalecer la gestión o reducir el problema sin explicar cómo.
+- Cada mejora debe resolver un problema, desperdicio o restricción específica.
+- Cada mejora debe explicar la práctica recomendada y cómo implementarla.
+- Distingue quick win, mejora gradual y proyecto estructural.
+- Toda mejora debe venir con defaultDecision = execute, salvo que exista evidencia para sugerir personalización o rechazo.
+- Genera mejoras suficientes si existen hallazgos; no devuelvas improvements vacío salvo ausencia total de evidencia.
+- Si una restricción es de política, propone gobernanza, RACI, dueño de proceso, regla de decisión o rediseño de aprobación.
+- Si una restricción es de información, propone catálogo, dato maestro, integración, tablero, registro único o estandarización documental.
+- Si una restricción es de capacidad, propone balanceo, redistribución, automatización, secuenciación o control de carga.
+
+SALIDA JSON ESTRICTA:
+{
+  "quickWins": [
+    {
+      "title": "",
+      "action": "",
+      "related_problem": "",
+      "expected_benefit": "",
+      "owner_suggestion": "",
+      "effort": "low|medium|high"
+    }
+  ],
+  "improvements": [
+    {
+      "title": "",
+      "summary": "",
+      "problem": "",
+      "currentState": "",
+      "proposedState": "",
+      "goodPractice": "",
+      "implementation": "",
+      "owner_suggestion": "",
+      "impact": "",
+      "justification": "",
+      "sourceFindingId": "",
+      "type": "quick_win|gradual|strategic",
+      "effort": "low|medium|high",
+      "priority": "high|medium|low",
+      "defaultDecision": "execute",
+      "status": "execute"
+    }
+  ],
+  "dataGaps": []
+}`},
+      B6:{label:'B6 · Prompt Builder SIPOC PRO', stageCode:'lmp_analysis_b6', instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder y validador de contrato JSON.
+
+OBJETIVO B6:
+Construir el bloque sipoc_input final usando el AS IS validado, el brief, el SIPOC disponible y los resultados de análisis. Este output será consumido por el módulo SB, por lo tanto debe ser estable, limpio y contractual.
+
+REGLAS CRÍTICAS:
+- Devuelve SOLO un objeto JSON con la clave sipoc_input.
+- No incluyas análisis, métricas, informes ni mejoras dentro de sipoc_input.
+- activities debe conservar todas las actividades AS IS validadas.
+- No reduzcas, no agrupes y no renombres actividades salvo corrección menor de claridad.
+- previous y next deben ser arrays de nombres exactos de actividades existentes.
+- Debe existir exactamente una actividad con is_start = true y exactamente una con is_end = true.
+- Si documents está vacío, intenta poblarlo desde brief.sipoc.documentsSystems, documentos mencionados o sistemas detectados, sin inventar códigos.
+- actors debe contener solo roles del proceso, no personas salvo que el insumo lo exija.
+- suppliers, inputs, outputs y customers deben ser arrays limpios y sin duplicados.
+- Si existe una advertencia, colócala en notes, no fuera del JSON.
+
+VALIDACIÓN INTERNA ANTES DE RESPONDER:
+- ¿Todas las actividades están conectadas o justificadas?
+- ¿previous y next apuntan a actividades existentes?
+- ¿No hay nodos duplicados por id o nombre?
+- ¿El contrato usa sipoc_input y no structured_process?
+
+SALIDA JSON ESTRICTA:
+{
+  "sipoc_input": {
+    "process_code": "",
+    "process_name": "",
+    "purpose": "",
+    "start_event": "",
+    "end_event": "",
+    "notes": "",
+    "suppliers": [],
+    "inputs": [],
+    "outputs": [],
+    "customers": [],
+    "actors": [],
+    "documents": [],
+    "activities": [
+      {
+        "name": "",
+        "type": "operation|decision|control|document",
+        "actor": "",
+        "document": "",
+        "previous": [],
+        "next": [],
+        "ext_suppliers": [],
+        "ext_inputs": [],
+        "ext_outputs": [],
+        "ext_customers": [],
+        "is_start": false,
+        "is_end": false,
+        "note": ""
+      }
+    ]
+  }
+}`}
     };
   }
   window.sgmpGetAnalysisStageDefinitions = stageDefinitions;
