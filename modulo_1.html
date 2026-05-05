@@ -3253,135 +3253,87 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 </section>
 <!-- RESULTADOS -->
 <section class="section" id="resultados">
-
-<style>
-/* FIX LOCAL SOLO PARA RESULTADOS */
-#resultados .cards{
-  width:100%;
-  max-width:100%;
-  overflow:hidden;
-}
-
-#resultados .doc-box,
-#resultados .pre{
-  width:100%;
-  max-width:100%;
-  min-width:0;
-  overflow:auto;
-  overflow-wrap:break-word;
-  word-break:break-word;
-}
-
-#resultados .doc-box table{
-  width:100%;
-  table-layout:fixed;
-}
-
-#resultados .doc-box td,
-#resultados .doc-box th{
-  white-space:normal;
-  word-break:break-word;
-}
-</style>
-
 <div class="section-head">
-  <div>
-    <h2>Resultados finales</h2>
-    <p>Genera JSON SB compatible, informe ejecutivo, informe técnico, plan de implementación y los entregables listos para el Evaluador Documental y el Integrador.</p>
-  </div>
-  <div class="step-pill">Paso 8</div>
+<div>
+<h2>Resultados finales</h2>
+<p>Genera JSON SB compatible, informe ejecutivo, informe técnico, plan de implementación y los entregables listos para el Evaluador Documental y el Integrador.</p>
 </div>
-
+<div class="step-pill">Paso 8</div>
+</div>
 <div class="cards">
-
-  <article class="card">
-    <h3>Generación de salidas</h3>
-    <div class="actions">
-      <div class="actions-left">
-        <button class="btn-ok" onclick="generateResults()" type="button">Generar resultados</button>
-        <button class="btn-ghost" onclick="copySBJson()" type="button">Copiar JSON SB</button>
-      </div>
-      <div class="actions-right">
-        <button class="btn-ok" onclick="openSBFromLMP()" type="button">Abrir en SIPOC Builder</button>
-        <button class="btn-ok" onclick="downloadSBJson()" type="button">Descargar JSON SB</button>
-      </div>
-    </div>
-    <div class="msg" id="resultsMsg"></div>
-  </article>
-
-  <article class="card half">
-    <h3>JSON SB compatible</h3>
-    <div class="pre" id="sbJsonView"></div>
-  </article>
-
-  <article class="card half">
-    <h3>Plan de implementación</h3>
-    <div class="doc-box" id="implementationView"></div>
-  </article>
-
-  <article class="card half">
-    <h3>Informe ejecutivo</h3>
-    <div class="actions" style="border-top:none;padding-top:0;margin-top:0">
-      <div class="actions-left">
-        <button class="btn-ghost" onclick="copyDocText('executiveText')" type="button">Copiar</button>
-        <button class="btn-warn" onclick="printDoc('executiveDoc', 'Informe Ejecutivo')" type="button">Imprimir / PDF</button>
-      </div>
-    </div>
-    <div class="doc-box" id="executiveDoc"></div>
-    <textarea class="hidden" id="executiveText"></textarea>
-  </article>
-
-  <article class="card half">
-    <h3>Informe técnico</h3>
-    <div class="actions" style="border-top:none;padding-top:0;margin-top:0">
-      <div class="actions-left">
-        <button class="btn-ghost" onclick="copyDocText('technicalText')" type="button">Copiar</button>
-        <button class="btn-warn" onclick="printDoc('technicalDoc', 'Informe Técnico')" type="button">Imprimir / PDF</button>
-      </div>
-    </div>
-    <div class="doc-box" id="technicalDoc"></div>
-    <textarea class="hidden" id="technicalText"></textarea>
-  </article>
-
-  <article class="card half">
-    <h3>Propuesta documental para Evaluador documental</h3>
-    <div class="actions" style="border-top:none;padding-top:0;margin-top:0">
-      <div class="actions-left">
-        <button class="btn-ghost" onclick="copyDocumentProposalJson()" type="button">Copiar JSON</button>
-        <button class="btn-ok" onclick="downloadDocumentProposalJson()" type="button">Descargar JSON</button>
-      </div>
-    </div>
-    <div class="pre" id="documentProposalView"></div>
-  </article>
-
-  <article class="card half">
-    <h3>Input para Integrador</h3>
-    <div class="actions" style="border-top:none;padding-top:0;margin-top:0">
-      <div class="actions-left">
-        <button class="btn-ghost" onclick="copyIntegrationJson()" type="button">Copiar JSON</button>
-        <button class="btn-ok" onclick="downloadIntegrationJson()" type="button">Descargar JSON</button>
-      </div>
-    </div>
-    <div class="pre" id="integrationInputView"></div>
-  </article>
-
-</div>
-
+<article class="card">
+<h3>Generación de salidas</h3>
 <div class="actions">
-  <div class="actions-left">
-    <button class="btn-ghost" onclick="goToPrev('resultados')" type="button">Volver</button>
-  </div>
-  <div class="actions-right">
-    <button class="btn-danger" onclick="downloadBackup()" type="button">Finalizar y guardar respaldo</button>
-  </div>
+<div class="actions-left">
+<button class="btn-ok" onclick="generateResults()" type="button">Generar resultados</button>
+<button class="btn-ghost" onclick="copySBJson()" type="button">Copiar JSON SB</button>
 </div>
-
+<div class="actions-right">
+<button class="btn-ok" onclick="openSBFromLMP()" type="button">Abrir en SIPOC Builder</button>
+<button class="btn-ok" onclick="downloadSBJson()" type="button">Descargar JSON SB</button>
+</div>
+</div>
+<div class="msg" id="resultsMsg"></div>
+</article>
+<article class="card half">
+<h3>JSON SB compatible</h3>
+<div class="pre" id="sbJsonView"></div>
+</article>
+<article class="card half">
+<h3>Plan de implementación</h3>
+<div class="doc-box" id="implementationView"></div>
+</article>
+<article class="card half">
+<h3>Informe ejecutivo</h3>
+<div class="actions" style="border-top:none;padding-top:0;margin-top:0">
+<div class="actions-left">
+<button class="btn-ghost" onclick="copyDocText('executiveText')" type="button">Copiar</button>
+<button class="btn-warn" onclick="printDoc('executiveDoc', 'Informe Ejecutivo')" type="button">Imprimir / PDF</button>
+</div>
+</div>
+<div class="doc-box" id="executiveDoc"></div>
+<textarea class="hidden" id="executiveText"></textarea>
+</article>
+<article class="card half">
+<h3>Informe técnico</h3>
+<div class="actions" style="border-top:none;padding-top:0;margin-top:0">
+<div class="actions-left">
+<button class="btn-ghost" onclick="copyDocText('technicalText')" type="button">Copiar</button>
+<button class="btn-warn" onclick="printDoc('technicalDoc', 'Informe Técnico')" type="button">Imprimir / PDF</button>
+</div>
+</div>
+<div class="doc-box" id="technicalDoc"></div>
+<textarea class="hidden" id="technicalText"></textarea>
+</article>
+<article class="card half">
+<h3>Propuesta documental para Evaluador documental</h3>
+<div class="actions" style="border-top:none;padding-top:0;margin-top:0">
+<div class="actions-left">
+<button class="btn-ghost" onclick="copyDocumentProposalJson()" type="button">Copiar JSON</button>
+<button class="btn-ok" onclick="downloadDocumentProposalJson()" type="button">Descargar JSON</button>
+</div>
+</div>
+<div class="pre" id="documentProposalView"></div>
+</article>
+<article class="card half">
+<h3>Input para Integrador</h3>
+<div class="actions" style="border-top:none;padding-top:0;margin-top:0">
+<div class="actions-left">
+<button class="btn-ghost" onclick="copyIntegrationJson()" type="button">Copiar JSON</button>
+<button class="btn-ok" onclick="downloadIntegrationJson()" type="button">Descargar JSON</button>
+</div>
+</div>
+<div class="pre" id="integrationInputView"></div>
+</article>
+</div>
+<div class="actions">
+<div class="actions-left"><button class="btn-ghost" onclick="goToPrev('resultados')" type="button">Volver</button></div>
+<div class="actions-right"><button class="btn-danger" onclick="downloadBackup()" type="button">Finalizar y guardar respaldo</button></div>
+</div>
 </section>
-
 </main>
 </div>
 </div>
-
 <script>
 
 // ══════════════════════════════════════════════════════
@@ -8730,6 +8682,169 @@ function sgmpStrengthenImprovementsFromFindings(data){
   return d;
 }
 
+
+/* ==========================================================
+   SGMP LMP · NORMALIZACIÓN DE CONSISTENCIA
+   Objetivo: reducir variabilidad entre corridas IA sin tocar UI.
+   Reglas aplicadas:
+   - AVA se calcula de forma determinística desde actividades/análisis.
+   - Desperdicios: rango objetivo 5 a 10.
+   - Restricciones: rango objetivo 3 a 6.
+   - Mejoras: rango objetivo 6 a 12.
+   - No se truncan actividades del proceso.
+   ========================================================== */
+const SGMP_LMP_STABILITY_RULES = {
+  wastes: { min: 5, max: 10 },
+  restrictions: { min: 3, max: 6 },
+  improvements: { min: 6, max: 12 }
+};
+
+function sgmpStableText(value){
+  if(value === undefined || value === null) return '';
+  if(typeof value === 'string') return value.trim();
+  return String(value.description || value.problem || value.title || value.name || value.activity || value.evidence || value.justification || JSON.stringify(value)).trim();
+}
+
+function sgmpStableKey(value){
+  return sgmpStableText(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+}
+
+function sgmpStableUniqueList(list){
+  const out = [];
+  const seen = new Set();
+  safeArray(list).forEach(item => {
+    const key = sgmpStableKey(item);
+    if(!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(item);
+  });
+  return out;
+}
+
+function sgmpStableSortByEvidence(list){
+  return sgmpStableUniqueList(list).sort((a,b) => {
+    const at = sgmpStableText(a), bt = sgmpStableText(b);
+    const score = (txt) => {
+      let s = Math.min(txt.length, 240) / 10;
+      if(/demora|retras|espera|error|reproceso|manual|aprobaci|proveedor|recepci|orden|oc|sla|sistema|erp|control|desviaci/i.test(txt)) s += 20;
+      if(/actividad|actor|evidencia|causa|impacto/i.test(txt)) s += 5;
+      return s;
+    };
+    return score(bt) - score(at) || at.localeCompare(bt);
+  });
+}
+
+function sgmpLimitStableList(list, min, max, supplements){
+  let out = sgmpStableSortByEvidence(list);
+  if(out.length < min){
+    out = sgmpStableUniqueList([...out, ...safeArray(supplements)]);
+    out = sgmpStableSortByEvidence(out);
+  }
+  return out.slice(0, max);
+}
+
+function sgmpBuildWasteSupplements(data){
+  const acts = safeArray(data?.as_is?.activities || data?.activities || state?.asis?.activities);
+  const base = [];
+  acts.forEach(a => {
+    const name = a.name || a.activity || a.title || a.id || 'actividad';
+    sgmpToList(a.wastes || a.desperdicios || a.waste).forEach(w => base.push({ description: sgmpStableText(w), activity: name }));
+    sgmpToList(a.problems || a.problem || a.issues).forEach(p => base.push({ description: sgmpStableText(p), activity: name }));
+    const cls = String(a.ava_classification || a.ava || a.classification || '').toUpperCase();
+    if(cls === 'NVA') base.push({ description: 'Actividad sin valor agregado detectada: ' + name, activity: name });
+    if(cls === 'NNVA') base.push({ description: 'Actividad necesaria pero no generadora de valor: ' + name, activity: name });
+  });
+  return base;
+}
+
+function sgmpBuildRestrictionSupplements(data){
+  const acts = safeArray(data?.as_is?.activities || data?.activities || state?.asis?.activities);
+  const base = [];
+  acts.forEach(a => {
+    const name = a.name || a.activity || a.title || a.id || 'actividad';
+    const constraintFlag = String(a.constraint || a.is_constraint || a.restriction || '').toLowerCase();
+    if(['si','sí','yes','true','1'].includes(constraintFlag)) base.push({ description: 'Restricción declarada en actividad: ' + name, activity: name });
+    sgmpToList(a.problems || a.problem || a.issues).forEach(p => {
+      const t = sgmpStableText(p);
+      if(/demora|retras|espera|aprobaci|proveedor|sobrecarga|capacidad|cuello|bloqueo|dependencia/i.test(t)) base.push({ description: t, activity: name });
+    });
+  });
+  return base;
+}
+
+function sgmpNormalizeAvaDeterministic(data){
+  const d = data || {};
+  const acts = safeArray(d.as_is?.activities || d.activities || state?.asis?.activities);
+  const rawAva = d.ava || {};
+  const activityAnalysis = safeArray(rawAva.activityAnalysis || rawAva.activities || d.activityAnalysis || d.analysis?.activityAnalysis);
+  const classify = (value) => {
+    const t = String(value || '').toUpperCase().replace(/\s+/g,'').trim();
+    if(t.includes('NNVA')) return 'NNVA';
+    if(t.includes('NVA')) return 'NVA';
+    if(t === 'VA' || t.includes('VALORAGREGADO')) return 'VA';
+    return '';
+  };
+  const byId = new Map();
+  const byName = new Map();
+  activityAnalysis.forEach(x => {
+    const cls = classify(x.classification || x.ava_classification || x.avaClassification || x.ava || x.type);
+    if(!cls) return;
+    const item = Object.assign({}, x, { classification: cls, ava_classification: cls });
+    if(x.id) byId.set(String(x.id).trim(), item);
+    if(x.name || x.activity) byName.set(String(x.name || x.activity).trim().toLowerCase(), item);
+  });
+  let counts = { VA:0, NNVA:0, NVA:0 };
+  const normalizedAnalysis = [];
+  acts.forEach((a, idx) => {
+    const id = String(a.id || '').trim();
+    const nm = String(a.name || a.activity || a.title || '').trim().toLowerCase();
+    const hit = (id && byId.get(id)) || (nm && byName.get(nm));
+    const cls = classify(hit?.classification || hit?.ava_classification || a.ava_classification || a.avaClassification || a.ava || a.classification) || 'NNVA';
+    counts[cls] = (counts[cls] || 0) + 1;
+    normalizedAnalysis.push({
+      id: a.id || hit?.id || ('ACT-' + String(idx+1).padStart(2,'0')),
+      name: a.name || a.activity || a.title || hit?.name || '',
+      actor: a.actor || a.role || hit?.actor || '',
+      classification: cls,
+      ava_classification: cls,
+      justification: hit?.justification || hit?.reason || hit?.evidence || a.ava_reason || 'Clasificación calculada desde la evidencia disponible del AS IS.'
+    });
+  });
+  const total = Math.max(acts.length, 1);
+  d.ava = Object.assign({}, rawAva, {
+    distribution: {
+      VA: counts.VA,
+      NNVA: counts.NNVA,
+      NVA: counts.NVA,
+      VA_pct: Math.round((counts.VA / total) * 100),
+      NNVA_pct: Math.round((counts.NNVA / total) * 100),
+      NVA_pct: Math.round((counts.NVA / total) * 100),
+      total: acts.length,
+      counts: counts,
+      calculation_method: 'deterministic_by_activity_classification'
+    },
+    activityAnalysis: normalizedAnalysis
+  });
+  return d;
+}
+
+function sgmpNormalizeAnalysisStability(data){
+  const d = data || {};
+  d.findings = d.findings || {};
+  d.findings.wastes = sgmpLimitStableList(d.findings.wastes, SGMP_LMP_STABILITY_RULES.wastes.min, SGMP_LMP_STABILITY_RULES.wastes.max, sgmpBuildWasteSupplements(d));
+  d.findings.restrictions = sgmpLimitStableList(d.findings.restrictions, SGMP_LMP_STABILITY_RULES.restrictions.min, SGMP_LMP_STABILITY_RULES.restrictions.max, sgmpBuildRestrictionSupplements(d));
+  d.improvements = sgmpStableSortByEvidence(safeArray(d.improvements || []).map(normalizeImprovement));
+  if(d.improvements.length < SGMP_LMP_STABILITY_RULES.improvements.min){
+    const generated = sgmpBuildCandidateImprovementsFromFindings(d.findings, SGMP_LMP_STABILITY_RULES.improvements.max);
+    d.improvements = sgmpStableSortByEvidence([...d.improvements, ...generated]);
+  }
+  d.improvements = d.improvements.slice(0, SGMP_LMP_STABILITY_RULES.improvements.max).map((item, idx) => Object.assign({}, item, {
+    id: item.id || ('IM-' + String(idx+1).padStart(2,'0')),
+    status: item.status || 'pending'
+  }));
+  return sgmpNormalizeAvaDeterministic(d);
+}
+
 function sgmpEnrichAnalysisModel(data){
   const d = data || {};
   d.findings = d.findings || {};
@@ -8790,6 +8905,7 @@ function sgmpEnrichAnalysisModel(data){
 
   d.improvements = safeArray(d.improvements || d.mejoras).map(normalizeImprovement);
   sgmpStrengthenImprovementsFromFindings(d);
+  sgmpNormalizeAnalysisStability(d);
   return d;
 }
 
@@ -8824,6 +8940,9 @@ REGLAS:
 - No elimines ni renombres actividades.
 - No propongas mejoras todavía.
 - Devuelve distribución porcentual y detalle por actividad.
+- Usa clasificación estable por actividad: cada actividad debe tener una sola clasificación VA, NNVA o NVA.
+- No devuelvas porcentajes estimados libres; los porcentajes deben derivarse del conteo de actividades clasificadas.
+- Valores extremos de VA (<3% o >25%) solo son aceptables si la evidencia por actividad lo sostiene claramente.
 
 SALIDA JSON ESTRICTA:
 {
@@ -8840,6 +8959,9 @@ REGLAS:
 - No diseñes TO BE.
 - No hagas contrato SB.
 - Cada hallazgo debe tener evidencia o actividad relacionada cuando sea posible.
+- Debes identificar entre 5 y 10 desperdicios relevantes.
+- No trunques listas críticas; prioriza evidencia operativa sobre generalidades.
+- No agrupes problemas distintos en un mismo hallazgo.
 
 SALIDA JSON ESTRICTA:
 {
@@ -8985,6 +9107,9 @@ Antes de responder, verifica:
 - ¿Cada mejora explica cómo se implementa?
 - ¿Cada mejora está adaptada al contexto/industria?
 - ¿El output alimenta directamente TO BE?
+- Debes proponer entre 6 y 12 mejoras.
+- 1 hallazgo relevante debe generar mínimo 1 mejora trazable, salvo que esté duplicado.
+- No agrupes problemas distintos en una sola mejora.
 
 Si alguna respuesta es NO, corrige antes de responder.`;
 
