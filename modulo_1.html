@@ -8477,6 +8477,109 @@ function sgmpCalculateAvaDistribution(activities){
   };
 }
 
+
+
+/* SGMP FIX · Evidencia ampliada para problemas/restricciones
+   Objetivo: evitar que B3/B4/B5 dependan solo de lo que devuelva la IA.
+   El demo trae problemas en actividades, cuestionarios y master.issues; este helper los vuelve visibles.
+*/
+function sgmpCollectEvidenceCandidatesFromState(){
+  const master = state.master || {};
+  const briefRaw = state.briefReview?.raw || state.brief || {};
+  const brief = normalizeBriefPayload(briefRaw || {});
+  const activities = [];
+  const pushActs = arr => safeArray(arr).forEach(a => { if(a) activities.push(a); });
+
+  pushActs(master.activities);
+  pushActs(state.asis?.activities);
+  pushActs(brief.as_is?.activities);
+  pushActs(brief.activities_preliminary);
+  pushActs(sgmpGetStructuralSourceActivities());
+
+  const issues = master.issues || {};
+  const fromActivities = {
+    problems: [],
+    wastes: [],
+    restrictions: [],
+    quickWins: [],
+    risks: [],
+    evidence: []
+  };
+
+  activities.forEach((a, idx) => {
+    const label = normalizeContractString(a.id || a.name || ('Actividad ' + (idx + 1)));
+    const prefix = label ? label + ': ' : '';
+
+    sgmpToList(a.problems || a.problemas || a.issue || a.issues).forEach(v => fromActivities.problems.push(prefix + sgmpTextOf(v)));
+    sgmpToList(a.wastes || a.desperdicios || a.waste).forEach(v => fromActivities.wastes.push(prefix + sgmpTextOf(v)));
+    sgmpToList(a.risks || a.riesgos || a.risk).forEach(v => fromActivities.risks.push(prefix + sgmpTextOf(v)));
+    sgmpToList(a.quickWin || a.quick_win || a.quickWins).forEach(v => {
+      const t = sgmpTextOf(v);
+      if(t && !/^no$/i.test(t)) fromActivities.quickWins.push(prefix + t);
+    });
+    sgmpToList(a.constraint || a.restriction || a.restriccion || a.restrictions || a.constraints).forEach(v => {
+      const t = sgmpTextOf(v);
+      if(t && !/^no$/i.test(t)) fromActivities.restrictions.push(prefix + t);
+    });
+
+    const note = sgmpTextOf(a.note || a.notes || '');
+    if(note){
+      fromActivities.evidence.push(prefix + note);
+      if(/problema|demora|espera|riesgo|rechazo|manual|incomplet|desactualiz|sin sla|no existe|falta/i.test(note)){
+        fromActivities.problems.push(prefix + note);
+      }
+      if(/restricci[oó]n|cuello|bloqueo|capacidad|espera|aprobaci[oó]n|proveedor|producci[oó]n|sla/i.test(note)){
+        fromActivities.restrictions.push(prefix + note);
+      }
+    }
+  });
+
+  return {
+    problems: sgmpUniqueStrings([
+      ...sgmpToList(issues.keyIssues),
+      ...sgmpToList(issues.problems),
+      ...sgmpToList(issues.delays),
+      ...sgmpToList(issues.rework),
+      ...sgmpToList(issues.frictions),
+      ...fromActivities.problems
+    ]),
+    wastes: sgmpUniqueStrings([
+      ...sgmpToList(issues.wastes),
+      ...fromActivities.wastes
+    ]),
+    restrictions: sgmpUniqueStrings([
+      ...sgmpToList(issues.constraints),
+      ...sgmpToList(issues.restrictions),
+      ...sgmpToList(issues.suspectedConstraints),
+      ...sgmpToList(issues.bottlenecks),
+      ...fromActivities.restrictions
+    ]),
+    quickWins: sgmpUniqueStrings([
+      ...sgmpToList(issues.quickWins),
+      ...fromActivities.quickWins
+    ]),
+    risks: sgmpUniqueStrings([
+      ...sgmpToList(issues.risks),
+      ...fromActivities.risks
+    ]),
+    evidence: sgmpUniqueStrings(fromActivities.evidence),
+    activitiesWithEvidence: activities.filter(a => sgmpTextOf(a.problems || a.note || a.wastes || a.constraint || a.restriction)).length,
+    sourceActivitiesCount: activities.length
+  };
+}
+
+function sgmpMergeEvidenceIntoFindings(findings){
+  const f = findings || {};
+  const evidence = sgmpCollectEvidenceCandidatesFromState();
+  f.wastes = sgmpUniqueStrings([...(f.wastes || []), ...evidence.wastes]);
+  f.problems = sgmpUniqueStrings([...(f.problems || []), ...evidence.problems]);
+  f.restrictions = sgmpUniqueStrings([...(f.restrictions || []), ...evidence.restrictions]);
+  f.quickWins = sgmpUniqueStrings([...(f.quickWins || []), ...evidence.quickWins]);
+  f.risks = sgmpUniqueStrings([...(f.risks || []), ...evidence.risks]);
+  f.evidenceHighlights = sgmpUniqueStrings([...(f.evidenceHighlights || []), ...evidence.evidence]);
+  return f;
+}
+
 function sgmpBuildCandidateImprovementsFromFindings(findings, maxItems){
   const f = findings || {};
   const candidates = [];
@@ -8507,7 +8610,7 @@ function sgmpBuildCandidateImprovementsFromFindings(findings, maxItems){
   sgmpToList(f.quickWins || f.quick_wins).forEach((x,i)=>add('Quick win',x,i));
   sgmpToList(f.restrictions || f.constraints || f.suspectedConstraints || f.suspected_constraints).forEach((x,i)=>add('Restricción',x,i));
   sgmpToList(f.wastes || f.manualDependencies || f.manual_dependencies).forEach((x,i)=>add('Desperdicio',x,i));
-  sgmpToList(f.problems || f.evidenceHighlights || f.evidence_highlights || f.contradictions || f.contradictions_detected).slice(0,5).forEach((x,i)=>add('Mejora derivada de problema',x,i));
+  sgmpToList(f.problems || f.evidenceHighlights || f.evidence_highlights || f.contradictions || f.contradictions_detected).forEach((x,i)=>add('Mejora derivada de problema',x,i));
   const unique = [];
   candidates.forEach(c => {
     const key = String(c.problem || c.summary || c.title || '').toLowerCase();
@@ -8554,6 +8657,8 @@ function sgmpEnrichAnalysisModel(data){
   f.manualDependencies = sgmpUniqueStrings([...sgmpToList(f.manualDependencies), ...sgmpToList(f.manual_dependencies)]);
   f.suspectedConstraints = sgmpUniqueStrings([...sgmpToList(f.suspectedConstraints), ...sgmpToList(f.suspected_constraints)]);
   f.contradictions = sgmpUniqueStrings([...sgmpToList(f.contradictions), ...sgmpToList(f.contradictions_detected)]);
+
+  sgmpMergeEvidenceIntoFindings(f);
 
   const acts = safeArray(d.as_is?.activities || d.activities);
   d.ava = d.ava || {};
@@ -8616,6 +8721,8 @@ REGLAS:
 - No diseñes TO BE.
 - No hagas contrato SB.
 - Cada hallazgo debe tener evidencia o actividad relacionada cuando sea posible.
+- Revisa TODOS los problemas y desperdicios que estén en source_evidence_candidates. No devuelvas solo 2 si hay más evidencias.
+- Devuelve preferentemente entre 6 y 15 hallazgos cuando el caso contenga evidencia suficiente.
 
 SALIDA JSON ESTRICTA:
 {
@@ -8639,6 +8746,8 @@ REGLAS:
 - Diferencia restricción real de problema general.
 - No propongas aún el plan TO BE completo.
 - Relaciona restricciones con actividades cuando aplique.
+- Revisa TODOS los problemas y restricciones que estén en source_evidence_candidates. No devuelvas solo 2 si hay más evidencias.
+- Devuelve restricciones reales, cuellos de botella y restricciones sospechadas por separado.
 
 SALIDA JSON ESTRICTA:
 {
@@ -8812,16 +8921,19 @@ function sgmpBuildAnalysisStagePrompt(stageKey){
     brief.activities_preliminary ||
     sgmpGetStructuralSourceActivities()
   );
+  const sourceEvidence = sgmpCollectEvidenceCandidatesFromState();
   const evidencePack = {
     context: c,
     brief,
     current_as_is: baseActivities,
     previous_stage_results: stageResults,
     master_sipoc: master.sipoc || {},
+    master_issues: master.issues || {},
+    source_evidence_candidates: sourceEvidence,
     source_activity_count: baseActivities.length,
     source_activities: baseActivities
   };
-  return `${def.instruction}\n\nREGLAS GLOBALES SGMP:\n- Responde SOLO JSON válido.\n- No uses markdown.\n- No inventes evidencia.\n- Si falta información, registra warnings o dataGaps.\n- Mantén nombres de campos exactamente como se solicita.\n\nINSUMOS:\n${JSON.stringify(evidencePack, null, 2)}`;
+  return `${def.instruction}\n\nREGLAS GLOBALES SGMP:\n- Responde SOLO JSON válido.\n- No uses markdown.\n- No inventes evidencia.\n- Si falta información, registra warnings o dataGaps.\n- Mantén nombres de campos exactamente como se solicita.\n- NO limites la respuesta a 2 hallazgos. Si source_evidence_candidates trae más problemas, restricciones o desperdicios, debes evaluarlos todos y devolver los relevantes.\n- Para B3, usa source_evidence_candidates.problems, wastes, risks, manual dependencies y evidence como lista mínima de revisión.\n- Para B4, usa source_evidence_candidates.restrictions y problems para separar restricciones reales, cuellos de botella y problemas generales.\n- Si el caso demo contiene múltiples evidencias por actividad, conserva la trazabilidad actividad → hallazgo.\n\nINSUMOS:\n${JSON.stringify(evidencePack, null, 2)}`;
 }
 
 function generateAnalysisStagePrompt(stageKey){
@@ -8855,7 +8967,24 @@ function sgmpAssembleStagedAnalysisPayload(){
       }) : a;
     });
   }
-  const mergedFindings = Object.assign({}, b3.findings || {}, b4.findings || {});
+  const f3 = b3.findings || {};
+  const f4 = b4.findings || {};
+  const mergedFindings = {
+    wastes: sgmpUniqueStrings([...sgmpToList(f3.wastes), ...sgmpToList(f4.wastes)]),
+    problems: sgmpUniqueStrings([...sgmpToList(f3.problems), ...sgmpToList(f4.problems)]),
+    risks: sgmpUniqueStrings([...sgmpToList(f3.risks), ...sgmpToList(f4.risks)]),
+    restrictions: sgmpUniqueStrings([...sgmpToList(f3.restrictions), ...sgmpToList(f4.restrictions), ...sgmpToList(f4.constraints)]),
+    quickWins: sgmpUniqueStrings([...sgmpToList(f3.quickWins), ...sgmpToList(f4.quickWins)]),
+    bottlenecks: sgmpUniqueStrings([...sgmpToList(f3.bottlenecks), ...sgmpToList(f4.bottlenecks)]),
+    suspected_constraints: sgmpUniqueStrings([...sgmpToList(f3.suspected_constraints), ...sgmpToList(f4.suspected_constraints)]),
+    rootCauseHypotheses: sgmpUniqueStrings([...sgmpToList(f3.rootCauseHypotheses), ...sgmpToList(f4.rootCauseHypotheses)]),
+    controlIssues: sgmpUniqueStrings([...sgmpToList(f3.controlIssues), ...sgmpToList(f4.controlIssues)]),
+    dataGaps: sgmpUniqueStrings([...sgmpToList(f3.dataGaps), ...sgmpToList(f4.dataGaps)]),
+    evidence_highlights: sgmpUniqueStrings([...sgmpToList(f3.evidence_highlights), ...sgmpToList(f4.evidence_highlights)]),
+    manual_dependencies: sgmpUniqueStrings([...sgmpToList(f3.manual_dependencies), ...sgmpToList(f4.manual_dependencies)]),
+    hidden_controls: sgmpUniqueStrings([...sgmpToList(f3.hidden_controls), ...sgmpToList(f4.hidden_controls)]),
+    contradictions_detected: sgmpUniqueStrings([...sgmpToList(f3.contradictions_detected), ...sgmpToList(f4.contradictions_detected)])
+  };
   return sgmpEnrichAnalysisModel({
     context: state.context || state.master?.context || {},
     as_is: { activities },
