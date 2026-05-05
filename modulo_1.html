@@ -2775,7 +2775,7 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 
 <article class="card half">
 <h3>Prompt B · Análisis del Brief</h3>
-<p>Se habilita cuando el Brief fue aprobado. Usa el brief oficial y los complementos cargados para generar el análisis completo.</p>
+<p>Se habilita cuando el Brief fue aprobado. Usa el brief oficial y los complementos cargados para generar cada bloque de análisis por separado.</p>
 <div class="actions" style="border-top:none;padding-top:0;margin-top:0">
 <div class="actions-left">
 <button class="btn" id="btnGenerateAnalysisPrompt" onclick="generateAnalysisStagePrompt('B1')" type="button">Generar B1 · AS IS</button>
@@ -2797,12 +2797,11 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 </article>
 
 <article class="card half">
-<h3>JSON maestro generado por IA</h3>
-<p>Pega aquí la respuesta del Prompt B. El sistema debe poder procesar estructuras parciales sin romper el flujo.</p>
-<textarea id="iaResponseEditor" placeholder="Pega aquí la respuesta completa de la IA..." style="width:100%;min-height:300px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+<h3>Respuesta JSON de la etapa actual</h3>
+<p>Pega aquí la respuesta del bloque seleccionado (B1, B2, B3, B4, B5 o B6). El flujo trabaja por etapas; se eliminó el procesamiento global para evitar validaciones cruzadas prematuras.</p>
+<textarea id="iaResponseEditor" placeholder="Pega aquí la respuesta JSON de la etapa actual..." style="width:100%;min-height:300px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
 <div class="actions">
-<div class="actions-left"><button class="btn-ok" id="btnProcessAnalysis" onclick="processIAResponse()" type="button">Procesar análisis completo</button><button class="btn-warn" id="btnProcessAnalysisStage" onclick="processAnalysisStageResponse()" type="button">Procesar etapa actual</button></div>
-<div class="actions-right"><button class="btn" id="btnApplyAnalysis" onclick="applyIAResponseAndContinue()" type="button">Aplicar al LMP y continuar</button></div>
+<div class="actions-left"><button class="btn-warn" id="btnProcessAnalysisStage" onclick="processAnalysisStageResponse()" type="button">Procesar etapa actual</button></div>
 </div>
 <div class="msg" id="iaMsg"></div><div class="msg" id="analysisValidationMsg"></div>
 </article>
@@ -7040,7 +7039,7 @@ function renderAnalysisValidation(){
   const msgId = 'analysisValidationMsg';
   if(!raw){ showMsg(msgId,'warn','Estado: análisis incompleto. Aún no se ha procesado un JSON maestro.'); return issues; }
   if(issues.length){ showMsg(msgId,'warn','Estado: análisis incompleto. Revisa o reanaliza:\n- ' + issues.join('\n- ')); }
-  else { showMsg(msgId,'ok','Estado: análisis completo. Ya puede aplicarse al LMP.'); }
+  else { showMsg(msgId,'ok','Estado: análisis por bloques disponible. Continúa con la etapa correspondiente.'); }
   return issues;
 }
 
@@ -7312,7 +7311,7 @@ function approveBriefAndUnlockAnalysis(){
       showMsg('briefIaMsg','warn','No se puede aprobar el Brief porque está incompleto.');
       return;
     }
-    showMsg('briefIaMsg','ok','Brief aprobado correctamente. Ya puedes generar el análisis completo.');
+    showMsg('briefIaMsg','ok','Brief aprobado correctamente. Ya puedes generar los bloques de análisis.');
   }catch(error){
     showMsg('briefIaMsg','err','El Brief editable no contiene un JSON válido. Detalle: ' + error.message);
   }
@@ -7410,12 +7409,12 @@ ${hardening}`;
   const prompt = (staticBase ? staticBase.replace('{{industry}}', c.industry || '[INDUSTRIA]').replace('{{activity}}', c.activity || '[ACTIVIDAD]').replace('{{processType}}', c.processType || '[TIPO_PROCESO]') + hardening : fallback) + '\n\n' + dynamic;
   try{ state.results = state.results || {}; state.results.sbNormalizationPrompt = buildSbNormalizationPrompt(); }catch(e){}
   if(sgmpGlobalApiEnabled() && sgmpStageUseApi('lmp_analysis')){
-    showMsg('cargaMsg','ok','Ejecutando IA para análisis...');
-    showLoader('Generando análisis con IA...', 'Etapa B · Construyendo AS IS, AVA, desperdicios, quick wins y restricciones.');
+    showMsg('cargaMsg','ok','Ejecutando IA para análisis por bloques...');
+    showLoader('Generando análisis con IA...', 'Etapa B · Flujo por bloques.');
     try{
       const result = await sgmpCallAI('lmp_analysis', prompt);
       if(qs('iaResponseEditor')) qs('iaResponseEditor').value = sgmpAIResultText(result);
-      processIAResponse();
+      // SGMP: procesamiento global eliminado. El usuario debe procesar por etapa.
       refreshCargaFlowState();
       hideLoader();
       return;
@@ -7836,8 +7835,8 @@ function refreshCargaFlowState(){
     btnProcessBrief: !hasBriefResponse,
     btnApproveBrief: !hasBrief,
     btnGenerateAnalysisPrompt: !briefApproved,
-    btnCopyAnalysisPrompt: !hasAnalysisPrompt,    btnProcessAnalysis: !hasAnalysisResponse,
-    btnApplyAnalysis: !(state.analysisRun && state.analysisRun.qa),
+    btnCopyAnalysisPrompt: !hasAnalysisPrompt,
+    btnProcessAnalysisStage: !hasAnalysisResponse || !briefApproved,
     btnGenerateSbContractPrompt: !(state.analysis || state.analysisRun?.raw || state.asis?.activities?.length || state.master),
     btnCopySbContractPrompt: !hasSbContractPrompt,
     btnValidateSbContract: !hasSbContractResponse,
@@ -8861,24 +8860,106 @@ function sgmpAssembleStagedAnalysisPayload(){
 function processAnalysisStageResponse(){
   const raw = qs('iaResponseEditor')?.value.trim() || '';
   if(!raw){ showMsg('iaMsg','warn','Pega primero la respuesta de la etapa.'); return; }
+  if(!(state.briefReview && state.briefReview.approved)){
+    showMsg('iaMsg','warn','Debes aprobar primero el Brief antes de procesar etapas de análisis.');
+    return;
+  }
+
   try{
     const parsed = extractJsonFromText(raw);
     state.analysisStages = state.analysisStages || { current:'B1', results:{} };
     const key = state.analysisStages.current || 'B1';
     state.analysisStages.results[key] = parsed;
+
     const assembled = sgmpAssembleStagedAnalysisPayload();
     const normalized = normalizeAnalysisPayload(assembled);
-    normalized.improvements = assembled.improvements || normalized.improvements || [];
-    if(!normalized.improvements.length) normalized.improvements = sgmpBuildCandidateImprovementsFromFindings(normalized.findings, 12);
-    qs('iaResponseEditor').value = JSON.stringify(normalized, null, 2);
-    processIAResponse();
+
+    const stageActivities = safeArray(
+      parsed?.as_is?.activities ||
+      parsed?.asIs?.activities ||
+      parsed?.activities ||
+      normalized?.as_is?.activities
+    );
+
+    if(key === 'B1' && stageActivities.length){
+      state.asis = state.asis || {};
+      state.asis.activities = stageActivities.map(a => Object.assign({}, a));
+      state.master = state.master || {};
+      state.master.activities = state.asis.activities.map(a => Object.assign({}, a));
+    }
+
+    const stageImprovements = safeArray(parsed?.improvements || parsed?.mejoras || parsed?.quickWins || parsed?.quick_wins);
+    if(key === 'B5' && stageImprovements.length){
+      state.tobe = state.tobe || {};
+      state.tobe.improvements = stageImprovements.map((item, idx) => Object.assign(
+        {},
+        normalizeImprovement(item),
+        {
+          id: item.id || ('imp-' + String(idx + 1).padStart(2,'0')),
+          status: item.status || 'pending',
+          customText: item.customText || ''
+        }
+      ));
+    }
+
+    const sbInput = parsed?.sipoc_input || parsed?.sb_contract?.sipoc_input || parsed?.sbContract?.sipoc_input;
+    if(key === 'B6' && sbInput){
+      state.sb_contract = { sipoc_input: sbInput };
+      state.master = state.master || {};
+      state.master.sb_contract = state.sb_contract;
+    }
+
+    state.analysis = state.analysis || {};
+    state.analysis.raw = normalized;
+    state.analysis.process = {
+      name: normalized.context?.processName || state.context?.processName || '',
+      code: normalized.context?.processCode || state.context?.processCode || ''
+    };
+    state.analysis.summary = {
+      activitiesCount: safeArray(normalized.as_is?.activities).length,
+      wastesCount: safeArray(normalized.findings?.wastes).length,
+      problemsCount: safeArray(normalized.findings?.problems).length,
+      quickWinsCount: safeArray(normalized.quickWins || normalized.findings?.quickWins).length,
+      constraintsCount: safeArray(normalized.findings?.restrictions).length,
+      stagesCompleted: Object.keys(state.analysisStages.results || {}).length
+    };
+    state.analysis.activities = safeArray(normalized.as_is?.activities);
+    state.analysis.wastes = safeArray(normalized.findings?.wastes);
+    state.analysis.problems = safeArray(normalized.findings?.problems);
+    state.analysis.quickWins = safeArray(normalized.quickWins || normalized.findings?.quickWins);
+    state.analysis.constraints = safeArray(normalized.findings?.restrictions);
+    state.analysis.risks = safeArray(normalized.findings?.risks);
+    state.analysis.improvements = safeArray(normalized.improvements);
+    state.analysis.sbContract = normalized.sb_contract || {};
+    state.analysis.qa = false;
+    state.analysisRun = { raw: normalized, qa: false, mode: 'staged' };
+
+    if(qs('iaDetectedPreview')) qs('iaDetectedPreview').textContent = JSON.stringify({
+      currentStage: key,
+      stageResult: parsed,
+      stagedSummary: state.analysis.summary,
+      assembledPreview: normalized
+    }, null, 2);
+    if(qs('iaActsKpi')) qs('iaActsKpi').textContent = state.analysis.summary.activitiesCount;
+    if(qs('iaImpKpi')) qs('iaImpKpi').textContent = safeArray(state.tobe?.improvements || normalized.improvements).length;
+    if(qs('iaQwKpi')) qs('iaQwKpi').textContent = state.analysis.summary.quickWinsCount;
+    if(qs('iaResKpi')) qs('iaResKpi').textContent = state.analysis.summary.constraintsCount;
+
+    if(qs('analysisValidationMsg')){
+      qs('analysisValidationMsg').className = 'msg';
+      qs('analysisValidationMsg').textContent = '';
+    }
+
+    refreshCargaFlowState();
+    updateTopStatus();
+
     const order = ['B1','B2','B3','B4','B5','B6'];
     const next = order[order.indexOf(key) + 1];
     if(next){
       state.analysisStages.current = next;
-      showMsg('iaMsg','ok','Etapa ' + key + ' procesada. Siguiente sugerida: ' + next + '.');
+      showMsg('iaMsg','ok','Etapa ' + key + ' procesada correctamente. Siguiente sugerida: ' + next + '.');
     }else{
-      showMsg('iaMsg','ok','Todas las etapas fueron procesadas. Puedes aplicar al LMP y continuar.');
+      showMsg('iaMsg','ok','B6 procesado. Análisis por bloques finalizado; revisa el contrato final LMP → SB.');
     }
   }catch(error){
     showMsg('iaMsg','err','No fue posible procesar la etapa. Detalle: ' + error.message);
@@ -9638,19 +9719,18 @@ Pasos:
 El Brief debe preservar:
 - contradicciones, vacíos, supuestos, riesgos visibles, controles ocultos, dependencias manuales, restricciones sospechadas y evidencia destacada.
 
-SUBFASE B - ANÁLISIS COMPLETO
+SUBFASE B - ANÁLISIS POR BLOQUES
 Requisito:
 - No se puede ejecutar sin Brief aprobado.
 
 Pasos:
-1. Generar Prompt MASTER B.
-2. Ejecutarlo en la IA con el Brief aprobado y complementos.
-3. Pegar respuesta JSON de análisis.
-4. Procesar respuesta IA.
-5. Aplicar al LMP y continuar.
+1. Generar y ejecutar B1 · AS IS.
+2. Pegar la respuesta JSON de B1 y procesar etapa actual.
+3. Repetir el flujo para B2 · AVA, B3 · Desperdicios, B4 · Restricciones, B5 · Mejoras y B6 · Builder.
+4. Cada bloque alimenta el estado interno del LMP sin usar procesamiento global.
 
-La respuesta debe alimentar:
-- AS IS, AVA, findings, improvements, one page, TO BE, indicadores, propuesta documental, input integrador y JSON para Builder.
+La respuesta por bloques debe alimentar progresivamente:
+- AS IS, AVA, findings, improvements, TO BE preliminar, indicadores y JSON para Builder.
 
 8. AS IS
 --------
