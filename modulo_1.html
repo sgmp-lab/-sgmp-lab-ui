@@ -4639,23 +4639,21 @@ function saveMasterAndContinue(){
     } else {
       mergeMaster();
     }
-
     if(!(state.briefReview && state.briefReview.approved)){
       showMsg('cargaMsg','warn','Debes aprobar primero el Brief antes de continuar.');
       return;
     }
-
-    /* FIX SGMP LMP:
-       La etapa Carga y consolidación solo debe cerrar el Brief aprobado.
-       El análisis por bloques B1-B6 se ejecuta después, no antes.
-       Por eso NO se debe exigir state.analysis.raw ni renderAnalysisValidation() aquí.
-    */
-    if(typeof hydrateAsIsFromMaster === 'function') hydrateAsIsFromMaster();
-    if(typeof renderAsIsActivities === 'function') renderAsIsActivities();
-    if(typeof updateTopStatus === 'function') updateTopStatus();
-
-    showMsg('cargaMsg','ok','Carga y Brief guardados correctamente. Avanzando a AS IS.');
-    showSection('asis');
+    if(!(state.analysis && state.analysis.raw)){
+      showMsg('cargaMsg','warn','Debes procesar el análisis maestro antes de continuar.');
+      return;
+    }
+    const analysisIssues = renderAnalysisValidation();
+    if(analysisIssues.length){
+      showMsg('cargaMsg','warn','No puedes cerrar esta etapa mientras el análisis permanezca incompleto.');
+      return;
+    }
+    hydrateAsIsFromMaster();
+    goToNext('carga');
   }catch(error){
     showMsg('cargaMsg','err',`El JSON maestro no es válido. Detalle: ${error.message}`);
   }
@@ -5769,7 +5767,11 @@ function buildImpactText(){
 
 function buildTechnicalHtml(){
   const acts = state.asis.activities.map((a,i)=>`<li><strong>${i+1}. ${escapeHtml(a.name)}</strong> · ${escapeHtml(a.actor)} · ${escapeHtml(a.type)}${a.problems ? ` · ${escapeHtml(a.problems)}`:''}</li>`).join('');
-  const wastes = state.analysis?.wastes?.length ? `<ul>${state.analysis.wastes.map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul>` : '<p>-</p>';
+  const listHtml = arr => safeArray(arr).length ? `<ul>${safeArray(arr).map(x=>`<li>${escapeHtml(typeof x === 'string' ? x : sgmpTextOf(x))}</li>`).join('')}</ul>` : '<p>-</p>';
+  const improvements = safeArray(state.tobe?.improvements?.length ? state.tobe.improvements : state.analysis?.improvements);
+  const improvementsHtml = improvements.length
+    ? `<ul>${improvements.map(x => `<li><strong>${escapeHtml(x.title || 'Mejora')}</strong><br><b>Actividad:</b> ${escapeHtml(x.applies_to_activity || '-')}<br><b>Hallazgo:</b> ${escapeHtml(x.linked_finding || x.problem || '-')}<br><b>Solución:</b> ${escapeHtml(x.solution || x.proposedState || '-')}<br><b>Impacto:</b> ${escapeHtml(x.expected_impact || x.impact || '-')}</li>`).join('')}</ul>`
+    : '<p>-</p>';
   const artifacts = buildToBeArtifacts();
   const selected = artifacts.selected;
   const rejected = artifacts.rejected;
@@ -5784,7 +5786,7 @@ function buildTechnicalHtml(){
   const rejectedHtml = rejected.length
     ? `<ul>${rejected.map(x => `<li><strong>${escapeHtml(x.title)}</strong>: ${escapeHtml(x.problem || x.summary || 'Rechazada por decisión del usuario')}</li>`).join('')}</ul>`
     : '<p>-</p>';
-
+  const ava = state.analysis?.summary?.ava || {};
   return `
     <h1>Informe Técnico</h1>
     <p><strong>Proceso:</strong> ${escapeHtml(state.context.processName || '-')}</p>
@@ -5793,11 +5795,24 @@ function buildTechnicalHtml(){
     <ul>${acts || '<li>-</li>'}</ul>
 
     <h2>Análisis</h2>
-    <p><strong>AVA:</strong> ${state.analysis?.summary?.ava?.VA_pct || 0}% ·
-       <strong>NNVA:</strong> ${state.analysis?.summary?.ava?.NNVA_pct || 0}% ·
-       <strong>NVA:</strong> ${state.analysis?.summary?.ava?.NVA_pct || 0}%</p>
+    <p><strong>AVA:</strong> ${ava.VA_pct || 0}% ·
+       <strong>NNVA:</strong> ${ava.NNVA_pct || 0}% ·
+       <strong>NVA:</strong> ${ava.NVA_pct || 0}%</p>
+
     <h3>Desperdicios</h3>
-    ${wastes}
+    ${listHtml(state.analysis?.wastes)}
+
+    <h3>Problemas</h3>
+    ${listHtml(state.analysis?.problems)}
+
+    <h3>Restricciones / cuellos de botella</h3>
+    ${listHtml(state.analysis?.constraints)}
+
+    <h3>Riesgos</h3>
+    ${listHtml(state.analysis?.risks)}
+
+    <h2>Propuestas de mejora generadas</h2>
+    ${improvementsHtml}
 
     <h2>Mejoras ejecutadas</h2>
     ${executedHtml}
@@ -8380,35 +8395,53 @@ function extractAsIsActivitiesFromPayload(payload){
 function normalizeImprovement(item = {}){
   const firstText = (...values) => values.map(value => {
     if(value === undefined || value === null) return '';
-    if(Array.isArray(value)) return value.map(v => typeof v === 'string' ? v : JSON.stringify(v)).filter(Boolean).join('; ');
-    if(typeof value === 'object') return value.title || value.name || value.problem || value.description || value.summary || JSON.stringify(value);
+    if(Array.isArray(value)) return value.map(v => typeof v === 'string' ? v : sgmpTextOf(v)).filter(Boolean).join('; ');
+    if(typeof value === 'object') return value.title || value.name || value.problem || value.description || value.summary || value.restriction || value.constraint || value.finding || JSON.stringify(value);
     return String(value);
-  }).map(value => value.trim()).find(Boolean) || '';
+  }).map(value => String(value || '').trim()).find(Boolean) || '';
 
-  const problem = firstText(item.problem, item.problem_to_solve, item.problemSolved, item.problem_solved, item.relatedProblem, item.related_problem, item.problema, item.restriction, item.description, item.summary);
-  const proposedState = firstText(item.proposedState, item.proposed_state, item.to_be, item.toBeState, item.to_be_state, item.action, item.recommendation, item.solution, item.description);
+  const problem = firstText(item.problem, item.problem_to_solve, item.problemSolved, item.problem_solved, item.relatedProblem, item.related_problem, item.problema, item.restriction, item.constraint, item.finding, item.linked_finding, item.description, item.summary);
+  const solution = firstText(item.solution, item.proposedState, item.proposed_state, item.to_be, item.toBeState, item.to_be_state, item.action, item.recommendation, item.descripcion_solucion);
+  const howItWorks = firstText(item.how_it_works, item.howItWorks, item.mechanism, item.mecanismo, item.implementation_logic);
   const impact = firstText(item.impact, item.impacto, item.expectedImpact, item.expected_impact, item.expectedBenefit, item.expected_benefit, item.benefit);
   const support = [
     firstText(item.support, item.sustento, item.justification, item.justificacion, item.technicalRationale, item.technical_rationale, item.evidence),
-    firstText(item.source, item.reference, item.fuente, item.improvementType, item.improvement_type, item.type)
+    firstText(item.source, item.reference, item.fuente, item.industry_reference, item.industryReference, item.improvementType, item.improvement_type, item.type)
   ].filter(Boolean).join(' | ');
   const titleBase = firstText(
     item.title, item.name, item.titulo,
     item.improvementTitle, item.improvement_title,
-    item.improvementType, item.improvement_type,
     item.recommendation, item.action, item.header,
     item.category, item.type,
-    problem, proposedState, impact
+    solution, problem, impact
   );
   const title = titleBase && titleBase !== 'Mejora propuesta'
-    ? (titleBase.length > 90 ? titleBase.slice(0, 87) + '...' : titleBase)
+    ? (titleBase.length > 96 ? titleBase.slice(0, 93) + '...' : titleBase)
     : 'Mejora propuesta';
-  const finalProposed = proposedState || (problem ? 'Implementar una acción de mejora para resolver: ' + problem : impact || title);
+  const finalProposed = solution || (problem ? 'Implementar una acción de mejora para resolver: ' + problem : impact || title);
 
   return {
+    id: firstText(item.id, item.code, item.codigo),
     title,
-    summary: firstText(item.summary, item.description, item.technicalRationale, item.technical_rationale, impact, problem),
+    type: firstText(item.type, item.improvement_type, item.improvementType, item.support) || 'gradual',
+    applies_to_activity: firstText(item.applies_to_activity, item.appliesToActivity, item.activity, item.actividad, item.relatedActivity),
+    linked_finding: firstText(item.linked_finding, item.linkedFinding, item.finding, item.relatedFinding, problem),
     problem,
+    root_cause: firstText(item.root_cause, item.rootCause, item.causa_raiz, item.cause),
+    solution: finalProposed,
+    how_it_works: howItWorks || finalProposed,
+    industry_reference: firstText(item.industry_reference, item.industryReference, item.reference, item.benchmark, item.best_practice),
+    adaptation_logic: firstText(item.adaptation_logic, item.adaptationLogic, item.adaptation, item.logic),
+    expected_impact: impact,
+    impact_level: firstText(item.impact_level, item.impactLevel, item.impactLevelText) || firstText(item.impactLevel) || 'medium',
+    effort_level: firstText(item.effort_level, item.effortLevel, item.effort) || 'medium',
+    priority_score: firstText(item.priority_score, item.priorityScore, item.priority, item.score),
+    implementation_steps: safeArray(item.implementation_steps || item.implementationSteps || item.steps || item.plan),
+    required_roles: safeArray(item.required_roles || item.requiredRoles || item.roles),
+    required_systems_or_documents: safeArray(item.required_systems_or_documents || item.requiredSystemsOrDocuments || item.documents || item.systems),
+    risks: safeArray(item.risks || item.riesgos),
+    success_indicators: safeArray(item.success_indicators || item.successIndicators || item.indicators || item.kpis),
+    summary: firstText(item.summary, item.description, item.technicalRationale, item.technical_rationale, impact, problem),
     currentState: firstText(item.currentState, item.current_state, item.as_is, item.asIsState, item.as_is_state, problem),
     proposedState: finalProposed,
     support,
@@ -8477,146 +8510,176 @@ function sgmpCalculateAvaDistribution(activities){
   };
 }
 
-
-
-/* SGMP FIX · Evidencia ampliada para problemas/restricciones
-   Objetivo: evitar que B3/B4/B5 dependan solo de lo que devuelva la IA.
-   El demo trae problemas en actividades, cuestionarios y master.issues; este helper los vuelve visibles.
-*/
-function sgmpCollectEvidenceCandidatesFromState(){
-  const master = state.master || {};
-  const briefRaw = state.briefReview?.raw || state.brief || {};
-  const brief = normalizeBriefPayload(briefRaw || {});
-  const activities = [];
-  const pushActs = arr => safeArray(arr).forEach(a => { if(a) activities.push(a); });
-
-  pushActs(master.activities);
-  pushActs(state.asis?.activities);
-  pushActs(brief.as_is?.activities);
-  pushActs(brief.activities_preliminary);
-  pushActs(sgmpGetStructuralSourceActivities());
-
-  const issues = master.issues || {};
-  const fromActivities = {
-    problems: [],
-    wastes: [],
-    restrictions: [],
-    quickWins: [],
-    risks: [],
-    evidence: []
-  };
-
-  activities.forEach((a, idx) => {
-    const label = normalizeContractString(a.id || a.name || ('Actividad ' + (idx + 1)));
-    const prefix = label ? label + ': ' : '';
-
-    sgmpToList(a.problems || a.problemas || a.issue || a.issues).forEach(v => fromActivities.problems.push(prefix + sgmpTextOf(v)));
-    sgmpToList(a.wastes || a.desperdicios || a.waste).forEach(v => fromActivities.wastes.push(prefix + sgmpTextOf(v)));
-    sgmpToList(a.risks || a.riesgos || a.risk).forEach(v => fromActivities.risks.push(prefix + sgmpTextOf(v)));
-    sgmpToList(a.quickWin || a.quick_win || a.quickWins).forEach(v => {
-      const t = sgmpTextOf(v);
-      if(t && !/^no$/i.test(t)) fromActivities.quickWins.push(prefix + t);
-    });
-    sgmpToList(a.constraint || a.restriction || a.restriccion || a.restrictions || a.constraints).forEach(v => {
-      const t = sgmpTextOf(v);
-      if(t && !/^no$/i.test(t)) fromActivities.restrictions.push(prefix + t);
-    });
-
-    const note = sgmpTextOf(a.note || a.notes || '');
-    if(note){
-      fromActivities.evidence.push(prefix + note);
-      if(/problema|demora|espera|riesgo|rechazo|manual|incomplet|desactualiz|sin sla|no existe|falta/i.test(note)){
-        fromActivities.problems.push(prefix + note);
-      }
-      if(/restricci[oó]n|cuello|bloqueo|capacidad|espera|aprobaci[oó]n|proveedor|producci[oó]n|sla/i.test(note)){
-        fromActivities.restrictions.push(prefix + note);
-      }
-    }
-  });
-
-  return {
-    problems: sgmpUniqueStrings([
-      ...sgmpToList(issues.keyIssues),
-      ...sgmpToList(issues.problems),
-      ...sgmpToList(issues.delays),
-      ...sgmpToList(issues.rework),
-      ...sgmpToList(issues.frictions),
-      ...fromActivities.problems
-    ]),
-    wastes: sgmpUniqueStrings([
-      ...sgmpToList(issues.wastes),
-      ...fromActivities.wastes
-    ]),
-    restrictions: sgmpUniqueStrings([
-      ...sgmpToList(issues.constraints),
-      ...sgmpToList(issues.restrictions),
-      ...sgmpToList(issues.suspectedConstraints),
-      ...sgmpToList(issues.bottlenecks),
-      ...fromActivities.restrictions
-    ]),
-    quickWins: sgmpUniqueStrings([
-      ...sgmpToList(issues.quickWins),
-      ...fromActivities.quickWins
-    ]),
-    risks: sgmpUniqueStrings([
-      ...sgmpToList(issues.risks),
-      ...fromActivities.risks
-    ]),
-    evidence: sgmpUniqueStrings(fromActivities.evidence),
-    activitiesWithEvidence: activities.filter(a => sgmpTextOf(a.problems || a.note || a.wastes || a.constraint || a.restriction)).length,
-    sourceActivitiesCount: activities.length
-  };
+function sgmpIsFindingNoise(text){
+  const t = String(text || '').trim();
+  if(!t) return true;
+  if(/^ACT-\d+\s*:/i.test(t) && /ID fuente/i.test(t)) return true;
+  if(/^ID fuente\s*:/i.test(t)) return true;
+  if(t.length > 360) return true;
+  if(/^(Rol y responsabilidades|Actividades del proceso|Recepción de material|Generación de requerimientos)\s*:/i.test(t) && t.length > 180) return true;
+  return false;
 }
 
-function sgmpMergeEvidenceIntoFindings(findings){
-  const f = findings || {};
-  const evidence = sgmpCollectEvidenceCandidatesFromState();
-  f.wastes = sgmpUniqueStrings([...(f.wastes || []), ...evidence.wastes]);
-  f.problems = sgmpUniqueStrings([...(f.problems || []), ...evidence.problems]);
-  f.restrictions = sgmpUniqueStrings([...(f.restrictions || []), ...evidence.restrictions]);
-  f.quickWins = sgmpUniqueStrings([...(f.quickWins || []), ...evidence.quickWins]);
-  f.risks = sgmpUniqueStrings([...(f.risks || []), ...evidence.risks]);
-  f.evidenceHighlights = sgmpUniqueStrings([...(f.evidenceHighlights || []), ...evidence.evidence]);
-  return f;
+function sgmpShortFindingText(item){
+  if(item && typeof item === 'object'){
+    return sgmpTextOf(item.description || item.problem || item.restriction || item.constraint || item.waste || item.title || item.summary || item.evidence || item);
+  }
+  return sgmpTextOf(item);
+}
+
+function sgmpFindActivityForFinding(item, text){
+  if(item && typeof item === 'object'){
+    const direct = sgmpTextOf(item.activity || item.applies_to_activity || item.appliesToActivity || item.relatedActivity || item.actividad);
+    if(direct) return direct;
+  }
+  const acts = safeArray(state.asis?.activities || state.master?.activities || state.briefReview?.raw?.as_is?.activities);
+  const t = String(text || '').toLowerCase();
+  const hit = acts.find(a => t.includes(String(a.name || '').toLowerCase()) || (a.id && t.includes(String(a.id).toLowerCase())));
+  return hit ? (hit.name || hit.id || '') : '';
+}
+
+function sgmpSolutionForFinding(kind, text, activity){
+  const t = String(text || '').toLowerCase();
+  if(/cotiz|proveedor|rfq|respuesta/.test(t)){
+    return {
+      title:'Digitalizar y controlar el ciclo RFQ/cotizaciones',
+      type:'automation',
+      solution:'Implementar un tablero RFQ con fecha límite, responsable, estado por proveedor, alertas automáticas y escalamiento cuando no exista respuesta dentro del SLA.',
+      how:'Cada solicitud de cotización se registra con proveedores invitados, plazo comprometido, recordatorios automáticos, evidencia de respuesta y semáforo de vencimiento. El asistente deja de perseguir manualmente correos dispersos.',
+      reference:'Portal RFQ usado en retail, construcción y manufactura para reducir espera de cotizaciones y trazabilidad de proveedores.'
+    };
+  }
+  if(/especificaci|producci|t[eé]cnica|sla/.test(t)){
+    return {
+      title:'Definir SLA y formato técnico obligatorio para validación de especificaciones',
+      type:'control',
+      solution:'Crear un flujo de validación técnica con campos obligatorios, responsable de Producción, plazo máximo y bloqueo de avance si la especificación no está completa.',
+      how:'El requerimiento pasa a Producción con campos técnicos predefinidos; si es urgente se responde en horas y si es normal dentro del plazo acordado. El sistema o control visual deja trazabilidad de espera y vencimiento.',
+      reference:'SLA interárea y formularios técnicos usados en mantenimiento, ingeniería y compras industriales.'
+    };
+  }
+  if(/erp|estado|visibilidad|trazabilidad|google|excel|manual/.test(t)){
+    return {
+      title:'Crear tablero único de estados de OC y requerimientos',
+      type:'automation',
+      solution:'Integrar o replicar en un tablero controlado los estados clave del requerimiento, cotización, aprobación, OC, despacho y recepción, eliminando controles paralelos no oficiales.',
+      how:'Cada OC queda con estado, fecha objetivo, responsable, vencimiento y alerta. Almacén, Compras y Logística consultan la misma fuente y reducen seguimiento informal.',
+      reference:'Tracking de pedidos de e-commerce adaptado a órdenes de compra industriales.'
+    };
+  }
+  if(/cat[aá]logo|c[oó]digo|insumo|stock|inventario|reorden/.test(t)){
+    return {
+      title:'Actualizar catálogo maestro de insumos y reglas de requerimiento',
+      type:'redesign',
+      solution:'Actualizar catálogo, variantes técnicas, códigos, puntos de reorden y campos obligatorios del requerimiento para reducir devoluciones y búsqueda manual.',
+      how:'Se depuran códigos duplicados, se incorporan insumos nuevos, se parametrizan mínimos y se obliga a seleccionar especificaciones desde listas controladas.',
+      reference:'Gestión de maestro de materiales usada en manufactura, MRP y mantenimiento industrial.'
+    };
+  }
+  if(/aprobaci|jefe|gerencia|reuni[oó]n|autoriz/.test(t)){
+    return {
+      title:'Implementar workflow de aprobación con SLA y delegación por monto',
+      type:'control',
+      solution:'Configurar reglas de aprobación con plazo máximo, delegación temporal y alertas de vencimiento según monto y criticidad.',
+      how:'La OC pendiente se enruta automáticamente al aprobador correcto, genera alertas, permite delegación y registra tiempos reales de aprobación.',
+      reference:'Workflows aprobatorios de banca y compras corporativas adaptados a compras industriales.'
+    };
+  }
+  if(/devoluci|rechazo|cuarentena|no conforme|calidad/.test(t)){
+    return {
+      title:'Formalizar gestión de material no conforme y devolución a proveedor',
+      type:'control',
+      solution:'Crear procedimiento y registro de rechazo/devolución con criterios, responsables, tiempos de reposición y comunicación a Producción y Finanzas.',
+      how:'Cuando se detecta no conformidad, se abre caso con evidencia, proveedor, plazo de retiro/reposición y cierre documentado.',
+      reference:'Flujo NCR/no conformidad de calidad aplicado a recepción de materiales.'
+    };
+  }
+  if(/sobrecarga|capacidad|asistente|interrup|urgencia/.test(t)){
+    return {
+      title:'Rediseñar capacidad y priorización del rol de Asistente de Compras',
+      type:'redesign',
+      solution:'Separar trabajo planificado, urgencias y seguimiento; definir reglas de priorización, tablero WIP y criterio para refuerzo temporal o redistribución.',
+      how:'Se limita trabajo en proceso, se visualizan urgencias, se asigna back-up para seguimiento y se mide carga real vs capacidad disponible.',
+      reference:'Kanban operativo y gestión WIP de servicios compartidos adaptado a compras.'
+    };
+  }
+  return {
+    title: kind + ' aplicado a ' + (activity || 'proceso'),
+    type: kind === 'Quick win' ? 'quick_win' : 'gradual',
+    solution:'Diseñar e implementar una acción específica para eliminar o controlar el hallazgo detectado, con responsable, evidencia, plazo e indicador de seguimiento.',
+    how:'Convertir el hallazgo en una acción controlada: definir estándar, responsable, indicador, punto de control y mecanismo de revisión semanal hasta estabilizar el resultado.',
+    reference:'Gestión visual Lean, control de proceso y ciclo PDCA aplicados a procesos administrativos industriales.'
+  };
 }
 
 function sgmpBuildCandidateImprovementsFromFindings(findings, maxItems){
   const f = findings || {};
+  const buckets = [
+    ['Quick win', sgmpToList(f.quickWins || f.quick_wins)],
+    ['Restricción', sgmpToList(f.restrictions || f.constraints || f.suspectedConstraints || f.suspected_constraints || f.bottlenecks)],
+    ['Desperdicio', sgmpToList(f.wastes || f.desperdicios || f.manualDependencies || f.manual_dependencies)],
+    ['Problema', sgmpToList(f.problems || f.problemas || f.evidenceHighlights || f.evidence_highlights)],
+    ['Riesgo', sgmpToList(f.risks || f.riesgos || f.controlIssues || f.control_issues || f.dataGaps || f.data_gaps)]
+  ];
   const candidates = [];
-  const add = (kind, item, idx) => {
-    const text = sgmpTextOf(item);
-    if(!text) return;
-    const title = kind + ' ' + (idx + 1);
-    candidates.push(normalizeImprovement({
-      title,
-      summary: text,
-      problem: text,
-      problemSolved: text,
-      currentState: text,
-      proposedState:
-        kind === 'Quick win' ? 'Implementar una acción rápida para resolver o mitigar: ' + text :
-        kind === 'Restricción' ? 'Eliminar, reducir o controlar la restricción detectada: ' + text :
-        kind === 'Desperdicio' ? 'Reducir el desperdicio identificado mediante estandarización, control visual o automatización selectiva: ' + text :
-        'Diseñar una acción de mejora para resolver: ' + text,
-      support: 'Generado desde hallazgos del análisis AS IS.',
-      impact:
-        kind === 'Quick win' ? 'Impacto rápido esperado en control, trazabilidad o reducción de reproceso.' :
-        kind === 'Restricción' ? 'Mejora esperada en capacidad, flujo o eliminación de bloqueo operativo.' :
-        kind === 'Desperdicio' ? 'Reducción esperada de tiempo, esperas, retrabajo o carga manual.' :
-        'Mejora esperada en desempeño operativo del proceso.',
-      status: 'pending'
-    }));
-  };
-  sgmpToList(f.quickWins || f.quick_wins).forEach((x,i)=>add('Quick win',x,i));
-  sgmpToList(f.restrictions || f.constraints || f.suspectedConstraints || f.suspected_constraints).forEach((x,i)=>add('Restricción',x,i));
-  sgmpToList(f.wastes || f.manualDependencies || f.manual_dependencies).forEach((x,i)=>add('Desperdicio',x,i));
-  sgmpToList(f.problems || f.evidenceHighlights || f.evidence_highlights || f.contradictions || f.contradictions_detected).forEach((x,i)=>add('Mejora derivada de problema',x,i));
+  buckets.forEach(([kind, list]) => {
+    list.forEach(item => {
+      const text = sgmpShortFindingText(item);
+      if(sgmpIsFindingNoise(text)) return;
+      const activity = sgmpFindActivityForFinding(item, text);
+      const sol = sgmpSolutionForFinding(kind, text, activity);
+      candidates.push(normalizeImprovement({
+        id:'',
+        title: sol.title,
+        type: sol.type,
+        applies_to_activity: activity,
+        linked_finding: text,
+        problem: text,
+        root_cause: (kind === 'Restricción' ? 'Restricción operativa no controlada o no formalizada.' : 'Causa probable asociada al hallazgo; requiere validación con dueño del proceso.'),
+        solution: sol.solution,
+        how_it_works: sol.how,
+        industry_reference: sol.reference,
+        adaptation_logic: 'La práctica se adapta al proceso actual usando roles, documentos, sistemas y controles existentes; no se propone como recomendación genérica.',
+        expected_impact: kind === 'Quick win' ? 'Impacto rápido en control, visibilidad o reducción de retrabajo.' : 'Reducción de tiempos, esperas, variabilidad, carga manual o riesgo operativo.',
+        impact_level: (kind === 'Restricción' || /cotiz|erp|sobrecarga|sla/i.test(text)) ? 'high' : 'medium',
+        effort_level: /portal|erp|sistema|workflow/i.test(sol.solution) ? 'medium' : 'low',
+        priority_score: (kind === 'Restricción' || /cotiz|erp|sobrecarga|sla/i.test(text)) ? '8' : '6',
+        implementation_steps: ['Confirmar hallazgo con dueño del proceso','Definir estándar o mecanismo de control','Asignar responsable y plazo','Piloto controlado','Medir resultado y ajustar'],
+        required_roles: ['Dueño del proceso','Actor responsable de la actividad','Procesos/Mejora Continua'],
+        required_systems_or_documents: ['Procedimiento o instructivo actualizado','Registro de control','Indicador de seguimiento'],
+        risks: ['Resistencia al cambio','Datos incompletos para línea base','Adopción parcial del nuevo estándar'],
+        success_indicators: ['Tiempo de ciclo','Cumplimiento de plazo','Cantidad de reprocesos o seguimientos manuales','Nivel de cumplimiento del nuevo estándar'],
+        status:'pending'
+      }));
+    });
+  });
   const unique = [];
   candidates.forEach(c => {
-    const key = String(c.problem || c.summary || c.title || '').toLowerCase();
-    if(key && !unique.some(u => String(u.problem || u.summary || u.title || '').toLowerCase() === key)) unique.push(c);
+    const key = String(c.problem || c.linked_finding || c.title || '').toLowerCase().replace(/\s+/g,' ').trim();
+    if(key && !unique.some(u => String(u.problem || u.linked_finding || u.title || '').toLowerCase().replace(/\s+/g,' ').trim() === key)) unique.push(c);
   });
-  return unique.slice(0, maxItems || 12);
+  return unique.slice(0, maxItems || 20).map((c,i)=>Object.assign({}, c, { id: c.id || ('IM-' + String(i+1).padStart(2,'0')) }));
+}
+
+function sgmpStrengthenImprovementsFromFindings(data){
+  const d = data || {};
+  const f = d.findings || {};
+  const generated = sgmpBuildCandidateImprovementsFromFindings(f, 20);
+  const existing = safeArray(d.improvements || []).map(normalizeImprovement).filter(x => x.problem || x.title || x.solution);
+  const minExpected = Math.min(12, Math.max(4, Math.ceil(generated.length * 0.65)));
+  let merged = [...existing];
+  generated.forEach(g => {
+    const gKey = String(g.problem || g.linked_finding || '').toLowerCase();
+    const already = merged.some(m => {
+      const mKey = String(m.problem || m.linked_finding || '').toLowerCase();
+      return mKey && gKey && (mKey === gKey || mKey.includes(gKey) || gKey.includes(mKey));
+    });
+    if(!already) merged.push(g);
+  });
+  if(existing.length < minExpected) d.improvements = merged.slice(0, Math.max(minExpected, existing.length));
+  else d.improvements = merged;
+  d.quickWins = safeArray(d.quickWins || d.findings?.quickWins || []);
+  return d;
 }
 
 function sgmpEnrichAnalysisModel(data){
@@ -8658,19 +8721,27 @@ function sgmpEnrichAnalysisModel(data){
   f.suspectedConstraints = sgmpUniqueStrings([...sgmpToList(f.suspectedConstraints), ...sgmpToList(f.suspected_constraints)]);
   f.contradictions = sgmpUniqueStrings([...sgmpToList(f.contradictions), ...sgmpToList(f.contradictions_detected)]);
 
-  sgmpMergeEvidenceIntoFindings(f);
-
   const acts = safeArray(d.as_is?.activities || d.activities);
   d.ava = d.ava || {};
   const existingDist = d.ava.distribution || d.ava.percentages || {};
   const calc = sgmpCalculateAvaDistribution(acts);
-  const hasAvaNumbers = ['VA','NNVA','NVA','VA_pct','NNVA_pct','NVA_pct'].some(k => Number(existingDist[k]) > 0);
-  d.ava.distribution = hasAvaNumbers ? Object.assign({}, calc, existingDist) : calc;
+  const vaN = Number(existingDist.VA || 0), nnvaN = Number(existingDist.NNVA || 0), nvaN = Number(existingDist.NVA || 0);
+  const totalByCounts = vaN + nnvaN + nvaN;
+  if(totalByCounts > 0 && (!Number(existingDist.VA_pct) && !Number(existingDist.NNVA_pct) && !Number(existingDist.NVA_pct))){
+    d.ava.distribution = Object.assign({}, existingDist, {
+      VA_pct: Math.round((vaN / totalByCounts) * 100),
+      NNVA_pct: Math.round((nnvaN / totalByCounts) * 100),
+      NVA_pct: Math.round((nvaN / totalByCounts) * 100),
+      counts: { VA: vaN, NNVA: nnvaN, NVA: nvaN },
+      total: totalByCounts
+    });
+  }else{
+    const hasAvaNumbers = ['VA','NNVA','NVA','VA_pct','NNVA_pct','NVA_pct'].some(k => Number(existingDist[k]) > 0);
+    d.ava.distribution = hasAvaNumbers ? Object.assign({}, calc, existingDist) : calc;
+  }
 
   d.improvements = safeArray(d.improvements || d.mejoras).map(normalizeImprovement);
-  if(!d.improvements.length){
-    d.improvements = sgmpBuildCandidateImprovementsFromFindings(f, 12);
-  }
+  sgmpStrengthenImprovementsFromFindings(d);
   return d;
 }
 
@@ -8721,8 +8792,6 @@ REGLAS:
 - No diseñes TO BE.
 - No hagas contrato SB.
 - Cada hallazgo debe tener evidencia o actividad relacionada cuando sea posible.
-- Revisa TODOS los problemas y desperdicios que estén en source_evidence_candidates. No devuelvas solo 2 si hay más evidencias.
-- Devuelve preferentemente entre 6 y 15 hallazgos cuando el caso contenga evidencia suficiente.
 
 SALIDA JSON ESTRICTA:
 {
@@ -8746,8 +8815,6 @@ REGLAS:
 - Diferencia restricción real de problema general.
 - No propongas aún el plan TO BE completo.
 - Relaciona restricciones con actividades cuando aplique.
-- Revisa TODOS los problemas y restricciones que estén en source_evidence_candidates. No devuelvas solo 2 si hay más evidencias.
-- Devuelve restricciones reales, cuellos de botella y restricciones sospechadas por separado.
 
 SALIDA JSON ESTRICTA:
 {
@@ -8804,6 +8871,12 @@ Si una idea usa una de esas frases, debe explicar exactamente:
 Cada mejora debe vincularse con al menos:
 - una actividad real del AS IS
 - un problema, desperdicio, riesgo, restricción o causa probable de B2-B4
+
+2.1 COBERTURA MÍNIMA OBLIGATORIA.
+No agrupes hallazgos distintos en una sola mejora salvo que compartan la misma causa raíz y exactamente el mismo mecanismo de solución.
+Si B3+B4 contienen más de 8 hallazgos relevantes, genera al menos 6 mejoras.
+Si existen hallazgos sobre cotizaciones, ERP/visibilidad, SLA/especificaciones, sobrecarga, catálogo, aprobación, material no conforme o urgencias, cada tema debe tener su propia mejora.
+Una salida de solo 1 o 2 mejoras es inválida cuando hay múltiples hallazgos.
 
 3. ADAPTACIÓN A INDUSTRIA.
 Cada mejora debe indicar una referencia práctica:
@@ -8921,19 +8994,16 @@ function sgmpBuildAnalysisStagePrompt(stageKey){
     brief.activities_preliminary ||
     sgmpGetStructuralSourceActivities()
   );
-  const sourceEvidence = sgmpCollectEvidenceCandidatesFromState();
   const evidencePack = {
     context: c,
     brief,
     current_as_is: baseActivities,
     previous_stage_results: stageResults,
     master_sipoc: master.sipoc || {},
-    master_issues: master.issues || {},
-    source_evidence_candidates: sourceEvidence,
     source_activity_count: baseActivities.length,
     source_activities: baseActivities
   };
-  return `${def.instruction}\n\nREGLAS GLOBALES SGMP:\n- Responde SOLO JSON válido.\n- No uses markdown.\n- No inventes evidencia.\n- Si falta información, registra warnings o dataGaps.\n- Mantén nombres de campos exactamente como se solicita.\n- NO limites la respuesta a 2 hallazgos. Si source_evidence_candidates trae más problemas, restricciones o desperdicios, debes evaluarlos todos y devolver los relevantes.\n- Para B3, usa source_evidence_candidates.problems, wastes, risks, manual dependencies y evidence como lista mínima de revisión.\n- Para B4, usa source_evidence_candidates.restrictions y problems para separar restricciones reales, cuellos de botella y problemas generales.\n- Si el caso demo contiene múltiples evidencias por actividad, conserva la trazabilidad actividad → hallazgo.\n\nINSUMOS:\n${JSON.stringify(evidencePack, null, 2)}`;
+  return `${def.instruction}\n\nREGLAS GLOBALES SGMP:\n- Responde SOLO JSON válido.\n- No uses markdown.\n- No inventes evidencia.\n- Si falta información, registra warnings o dataGaps.\n- Mantén nombres de campos exactamente como se solicita.\n\nINSUMOS:\n${JSON.stringify(evidencePack, null, 2)}`;
 }
 
 function generateAnalysisStagePrompt(stageKey){
@@ -8967,24 +9037,7 @@ function sgmpAssembleStagedAnalysisPayload(){
       }) : a;
     });
   }
-  const f3 = b3.findings || {};
-  const f4 = b4.findings || {};
-  const mergedFindings = {
-    wastes: sgmpUniqueStrings([...sgmpToList(f3.wastes), ...sgmpToList(f4.wastes)]),
-    problems: sgmpUniqueStrings([...sgmpToList(f3.problems), ...sgmpToList(f4.problems)]),
-    risks: sgmpUniqueStrings([...sgmpToList(f3.risks), ...sgmpToList(f4.risks)]),
-    restrictions: sgmpUniqueStrings([...sgmpToList(f3.restrictions), ...sgmpToList(f4.restrictions), ...sgmpToList(f4.constraints)]),
-    quickWins: sgmpUniqueStrings([...sgmpToList(f3.quickWins), ...sgmpToList(f4.quickWins)]),
-    bottlenecks: sgmpUniqueStrings([...sgmpToList(f3.bottlenecks), ...sgmpToList(f4.bottlenecks)]),
-    suspected_constraints: sgmpUniqueStrings([...sgmpToList(f3.suspected_constraints), ...sgmpToList(f4.suspected_constraints)]),
-    rootCauseHypotheses: sgmpUniqueStrings([...sgmpToList(f3.rootCauseHypotheses), ...sgmpToList(f4.rootCauseHypotheses)]),
-    controlIssues: sgmpUniqueStrings([...sgmpToList(f3.controlIssues), ...sgmpToList(f4.controlIssues)]),
-    dataGaps: sgmpUniqueStrings([...sgmpToList(f3.dataGaps), ...sgmpToList(f4.dataGaps)]),
-    evidence_highlights: sgmpUniqueStrings([...sgmpToList(f3.evidence_highlights), ...sgmpToList(f4.evidence_highlights)]),
-    manual_dependencies: sgmpUniqueStrings([...sgmpToList(f3.manual_dependencies), ...sgmpToList(f4.manual_dependencies)]),
-    hidden_controls: sgmpUniqueStrings([...sgmpToList(f3.hidden_controls), ...sgmpToList(f4.hidden_controls)]),
-    contradictions_detected: sgmpUniqueStrings([...sgmpToList(f3.contradictions_detected), ...sgmpToList(f4.contradictions_detected)])
-  };
+  const mergedFindings = Object.assign({}, b3.findings || {}, b4.findings || {});
   return sgmpEnrichAnalysisModel({
     context: state.context || state.master?.context || {},
     as_is: { activities },
@@ -9028,17 +9081,20 @@ function processAnalysisStageResponse(){
     }
 
     const stageImprovements = safeArray(parsed?.improvements || parsed?.mejoras || parsed?.quickWins || parsed?.quick_wins);
-    if(key === 'B5' && stageImprovements.length){
-      state.tobe = state.tobe || {};
-      state.tobe.improvements = stageImprovements.map((item, idx) => Object.assign(
-        {},
-        normalizeImprovement(item),
-        {
-          id: item.id || ('imp-' + String(idx + 1).padStart(2,'0')),
-          status: item.status || 'pending',
-          customText: item.customText || ''
-        }
-      ));
+    if(key === 'B5'){
+      const expandedImprovements = safeArray(normalized?.improvements || stageImprovements);
+      if(expandedImprovements.length){
+        state.tobe = state.tobe || {};
+        state.tobe.improvements = expandedImprovements.map((item, idx) => Object.assign(
+          {},
+          normalizeImprovement(item),
+          {
+            id: item.id || ('IM-' + String(idx + 1).padStart(2,'0')),
+            status: item.status || 'pending',
+            customText: item.customText || ''
+          }
+        ));
+      }
     }
 
     const sbInput = parsed?.sipoc_input || parsed?.sb_contract?.sipoc_input || parsed?.sbContract?.sipoc_input;
@@ -10417,7 +10473,6 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
     if(typeof syncVisibleStage === 'function') syncVisibleStage();
     if(current === 'preparacion'){ if(state.metadata.route === 'doc'){ showSection('documentacion_existente'); return; } showSection('carga'); return; }
     if(current === 'documentacion_existente'){ showSection('carga'); return; }
-    if(current === 'carga'){ showSection('asis'); return; }
     if(current === 'asis'){ showSection('analisis_b1'); return; }
     if(current === 'analisis_b6'){ showSection('decision'); return; }
     if(current === 'decision'){ if(typeof continueFromDecision === 'function') continueFromDecision(); return; }
