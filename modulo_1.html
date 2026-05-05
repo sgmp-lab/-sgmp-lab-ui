@@ -1518,7 +1518,7 @@ body .app .layout > aside.sidebar .step-list::-webkit-scrollbar-thumb:hover{
 <button class="step-btn" data-target="analisis_b2">B2 · AVA<small>Prompt y respuesta de valor agregado.</small></button>
 <button class="step-btn" data-target="analisis_b3">B3 · Desperdicios<small>Prompt y respuesta de hallazgos Lean.</small></button>
 <button class="step-btn" data-target="analisis_b4">B4 · Restricciones<small>Prompt y respuesta de restricciones TOC.</small></button>
-<button class="step-btn" data-target="analisis_b5">B5 · Mejoras<small>Prompt y respuesta para TO BE.</small></button>
+<button class="step-btn" data-target="analisis_b5">B5 · Mejoras<small>Propuestas aplicadas y trazables.</small></button>
 <button class="step-btn" data-target="analisis_b6">B6 · Builder SB<small>Prompt y respuesta del contrato SIPOC.</small></button>
 <button class="step-btn" data-target="decision">Decisión<small>Cerrar con AS IS o pasar a TO BE.</small></button>
 <button class="step-btn" data-target="tobe">TO BE<small>Evaluación de mejoras.</small></button>
@@ -2783,7 +2783,7 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 </div>
 </div>
 <textarea id="analysisPromptEditor" placeholder="Aquí aparecerá el Prompt B una vez aprobado el Brief." style="width:100%;min-height:300px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
-<div class="note" id="analysisStageHelp"><strong>Análisis por etapas</strong><br/>Genera y procesa una etapa a la vez: B1 AS IS, B2 AVA, B3 desperdicios/problemas, B4 restricciones, B5 mejoras candidatas y B6 contrato SB. Los prompts están embebidos temporalmente en el HTML.</div>
+<div class="note" id="analysisStageHelp"><strong>Análisis por etapas</strong><br/>Genera y procesa una etapa a la vez: B1 AS IS, B2 AVA, B3 desperdicios/problemas, B4 restricciones, B5 mejoras aplicadas y B6 contrato SB. Los prompts se cargan desde Apps Script / Google Sheets cuando existen; si no están disponibles, se usa fallback interno por bloque.</div>
 <div class="actions" style="border-top:none;padding-top:8px;margin-top:8px">
   <div class="actions-left">
     <button class="btn-ghost" onclick="generateAnalysisStagePrompt('B1')" type="button">B1 · AS IS</button>
@@ -3079,7 +3079,7 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 <section class="section analysis-stage-section" id="analisis_b5" data-analysis-stage="B5">
   <div class="section-head">
     <div>
-      <h2>B5 · Mejoras candidatas</h2>
+      <h2>B5 · Mejoras aplicadas</h2>
       <p>Convierte hallazgos en mejoras candidatas para que el TO BE tenga elementos para aprobar, ajustar o rechazar.</p>
     </div>
     <div class="step-pill">Paso 5.5</div>
@@ -8433,37 +8433,231 @@ function sgmpEnrichAnalysisModel(data){
 }
 
 function sgmpGetAnalysisStageDefinitions(){
+  const p = (key, fallback) => (typeof sgmpPrompt === 'function' ? sgmpPrompt(key, fallback) : fallback);
+  const fallbackB1 = `ACTÚA COMO consultor senior en procesos y modelador AS IS.
+
+OBJETIVO B1:
+Validar, limpiar y estructurar el AS IS usando como fuente principal source_activities.
+
+REGLAS:
+- No hagas análisis de mejoras todavía.
+- No hagas AVA todavía.
+- No reduzcas ni agrupes actividades.
+- Conserva todas las actividades estructurales.
+- Corrige continuidad previous/next si hay vacíos.
+- Marca una sola actividad inicial y una sola final.
+
+SALIDA JSON ESTRICTA:
+{
+  "as_is": {"activities": []},
+  "validation": {"valid": true, "activity_count": 0, "warnings": [], "blockingIssues": []}
+}`;
+
+  const fallbackB2 = `ACTÚA COMO especialista Lean Six Sigma.
+
+OBJETIVO B2:
+Clasificar cada actividad AS IS en VA, NNVA o NVA, con evidencia breve.
+
+REGLAS:
+- Usa solo las actividades recibidas.
+- No elimines ni renombres actividades.
+- No propongas mejoras todavía.
+- Devuelve distribución porcentual y detalle por actividad.
+
+SALIDA JSON ESTRICTA:
+{
+  "as_is": {"activities": []},
+  "ava": {"distribution": {"VA": 0, "NNVA": 0, "NVA": 0}, "activityAnalysis": [], "evidence": []}
+}`;
+
+  const fallbackB3 = `ACTÚA COMO experto Lean, análisis de desperdicios y diagnóstico operativo.
+
+OBJETIVO B3:
+Detectar desperdicios, problemas, riesgos, dependencias manuales, controles ocultos y evidencias desde el AS IS y el brief.
+
+REGLAS:
+- No diseñes TO BE.
+- No hagas contrato SB.
+- Cada hallazgo debe tener evidencia o actividad relacionada cuando sea posible.
+
+SALIDA JSON ESTRICTA:
+{
+  "findings": {
+    "wastes": [],
+    "problems": [],
+    "risks": [],
+    "evidence_highlights": [],
+    "manual_dependencies": [],
+    "hidden_controls": [],
+    "contradictions_detected": []
+  }
+}`;
+
+  const fallbackB4 = `ACTÚA COMO especialista TOC, causa raíz y flujo operativo.
+
+OBJETIVO B4:
+Identificar restricciones, cuellos de botella, causas probables y puntos de bloqueo del proceso.
+
+REGLAS:
+- Diferencia restricción real de problema general.
+- No propongas aún el plan TO BE completo.
+- Relaciona restricciones con actividades cuando aplique.
+
+SALIDA JSON ESTRICTA:
+{
+  "findings": {
+    "restrictions": [],
+    "suspected_constraints": [],
+    "bottlenecks": [],
+    "rootCauseHypotheses": [],
+    "controlIssues": [],
+    "dataGaps": []
+  }
+}`;
+
+  const fallbackB5 = `ACTÚA COMO:
+
+- Consultor senior en mejora continua, Lean, Six Sigma, TOC y BPM.
+- Especialista en rediseño operativo aplicado a la industria del proceso.
+- Analista crítico de buenas prácticas operativas y tecnológicas.
+- Consultor capaz de adaptar prácticas de otras industrias cuando sean lógicas y aplicables.
+
+OBJETIVO B5:
+Convertir los hallazgos de B1, B2, B3 y B4 en propuestas de mejora específicas, accionables y defendibles.
+
+B5 NO debe analizar desde cero.
+B5 debe usar los resultados anteriores como fuente de verdad.
+
+FUENTES OBLIGATORIAS:
+- previous_stage_results.B1.as_is.activities
+- previous_stage_results.B2.ava
+- previous_stage_results.B3.findings
+- previous_stage_results.B4.findings
+- brief
+- context.industry
+- context.activity
+- context.processType
+
+REGLAS CRÍTICAS:
+1. PROHIBIDO generar mejoras genéricas.
+No uses recomendaciones vagas como:
+- mejorar comunicación
+- optimizar el proceso
+- automatizar el proceso
+- capacitar al personal
+- hacer seguimiento
+
+Si una idea usa una de esas frases, debe explicar exactamente:
+- qué se implementa
+- en qué actividad aplica
+- cómo funciona
+- qué dato, documento, sistema, rol o control cambia
+- qué buena práctica la respalda
+
+2. TRAZABILIDAD OBLIGATORIA.
+Cada mejora debe vincularse con al menos:
+- una actividad real del AS IS
+- un problema, desperdicio, riesgo, restricción o causa probable de B2-B4
+
+3. ADAPTACIÓN A INDUSTRIA.
+Cada mejora debe indicar una referencia práctica:
+- buena práctica de la misma industria, o
+- práctica de otra industria adaptada al caso.
+Ejemplos válidos: portales RFQ de retail adaptados a compras industriales; kanban de manufactura aplicado a abastecimiento; workflow aprobatorio de banca adaptado a compras; tracking logístico de e-commerce adaptado a OC.
+
+4. MECANISMO DE SOLUCIÓN.
+No basta con decir qué hacer. Explica cómo se ejecuta.
+
+5. CLASIFICACIÓN CONSULTIVA.
+Clasifica cada mejora como:
+- quick_win
+- gradual
+- strategic
+- automation
+- control
+- redesign
+
+6. PRIORIZACIÓN.
+Incluye impacto, esfuerzo y prioridad argumentada.
+
+ESTRUCTURA OBLIGATORIA DE CADA MEJORA:
+{
+  "id": "",
+  "title": "",
+  "type": "quick_win|gradual|strategic|automation|control|redesign",
+  "applies_to_activity": "",
+  "linked_finding": "",
+  "problem": "",
+  "root_cause": "",
+  "solution": "",
+  "how_it_works": "",
+  "industry_reference": "",
+  "adaptation_logic": "",
+  "expected_impact": "",
+  "impact_level": "low|medium|high",
+  "effort_level": "low|medium|high",
+  "priority_score": "",
+  "implementation_steps": [],
+  "required_roles": [],
+  "required_systems_or_documents": [],
+  "risks": [],
+  "success_indicators": [],
+  "status": "pending"
+}
+
+SALIDA JSON ESTRICTA:
+{
+  "quickWins": [],
+  "improvements": []
+}
+
+VALIDACIÓN FINAL:
+Antes de responder, verifica:
+- ¿Cada mejora está ligada a una actividad real?
+- ¿Cada mejora tiene hallazgo asociado?
+- ¿Cada mejora explica cómo se implementa?
+- ¿Cada mejora está adaptada al contexto/industria?
+- ¿El output alimenta directamente TO BE?
+
+Si alguna respuesta es NO, corrige antes de responder.`;
+
+  const fallbackB6 = `ACTÚA COMO builder contractual final LMP → SIPOC Builder.
+
+OBJETIVO B6:
+Construir el bloque sipoc_input usando el AS IS validado y los datos SIPOC disponibles.
+
+REGLAS:
+- Devuelve SOLO sipoc_input.
+- No incluyas análisis, métricas ni mejoras.
+- previous y next deben ser arrays.
+- activities debe conservar todas las actividades AS IS.
+
+SALIDA JSON ESTRICTA:
+{
+  "sipoc_input": {
+    "process_code": "",
+    "process_name": "",
+    "purpose": "",
+    "start_event": "",
+    "end_event": "",
+    "notes": "",
+    "suppliers": [],
+    "inputs": [],
+    "outputs": [],
+    "customers": [],
+    "actors": [],
+    "documents": [],
+    "activities": []
+  }
+}`;
+
   return {
-    B1:{
-      label:'B1 · Validación AS IS',
-      stageCode:'lmp_analysis_b1',
-      instruction:`ACTÚA COMO consultor senior en procesos y modelador AS IS.\n\nOBJETIVO B1:\nValidar, limpiar y estructurar el AS IS usando como fuente principal source_activities.\n\nREGLAS:\n- No hagas análisis de mejoras todavía.\n- No hagas AVA todavía.\n- No reduzcas ni agrupes actividades.\n- Conserva todas las actividades estructurales.\n- Corrige continuidad previous/next si hay vacíos.\n- Marca una sola actividad inicial y una sola final.\n\nSALIDA JSON ESTRICTA:\n{\n  "as_is": {"activities": []},\n  "validation": {"valid": true, "activity_count": 0, "warnings": [], "blockingIssues": []}\n}`
-    },
-    B2:{
-      label:'B2 · Análisis AVA',
-      stageCode:'lmp_analysis_b2',
-      instruction:`ACTÚA COMO especialista Lean Six Sigma.\n\nOBJETIVO B2:\nClasificar cada actividad AS IS en VA, NNVA o NVA, con evidencia breve.\n\nREGLAS:\n- Usa solo las actividades recibidas.\n- No elimines ni renombres actividades.\n- No propongas mejoras todavía.\n- Devuelve distribución porcentual y detalle por actividad.\n\nSALIDA JSON ESTRICTA:\n{\n  "as_is": {"activities": []},\n  "ava": {"distribution": {"VA": 0, "NNVA": 0, "NVA": 0}, "activityAnalysis": [], "evidence": []}\n}`
-    },
-    B3:{
-      label:'B3 · Desperdicios y problemas',
-      stageCode:'lmp_analysis_b3',
-      instruction:`ACTÚA COMO experto Lean, análisis de desperdicios y diagnóstico operativo.\n\nOBJETIVO B3:\nDetectar desperdicios, problemas, riesgos, dependencias manuales, controles ocultos y evidencias desde el AS IS y el brief.\n\nREGLAS:\n- No diseñes TO BE.\n- No hagas contrato SB.\n- Cada hallazgo debe tener evidencia o actividad relacionada cuando sea posible.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "wastes": [],\n    "problems": [],\n    "risks": [],\n    "evidence_highlights": [],\n    "manual_dependencies": [],\n    "hidden_controls": [],\n    "contradictions_detected": []\n  }\n}`
-    },
-    B4:{
-      label:'B4 · Restricciones y causa probable',
-      stageCode:'lmp_analysis_b4',
-      instruction:`ACTÚA COMO especialista TOC, causa raíz y flujo operativo.\n\nOBJETIVO B4:\nIdentificar restricciones, cuellos de botella, causas probables y puntos de bloqueo del proceso.\n\nREGLAS:\n- Diferencia restricción real de problema general.\n- No propongas aún el plan TO BE completo.\n- Relaciona restricciones con actividades cuando aplique.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "restrictions": [],\n    "suspected_constraints": [],\n    "bottlenecks": [],\n    "rootCauseHypotheses": [],\n    "controlIssues": [],\n    "dataGaps": []\n  }\n}`
-    },
-    B5:{
-      label:'B5 · Mejoras candidatas para TO BE',
-      stageCode:'lmp_analysis_b5',
-      instruction:`ACTÚA COMO consultor senior de mejora continua.\n\nOBJETIVO B5:\nConvertir hallazgos, problemas, desperdicios y restricciones en mejoras candidatas para que el usuario las apruebe, ajuste o rechace en TO BE.\n\nREGLAS:\n- No generes mejoras genéricas.\n- Cada mejora debe estar conectada a un problema, desperdicio o restricción.\n- Distingue quick win de mejora gradual y proyecto estructural.\n- La salida debe alimentar directamente la pantalla TO BE.\n\nSALIDA JSON ESTRICTA:\n{\n  "quickWins": [],\n  "improvements": [\n    {\n      "title": "",\n      "summary": "",\n      "problem": "",\n      "currentState": "",\n      "proposedState": "",\n      "support": "",\n      "impact": "",\n      "justification": "",\n      "type": "quick_win|gradual|strategic",\n      "status": "pending"\n    }\n  ]\n}`
-    },
-    B6:{
-      label:'B6 · Contrato para SIPOC Builder',
-      stageCode:'lmp_analysis_b6',
-      instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder.\n\nOBJETIVO B6:\nConstruir el bloque sipoc_input usando el AS IS validado y los datos SIPOC disponibles.\n\nREGLAS:\n- Devuelve SOLO sipoc_input.\n- No incluyas análisis, métricas ni mejoras.\n- previous y next deben ser arrays.\n- activities debe conservar todas las actividades AS IS.\n\nSALIDA JSON ESTRICTA:\n{\n  "sipoc_input": {\n    "process_code": "",\n    "process_name": "",\n    "purpose": "",\n    "start_event": "",\n    "end_event": "",\n    "notes": "",\n    "suppliers": [],\n    "inputs": [],\n    "outputs": [],\n    "customers": [],\n    "actors": [],\n    "documents": [],\n    "activities": []\n  }\n}`
-    }
+    B1:{ label:'B1 · Validación AS IS', stageCode:'lmp_analysis_b1', instruction:p('prompt_analysis_b1', fallbackB1) },
+    B2:{ label:'B2 · Análisis AVA', stageCode:'lmp_analysis_b2', instruction:p('prompt_analysis_b2', fallbackB2) },
+    B3:{ label:'B3 · Desperdicios y problemas', stageCode:'lmp_analysis_b3', instruction:p('prompt_analysis_b3', fallbackB3) },
+    B4:{ label:'B4 · Restricciones y causa probable', stageCode:'lmp_analysis_b4', instruction:p('prompt_analysis_b4', fallbackB4) },
+    B5:{ label:'B5 · Mejoras aplicadas', stageCode:'lmp_analysis_b5', instruction:p('prompt_analysis_b5', p('prompt_improvements', fallbackB5)) },
+    B6:{ label:'B6 · Contrato para SIPOC Builder', stageCode:'lmp_analysis_b6', instruction:p('prompt_analysis_b6', fallbackB6) }
   };
 }
 
