@@ -4639,21 +4639,23 @@ function saveMasterAndContinue(){
     } else {
       mergeMaster();
     }
+
     if(!(state.briefReview && state.briefReview.approved)){
       showMsg('cargaMsg','warn','Debes aprobar primero el Brief antes de continuar.');
       return;
     }
-    if(!(state.analysis && state.analysis.raw)){
-      showMsg('cargaMsg','warn','Debes procesar el análisis maestro antes de continuar.');
-      return;
-    }
-    const analysisIssues = renderAnalysisValidation();
-    if(analysisIssues.length){
-      showMsg('cargaMsg','warn','No puedes cerrar esta etapa mientras el análisis permanezca incompleto.');
-      return;
-    }
-    hydrateAsIsFromMaster();
-    goToNext('carga');
+
+    /* FIX SGMP LMP:
+       La etapa Carga y consolidación solo debe cerrar el Brief aprobado.
+       El análisis por bloques B1-B6 se ejecuta después, no antes.
+       Por eso NO se debe exigir state.analysis.raw ni renderAnalysisValidation() aquí.
+    */
+    if(typeof hydrateAsIsFromMaster === 'function') hydrateAsIsFromMaster();
+    if(typeof renderAsIsActivities === 'function') renderAsIsActivities();
+    if(typeof updateTopStatus === 'function') updateTopStatus();
+
+    showMsg('cargaMsg','ok','Carga y Brief guardados correctamente. Avanzando a AS IS.');
+    showSection('asis');
   }catch(error){
     showMsg('cargaMsg','err',`El JSON maestro no es válido. Detalle: ${error.message}`);
   }
@@ -10286,6 +10288,7 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
     if(typeof syncVisibleStage === 'function') syncVisibleStage();
     if(current === 'preparacion'){ if(state.metadata.route === 'doc'){ showSection('documentacion_existente'); return; } showSection('carga'); return; }
     if(current === 'documentacion_existente'){ showSection('carga'); return; }
+    if(current === 'carga'){ showSection('asis'); return; }
     if(current === 'asis'){ showSection('analisis_b1'); return; }
     if(current === 'analisis_b6'){ showSection('decision'); return; }
     if(current === 'decision'){ if(typeof continueFromDecision === 'function') continueFromDecision(); return; }
