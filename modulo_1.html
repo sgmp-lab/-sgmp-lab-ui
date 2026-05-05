@@ -3253,87 +3253,135 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 </section>
 <!-- RESULTADOS -->
 <section class="section" id="resultados">
+
+<style>
+/* FIX LOCAL SOLO PARA RESULTADOS */
+#resultados .cards{
+  width:100%;
+  max-width:100%;
+  overflow:hidden;
+}
+
+#resultados .doc-box,
+#resultados .pre{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  overflow:auto;
+  overflow-wrap:break-word;
+  word-break:break-word;
+}
+
+#resultados .doc-box table{
+  width:100%;
+  table-layout:fixed;
+}
+
+#resultados .doc-box td,
+#resultados .doc-box th{
+  white-space:normal;
+  word-break:break-word;
+}
+</style>
+
 <div class="section-head">
-<div>
-<h2>Resultados finales</h2>
-<p>Genera JSON SB compatible, informe ejecutivo, informe técnico, plan de implementación y los entregables listos para el Evaluador Documental y el Integrador.</p>
+  <div>
+    <h2>Resultados finales</h2>
+    <p>Genera JSON SB compatible, informe ejecutivo, informe técnico, plan de implementación y los entregables listos para el Evaluador Documental y el Integrador.</p>
+  </div>
+  <div class="step-pill">Paso 8</div>
 </div>
-<div class="step-pill">Paso 8</div>
-</div>
+
 <div class="cards">
-<article class="card">
-<h3>Generación de salidas</h3>
+
+  <article class="card">
+    <h3>Generación de salidas</h3>
+    <div class="actions">
+      <div class="actions-left">
+        <button class="btn-ok" onclick="generateResults()" type="button">Generar resultados</button>
+        <button class="btn-ghost" onclick="copySBJson()" type="button">Copiar JSON SB</button>
+      </div>
+      <div class="actions-right">
+        <button class="btn-ok" onclick="openSBFromLMP()" type="button">Abrir en SIPOC Builder</button>
+        <button class="btn-ok" onclick="downloadSBJson()" type="button">Descargar JSON SB</button>
+      </div>
+    </div>
+    <div class="msg" id="resultsMsg"></div>
+  </article>
+
+  <article class="card half">
+    <h3>JSON SB compatible</h3>
+    <div class="pre" id="sbJsonView"></div>
+  </article>
+
+  <article class="card half">
+    <h3>Plan de implementación</h3>
+    <div class="doc-box" id="implementationView"></div>
+  </article>
+
+  <article class="card half">
+    <h3>Informe ejecutivo</h3>
+    <div class="actions" style="border-top:none;padding-top:0;margin-top:0">
+      <div class="actions-left">
+        <button class="btn-ghost" onclick="copyDocText('executiveText')" type="button">Copiar</button>
+        <button class="btn-warn" onclick="printDoc('executiveDoc', 'Informe Ejecutivo')" type="button">Imprimir / PDF</button>
+      </div>
+    </div>
+    <div class="doc-box" id="executiveDoc"></div>
+    <textarea class="hidden" id="executiveText"></textarea>
+  </article>
+
+  <article class="card half">
+    <h3>Informe técnico</h3>
+    <div class="actions" style="border-top:none;padding-top:0;margin-top:0">
+      <div class="actions-left">
+        <button class="btn-ghost" onclick="copyDocText('technicalText')" type="button">Copiar</button>
+        <button class="btn-warn" onclick="printDoc('technicalDoc', 'Informe Técnico')" type="button">Imprimir / PDF</button>
+      </div>
+    </div>
+    <div class="doc-box" id="technicalDoc"></div>
+    <textarea class="hidden" id="technicalText"></textarea>
+  </article>
+
+  <article class="card half">
+    <h3>Propuesta documental para Evaluador documental</h3>
+    <div class="actions" style="border-top:none;padding-top:0;margin-top:0">
+      <div class="actions-left">
+        <button class="btn-ghost" onclick="copyDocumentProposalJson()" type="button">Copiar JSON</button>
+        <button class="btn-ok" onclick="downloadDocumentProposalJson()" type="button">Descargar JSON</button>
+      </div>
+    </div>
+    <div class="pre" id="documentProposalView"></div>
+  </article>
+
+  <article class="card half">
+    <h3>Input para Integrador</h3>
+    <div class="actions" style="border-top:none;padding-top:0;margin-top:0">
+      <div class="actions-left">
+        <button class="btn-ghost" onclick="copyIntegrationJson()" type="button">Copiar JSON</button>
+        <button class="btn-ok" onclick="downloadIntegrationJson()" type="button">Descargar JSON</button>
+      </div>
+    </div>
+    <div class="pre" id="integrationInputView"></div>
+  </article>
+
+</div>
+
 <div class="actions">
-<div class="actions-left">
-<button class="btn-ok" onclick="generateResults()" type="button">Generar resultados</button>
-<button class="btn-ghost" onclick="copySBJson()" type="button">Copiar JSON SB</button>
+  <div class="actions-left">
+    <button class="btn-ghost" onclick="goToPrev('resultados')" type="button">Volver</button>
+  </div>
+  <div class="actions-right">
+    <button class="btn-danger" onclick="downloadBackup()" type="button">Finalizar y guardar respaldo</button>
+  </div>
 </div>
-<div class="actions-right">
-<button class="btn-ok" onclick="openSBFromLMP()" type="button">Abrir en SIPOC Builder</button>
-<button class="btn-ok" onclick="downloadSBJson()" type="button">Descargar JSON SB</button>
-</div>
-</div>
-<div class="msg" id="resultsMsg"></div>
-</article>
-<article class="card half">
-<h3>JSON SB compatible</h3>
-<div class="pre" id="sbJsonView"></div>
-</article>
-<article class="card half">
-<h3>Plan de implementación</h3>
-<div class="doc-box" id="implementationView"></div>
-</article>
-<article class="card half">
-<h3>Informe ejecutivo</h3>
-<div class="actions" style="border-top:none;padding-top:0;margin-top:0">
-<div class="actions-left">
-<button class="btn-ghost" onclick="copyDocText('executiveText')" type="button">Copiar</button>
-<button class="btn-warn" onclick="printDoc('executiveDoc', 'Informe Ejecutivo')" type="button">Imprimir / PDF</button>
-</div>
-</div>
-<div class="doc-box" id="executiveDoc"></div>
-<textarea class="hidden" id="executiveText"></textarea>
-</article>
-<article class="card half">
-<h3>Informe técnico</h3>
-<div class="actions" style="border-top:none;padding-top:0;margin-top:0">
-<div class="actions-left">
-<button class="btn-ghost" onclick="copyDocText('technicalText')" type="button">Copiar</button>
-<button class="btn-warn" onclick="printDoc('technicalDoc', 'Informe Técnico')" type="button">Imprimir / PDF</button>
-</div>
-</div>
-<div class="doc-box" id="technicalDoc"></div>
-<textarea class="hidden" id="technicalText"></textarea>
-</article>
-<article class="card half">
-<h3>Propuesta documental para Evaluador documental</h3>
-<div class="actions" style="border-top:none;padding-top:0;margin-top:0">
-<div class="actions-left">
-<button class="btn-ghost" onclick="copyDocumentProposalJson()" type="button">Copiar JSON</button>
-<button class="btn-ok" onclick="downloadDocumentProposalJson()" type="button">Descargar JSON</button>
-</div>
-</div>
-<div class="pre" id="documentProposalView"></div>
-</article>
-<article class="card half">
-<h3>Input para Integrador</h3>
-<div class="actions" style="border-top:none;padding-top:0;margin-top:0">
-<div class="actions-left">
-<button class="btn-ghost" onclick="copyIntegrationJson()" type="button">Copiar JSON</button>
-<button class="btn-ok" onclick="downloadIntegrationJson()" type="button">Descargar JSON</button>
-</div>
-</div>
-<div class="pre" id="integrationInputView"></div>
-</article>
-</div>
-<div class="actions">
-<div class="actions-left"><button class="btn-ghost" onclick="goToPrev('resultados')" type="button">Volver</button></div>
-<div class="actions-right"><button class="btn-danger" onclick="downloadBackup()" type="button">Finalizar y guardar respaldo</button></div>
-</div>
+
 </section>
+
 </main>
 </div>
 </div>
+
 <script>
 
 // ══════════════════════════════════════════════════════
