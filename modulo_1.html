@@ -3985,6 +3985,125 @@ function selectRoute(route){
   }
 }
 
+function detectLmpImportType(parsed){
+  if(!parsed || typeof parsed !== 'object') return 'UNKNOWN';
+
+  const hasLmpState = !!(parsed.metadata && (parsed.master || parsed.asis || parsed.loads || parsed.results));
+  if(hasLmpState) return 'LMP_BACKUP';
+
+  const hasProcessMaster = !!(parsed.proceso && Array.isArray(parsed.proceso.actividades));
+  if(hasProcessMaster) return 'JSON_MAESTRO_PROCESO';
+
+  const hasInterview = !!(parsed.entrevista || parsed.interview || parsed.segmentos || parsed.actividades_referenciadas);
+  if(hasInterview) return 'ENTREVISTA_JSON';
+
+  const hasQuestionnaire = !!(parsed.cuestionario || parsed.questionnaire || parsed.preguntas);
+  if(hasQuestionnaire) return 'CUESTIONARIO_JSON';
+
+  const hasSipoc = !!(parsed.sipoc_input || parsed.sipoc || parsed.lmpSipocDraft || parsed.sipocDraft);
+  if(hasSipoc) return 'SIPOC_JSON';
+
+  return 'UNKNOWN';
+}
+
+function normalizeProcessMasterToLmpMaster(parsed){
+  const proceso = parsed?.proceso || {};
+  const actividadesFuente = safeArray(proceso.actividades);
+  const actividades = sgmpCanonicalizeActivityList(actividadesFuente);
+
+  const actores = safeArray(proceso.actores)
+    .map(a => typeof a === 'string' ? a : (a.nombre || a.name || a.rol || a.role || a.id || ''))
+    .filter(Boolean);
+
+  const documentos = safeArray(proceso.documentos_del_proceso || proceso.documentos || proceso.documents)
+    .map(d => typeof d === 'string' ? d : ([d.codigo, d.nombre].filter(Boolean).join(' - ') || d.name || d.id || ''))
+    .filter(Boolean);
+
+  const entradas = dedupeCatalog(actividades.flatMap(a => safeArray(a.ext_inputs || a.entradas || a.inputs)));
+  const salidas = dedupeCatalog(actividades.flatMap(a => safeArray(a.ext_outputs || a.salidas || a.outputs)));
+
+  return {
+    context: {
+      company: proceso.empresa || state.context.company || '',
+      processName: proceso.nombre || proceso.process_name || state.context.processName || '',
+      processCode: proceso.id || proceso.codigo || proceso.codigo_proceso || state.context.processCode || '',
+      owner: proceso.area_responsable || proceso.owner || state.context.owner || '',
+      analyst: proceso.consultor || state.context.analyst || '',
+      industry: state.context.industry || '',
+      processType: state.context.processType || '',
+      activity: state.context.activity || '',
+      purpose: proceso.objetivo || state.context.purpose || ''
+    },
+    sipoc: {
+      suppliers: dedupeCatalog(proceso.proveedores || proceso.suppliers || actividades.flatMap(a => safeArray(a.ext_suppliers))),
+      inputs: entradas,
+      outputs: salidas,
+      customers: dedupeCatalog(proceso.clientes || proceso.customers || actividades.flatMap(a => safeArray(a.ext_customers))),
+      actors: dedupeCatalog(actores),
+      documentsSystems: dedupeCatalog(documentos)
+    },
+    activities: actividades,
+    issues: {
+      keyIssues: dedupeCatalog(actividades.flatMap(a => safeArray(a.problems))),
+      delays: [],
+      rework: [],
+      constraints: dedupeCatalog(actividades.filter(a => String(a.constraint || '').toLowerCase().includes('s')).map(a => a.name)),
+      frictions: [],
+      quickWins: dedupeCatalog(actividades.filter(a => String(a.quickWin || '').toLowerCase().includes('s')).map(a => a.name)),
+      futureVision: [],
+      wastes: dedupeCatalog(actividades.flatMap(a => safeArray(a.wastes)))
+    },
+    indicators: safeArray(proceso.indicadores || proceso.indicators),
+    notes: {
+      analystNotes: [],
+      preInterviewNotes: [],
+      additionalDocuments: [],
+      docNotes: 'JSON maestro de proceso importado directamente desde raíz proceso.'
+    },
+    raw: parsed
+  };
+}
+
+function applyJsonMaestroProceso(parsed){
+  const master = normalizeProcessMasterToLmpMaster(parsed);
+
+  state.metadata.route = 'backup';
+  state.metadata.currentStage = 'asis';
+
+  state.context.company = master.context.company || state.context.company || '';
+  state.context.processName = master.context.processName || state.context.processName || '';
+  state.context.processCode = master.context.processCode || state.context.processCode || '';
+  state.context.owner = master.context.owner || state.context.owner || '';
+  state.context.analyst = master.context.analyst || state.context.analyst || '';
+  state.context.purpose = master.context.purpose || state.context.purpose || '';
+
+  state.master = master;
+  state.asis.activities = safeArray(master.activities).map(a => ({...a}));
+
+  if(qs('masterEditor')) qs('masterEditor').value = JSON.stringify(master, null, 2);
+  if(qs('masterPreview')) qs('masterPreview').textContent = JSON.stringify(master, null, 2);
+
+  return state.asis.activities.length;
+}
+
+function applySingleInstrumentJson(parsed, type){
+  state.metadata.route = state.metadata.route || 'backup';
+  state.metadata.currentStage = 'carga';
+
+  let normalized = parsed;
+  if(type === 'SIPOC_JSON') normalized = normalizeSipocJsonAsInterview(parsed);
+
+  if(type === 'CUESTIONARIO_JSON'){
+    state.loads.pre = [...(state.loads.pre || []), normalized];
+  }else{
+    state.loads.interview = [...(state.loads.interview || []), normalized];
+  }
+
+  mergeMaster();
+  hydrateAsIsFromMaster();
+  return state.asis.activities?.length || state.master?.activities?.length || 0;
+}
+
 async function loadRouteJson(mode){
   const input = qs('resumeFile');
   const file = input.files[0];
@@ -3995,11 +4114,36 @@ async function loadRouteJson(mode){
 
   try{
     const parsed = JSON.parse(await file.text());
-    mergeLoadedState(parsed);
-    state.metadata.route = parsed?.metadata?.route || 'backup';
-    showMsg('inicioMsg','ok',`JSON cargado correctamente. Se detectó la etapa: ${labelStage(state.metadata.currentStage)}.`);
+    const importType = detectLmpImportType(parsed);
+    let detectedActivities = 0;
+
+    if(importType === 'LMP_BACKUP'){
+      mergeLoadedState(parsed);
+      state.metadata.route = parsed?.metadata?.route || 'backup';
+      detectedActivities = state.asis?.activities?.length || state.master?.activities?.length || 0;
+    }
+    else if(importType === 'JSON_MAESTRO_PROCESO'){
+      detectedActivities = applyJsonMaestroProceso(parsed);
+    }
+    else if(['ENTREVISTA_JSON','CUESTIONARIO_JSON','SIPOC_JSON'].includes(importType)){
+      detectedActivities = applySingleInstrumentJson(parsed, importType);
+    }
+    else{
+      mergeLoadedState(parsed);
+      state.metadata.route = parsed?.metadata?.route || 'backup';
+      detectedActivities = state.asis?.activities?.length || state.master?.activities?.length || 0;
+    }
+
     renderAllFromState();
-    showSection(state.metadata.currentStage || 'inicio');
+    updateTopStatus();
+
+    showMsg(
+      'inicioMsg',
+      'ok',
+      `JSON cargado correctamente. Tipo detectado: ${importType}. Actividades detectadas: ${detectedActivities}. Etapa: ${labelStage(state.metadata.currentStage)}.`
+    );
+
+    showSection(state.metadata.currentStage || (detectedActivities ? 'asis' : 'inicio'));
   }catch(error){
     showMsg('inicioMsg','err',`No fue posible leer el JSON. Detalle: ${error.message}`);
   }
