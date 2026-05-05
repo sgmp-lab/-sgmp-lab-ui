@@ -9979,5 +9979,208 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 })();
 </script>
 
+
+<script id="sgmp-brief-api-route-hard-fix">
+
+(function(){
+  'use strict';
+  function q(id){ return (typeof qs === 'function' ? qs(id) : document.getElementById(id)); }
+  function txt(v){ return String(v == null ? '' : v).trim(); }
+  function arr(v){ return Array.isArray(v) ? v : (v == null || v === '' ? [] : [v]); }
+  function splitLines(v){
+    if(Array.isArray(v)) return v.map(x => typeof x === 'object' ? (x.name || x.title || x.description || JSON.stringify(x)) : String(x)).filter(Boolean);
+    return txt(v).split(/\n|;|,/).map(x=>x.trim()).filter(Boolean);
+  }
+  function safeJson(v){ try { return JSON.stringify(v, null, 2); } catch(e){ return String(v || ''); } }
+  function parseJsonText(raw){
+    if(typeof extractJsonFromText === 'function') return extractJsonFromText(raw);
+    const t = txt(raw);
+    const a = t.indexOf('{'); const b = t.lastIndexOf('}');
+    if(a >= 0 && b > a) return JSON.parse(t.slice(a, b + 1));
+    return JSON.parse(t);
+  }
+  function getMaster(){
+    try { return (window.state && (state.master || (typeof mergeMaster === 'function' ? mergeMaster() : null))) || {}; }
+    catch(e){ return (window.state && state.master) || {}; }
+  }
+  function cleanActivities(list){
+    const out=[]; const seen=new Set();
+    arr(list).forEach((a, idx)=>{
+      if(!a || typeof a !== 'object') return;
+      const name = txt(a.name || a.activity || a.title || a.step || a.descripcion || a.description);
+      if(!name) return;
+      const id = txt(a.id || a.code || a.activity_id || ('ACT-' + String(out.length + 1).padStart(2,'0')));
+      const key = (id + '|' + name).toLowerCase();
+      if(seen.has(key)) return;
+      seen.add(key);
+      out.push(Object.assign({}, a, {
+        id: id,
+        name: name,
+        type: txt(a.type || a.activity_type || 'operation') || 'operation',
+        actor: txt(a.actor || a.responsible || a.responsable || a.role || ''),
+        document: txt(a.document || a.documento || ''),
+        previous: arr(a.previous).map(String).filter(Boolean),
+        next: arr(a.next).map(String).filter(Boolean),
+        is_start: false,
+        is_end: false,
+        note: txt(a.note || a.notes || a.observation || '')
+      }));
+    });
+    out.forEach((a,i)=>{
+      a.is_start = i === 0;
+      a.is_end = i === out.length - 1;
+      if(i === 0) a.previous = [];
+      else if(!a.previous.length) a.previous = [out[i-1].name];
+      if(i === out.length - 1) a.next = [];
+      else if(!a.next.length) a.next = [out[i+1].name];
+    });
+    return out;
+  }
+  function findActivities(payload){
+    const p = payload || {};
+    const candidates = [
+      p.as_is && p.as_is.activities,
+      p.asIs && p.asIs.activities,
+      p.activities,
+      p.activities_preliminary,
+      p.brief && p.brief.as_is && p.brief.as_is.activities,
+      p.brief && p.brief.activities_preliminary,
+      getMaster().activities,
+      getMaster().as_is && getMaster().as_is.activities,
+      getMaster().brief && getMaster().brief.activities_preliminary
+    ];
+    for(const c of candidates){ const acts = cleanActivities(c); if(acts.length) return acts; }
+    return [];
+  }
+  function isAsIsOnly(payload){
+    if(!payload || typeof payload !== 'object') return false;
+    const p = payload.brief || payload;
+    const hasAsIs = cleanActivities((payload.as_is && payload.as_is.activities) || payload.activities || (p.as_is && p.as_is.activities)).length > 0;
+    const s = p.summary || payload.summary || {};
+    const hasBrief = !!(payload.brief || payload.summary || s.executiveSummary || s.purposeSummary || p.executiveSummary || p.processPurpose || p.purposeSummary || p.sipoc_preliminary || p.sipoc);
+    return hasAsIs && !hasBrief;
+  }
+  function asTextList(v){ return splitLines(v).join('\n'); }
+  function synthesizeBriefFromAsIs(payload){
+    const master = getMaster();
+    const context = Object.assign({}, (window.state && state.context) || {}, master.context || {}, payload.context || {});
+    const processCode = txt(payload.as_is && payload.as_is.process_code) || txt(master.context && master.context.processCode) || txt(context.processCode) || txt(context.process_code) || '';
+    const processName = txt(payload.as_is && payload.as_is.process_name) || txt(master.context && master.context.processName) || txt(context.processName) || txt(context.process_name) || 'Proceso en análisis';
+    const purpose = txt(context.purpose || master.purpose || master.processPurpose || master.brief && master.brief.processPurpose) || 'Definir y ejecutar el proceso con trazabilidad, control y resultados verificables.';
+    const acts = findActivities(payload);
+    const sipoc = master.sipoc || master.sipoc_preliminary || (master.brief && (master.brief.sipoc || master.brief.sipoc_preliminary)) || {};
+    const suppliers = asTextList(sipoc.suppliers || sipoc.proveedores || master.suppliers || payload.suppliers) || 'Proveedores internos y externos del proceso';
+    const inputs = asTextList(sipoc.inputs || sipoc.entradas || master.inputs || payload.inputs) || 'Requerimientos, información y recursos necesarios para iniciar el proceso';
+    const outputs = asTextList(sipoc.outputs || sipoc.salidas || master.outputs || payload.outputs) || 'Resultado del proceso entregado al cliente interno o externo';
+    const customers = asTextList(sipoc.customers || sipoc.clientes || master.customers || payload.customers) || 'Clientes internos o externos del proceso';
+    const actors = asTextList(sipoc.actors || sipoc.actores || master.actors || acts.map(a=>a.actor).filter(Boolean)) || Array.from(new Set(acts.map(a=>a.actor).filter(Boolean))).join('\n');
+    const flowSummary = acts.map((a,i)=> (i+1) + '. ' + a.name).join('\n');
+    return {
+      summary: {
+        executiveSummary: `El proceso ${processName} fue estructurado a partir de la información disponible y contiene ${acts.length} actividades AS IS. El flujo inicia en ${acts[0]?.name || 'la actividad inicial'} y finaliza en ${acts[acts.length-1]?.name || 'la actividad final'}. Esta versión sirve como base formal para el análisis de valor agregado, desperdicios, restricciones y oportunidades de mejora.`,
+        purposeSummary: purpose,
+        expectedResult: '',
+        trigger: acts[0]?.name || '',
+        closure: acts[acts.length-1]?.name || '',
+        flowSummary: flowSummary
+      },
+      sipoc: {
+        suppliers: suppliers,
+        inputs: inputs,
+        process: processName,
+        outputs: outputs,
+        customers: customers,
+        actors: actors,
+        documentsSystems: asTextList(sipoc.documentsSystems || sipoc.documents || master.documents || master.systems || '')
+      },
+      activities_preliminary: acts,
+      as_is: { process_code: processCode, process_name: processName, activities: acts },
+      insights: {
+        keyIssues: txt(master.insights && master.insights.keyIssues) || '',
+        quickWins: txt(master.insights && master.insights.quickWins) || '',
+        constraints: txt(master.insights && master.insights.constraints) || ''
+      },
+      futureState: { futureVision: '' },
+      indicators: asTextList((context.globalIndicators || master.globalIndicators || []).map(x => x.name || x)),
+      informationGaps: [],
+      openQuestions: [],
+      validation: {
+        sourceActivityCount: acts.length,
+        briefActivityCount: acts.length,
+        canProceedToAnalysis: true,
+        blockingGaps: [],
+        warnings: ['Brief sintetizado automáticamente porque la API devolvió estructura AS IS en la etapa A. Revisar SIPOC preliminar antes de aprobar si es necesario.']
+      }
+    };
+  }
+  function forceLocalBriefPrompt(master){
+    const c = (master && master.context) || {};
+    const acts = cleanActivities(master && (master.activities || (master.as_is && master.as_is.activities)));
+    return `ACTÚA COMO consultor senior en procesos, Lean, Six Sigma, TOC y BPM.\n\nOBJETIVO:\nConstruir EXCLUSIVAMENTE el BRIEF FORMAL DEL PROCESO para el módulo LMP. No generes únicamente AS IS. El AS IS puede venir incluido, pero la raíz de la respuesta debe ser un Brief completo.\n\nREGLAS CRÍTICAS:\n- Devuelve SOLO JSON válido.\n- La salida debe contener obligatoriamente: summary, sipoc, activities_preliminary, as_is, insights, validation.\n- summary.executiveSummary es obligatorio.\n- summary.purposeSummary es obligatorio.\n- sipoc.suppliers, sipoc.inputs, sipoc.outputs y sipoc.customers son obligatorios.\n- Si existen actividades fuente, conserva todas en activities_preliminary y as_is.activities.\n- No devuelvas solo {\"as_is\":...}. Eso es inválido para esta etapa.\n\nJSON DE SALIDA OBLIGATORIO:\n{\n  \"summary\": {\n    \"executiveSummary\": \"\",\n    \"purposeSummary\": \"\",\n    \"expectedResult\": \"\",\n    \"trigger\": \"\",\n    \"closure\": \"\",\n    \"flowSummary\": \"\"\n  },\n  \"sipoc\": {\n    \"suppliers\": \"\",\n    \"inputs\": \"\",\n    \"process\": \"\",\n    \"outputs\": \"\",\n    \"customers\": \"\",\n    \"actors\": \"\",\n    \"documentsSystems\": \"\"\n  },\n  \"activities_preliminary\": [],\n  \"as_is\": { \"activities\": [] },\n  \"insights\": { \"keyIssues\": \"\", \"quickWins\": \"\", \"constraints\": \"\" },\n  \"futureState\": { \"futureVision\": \"\" },\n  \"indicators\": \"\",\n  \"informationGaps\": [],\n  \"openQuestions\": [],\n  \"validation\": { \"sourceActivityCount\": ${acts.length}, \"briefActivityCount\": 0, \"canProceedToAnalysis\": false, \"blockingGaps\": [], \"warnings\": [] }\n}\n\nCONTEXTO:\n${safeJson(c)}\n\nACTIVIDADES FUENTE OBLIGATORIAS:\n${safeJson({source_activity_count: acts.length, source_activities: acts})}\n\nENTRADA CONSOLIDADA COMPLETA:\n${safeJson(master || {})}`;
+  }
+  window.buildBriefPrompt = function(master){ return forceLocalBriefPrompt(master || getMaster()); };
+
+  window.processBriefResponse = function(){
+    const box = q('briefResponseEditor');
+    const rawText = txt(box && box.value);
+    if(!rawText){ if(typeof showMsg === 'function') showMsg('briefIaMsg','warn','No hay respuesta del Brief A para procesar.'); return; }
+    try{
+      const parsed = parseJsonText(rawText);
+      const normalized = isAsIsOnly(parsed) ? synthesizeBriefFromAsIs(parsed) : (typeof normalizeBriefPayload === 'function' ? normalizeBriefPayload(parsed) : parsed);
+      const issues = typeof evaluateBriefCompleteness === 'function' ? evaluateBriefCompleteness(normalized) : [];
+      state.briefReview = { raw: normalized, approved: issues.length === 0 };
+      state.brief = normalized;
+      if(q('briefEditor')) q('briefEditor').value = safeJson(normalized);
+      if(typeof renderBriefDraft === 'function') renderBriefDraft();
+      if(typeof renderBriefValidation === 'function') renderBriefValidation();
+      if(typeof seedAsIsBuilderFromBrief === 'function') seedAsIsBuilderFromBrief(false);
+      if(typeof refreshCargaFlowState === 'function') refreshCargaFlowState();
+      if(typeof showMsg === 'function') showMsg('briefIaMsg', issues.length ? 'warn' : 'ok', issues.length ? 'Brief procesado, pero requiere revisión: ' + issues.join(' | ') : 'Brief A procesado correctamente.');
+    }catch(error){ if(typeof showMsg === 'function') showMsg('briefIaMsg','err','No fue posible procesar el Brief A: ' + (error.message || error)); }
+  };
+
+  window.approveBriefAndUnlockAnalysis = function(){
+    const raw = txt(q('briefEditor') && q('briefEditor').value) || txt(q('briefResponseEditor') && q('briefResponseEditor').value);
+    if(!raw){ if(typeof showMsg === 'function') showMsg('briefIaMsg','warn','No hay Brief para aprobar.'); return; }
+    try{
+      const parsed = parseJsonText(raw);
+      const normalized = isAsIsOnly(parsed) ? synthesizeBriefFromAsIs(parsed) : (typeof normalizeBriefPayload === 'function' ? normalizeBriefPayload(parsed) : parsed);
+      const issues = typeof evaluateBriefCompleteness === 'function' ? evaluateBriefCompleteness(normalized) : [];
+      state.briefReview = { raw: normalized, approved: issues.length === 0 };
+      state.brief = normalized;
+      if(q('briefEditor')) q('briefEditor').value = safeJson(normalized);
+      if(typeof renderBriefDraft === 'function') renderBriefDraft();
+      if(typeof renderBriefValidation === 'function') renderBriefValidation();
+      if(typeof refreshCargaFlowState === 'function') refreshCargaFlowState();
+      if(issues.length){ if(typeof showMsg === 'function') showMsg('briefIaMsg','warn','No se puede aprobar el Brief porque está incompleto: ' + issues.join(' | ')); return; }
+      if(typeof showMsg === 'function') showMsg('briefIaMsg','ok','Brief aprobado correctamente. Continúa a B1 · Validación AS IS.');
+    }catch(error){ if(typeof showMsg === 'function') showMsg('briefIaMsg','err','El Brief editable no contiene JSON válido: ' + (error.message || error)); }
+  };
+
+  window.generateBriefPromptFromMaster = async function(){
+    const btn = q('btnGenerateBriefPrompt');
+    try{
+      if(btn) btn.disabled = true;
+      if(typeof showLoader === 'function') showLoader('Generando Brief con IA...', 'Etapa A · Prompt local blindado y respuesta automática.');
+      if(typeof sgmpLoadRuntimeConfig === 'function') await sgmpLoadRuntimeConfig();
+      const master = getMaster();
+      const prompt = window.buildBriefPrompt(master);
+      if(q('briefPromptEditor')) q('briefPromptEditor').value = prompt;
+      if(typeof showMsg === 'function') showMsg('cargaMsg','ok','Ejecutando IA para Brief A...');
+      const result = await sgmpCallAI('lmp_brief', prompt);
+      const textResult = typeof sgmpAIResultText === 'function' ? sgmpAIResultText(result) : String(result || '');
+      if(!txt(textResult)) throw new Error('La API respondió vacío para lmp_brief.');
+      if(q('briefResponseEditor')) q('briefResponseEditor').value = textResult;
+      window.processBriefResponse();
+      if(typeof refreshCargaFlowState === 'function') refreshCargaFlowState();
+      if(typeof showMsg === 'function') showMsg('cargaMsg','ok','Brief A generado y procesado automáticamente.');
+    }catch(error){
+      if(q('briefPromptEditor') && !txt(q('briefPromptEditor').value)) q('briefPromptEditor').value = window.buildBriefPrompt(getMaster());
+      if(typeof showMsg === 'function') showMsg('cargaMsg','err','No se ejecutó el flujo automático del Brief. Copia el prompt y usa modo manual. Detalle: ' + (error.message || error));
+    }finally{ if(typeof hideLoader === 'function') hideLoader(); if(btn) btn.disabled = false; }
+  };
+})();
+
+</script>
 </body>
 </html>
