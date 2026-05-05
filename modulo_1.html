@@ -1393,6 +1393,73 @@ body.sgmp-v3-processing button:not(.sgmp-v3-allow),body.sgmp-v3-processing input
 @media print{#sgmp_v3_timer,.sgmp-timing-actions{display:none!important}}
 </style>
 
+
+
+<style id="sgmp-lmp-sidebar-scroll-fix-final">
+/* =========================================
+   FIX DEFINITIVO SIDEBAR SCROLL SGMP LMP
+   Objetivo: permitir explorar las fases del lado izquierdo
+   con scroll interno, sin obligar a bajar toda la pantalla.
+   ========================================= */
+
+body .app .layout > aside.sidebar{
+  position: sticky !important;
+  top: 16px !important;
+  height: calc(100vh - 32px) !important;
+  max-height: calc(100vh - 32px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+body .app .layout > aside.sidebar .step-list{
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-right: 6px !important;
+  margin-right: -4px !important;
+}
+
+body .app .layout > aside.sidebar .summary-list{
+  flex: 0 0 auto !important;
+}
+
+body .app .layout > aside.sidebar .step-list::-webkit-scrollbar{
+  width: 8px;
+}
+
+body .app .layout > aside.sidebar .step-list::-webkit-scrollbar-track{
+  background: rgba(255,255,255,.06);
+  border-radius: 999px;
+}
+
+body .app .layout > aside.sidebar .step-list::-webkit-scrollbar-thumb{
+  background: rgba(0,194,255,.45);
+  border-radius: 999px;
+}
+
+body .app .layout > aside.sidebar .step-list::-webkit-scrollbar-thumb:hover{
+  background: rgba(0,194,255,.75);
+}
+
+@media (max-width:1220px){
+  body .app .layout > aside.sidebar{
+    position: relative !important;
+    top: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  body .app .layout > aside.sidebar .step-list{
+    max-height: 360px !important;
+    overflow-y: auto !important;
+  }
+}
+</style>
+
 </head>
 <body>
 <div class="app">
