@@ -1452,7 +1452,7 @@ body.sgmp-v3-processing button:not(.sgmp-v3-allow),body.sgmp-v3-processing input
 <button class="step-btn" data-target="analisis_b3">B3 · Desperdicios<small>Prompt y respuesta de hallazgos Lean.</small></button>
 <button class="step-btn" data-target="analisis_b4">B4 · Restricciones<small>Prompt y respuesta de restricciones TOC.</small></button>
 <button class="step-btn" data-target="analisis_b5">B5 · Mejoras<small>Prompt y respuesta para TO BE.</small></button>
-<button class="step-btn" data-target="analisis_b6">B6 · Prompt Builder SIPOC<small>Prompt y respuesta del contrato SIPOC.</small></button>
+<button class="step-btn" data-target="analisis_b6">B6 · Builder SB<small>Prompt y respuesta del contrato SIPOC.</small></button>
 <button class="step-btn" data-target="decision">Decisión<small>Cerrar con AS IS o pasar a TO BE.</small></button>
 <button class="step-btn" data-target="tobe">TO BE<small>Evaluación de mejoras.</small></button>
 <button class="step-btn" data-target="resultados">Resultados<small>SB, informes y plan.</small></button>
@@ -2116,7 +2116,7 @@ ${script}
       B3:{label:'B3 · Desperdicios y problemas', stageCode:'lmp_analysis_b3', instruction:`ACTÚA COMO experto Lean, análisis de desperdicios y diagnóstico operativo.\n\nOBJETIVO B3:\nDetectar desperdicios, problemas, riesgos, dependencias manuales, controles ocultos y evidencias desde el AS IS, el brief y el análisis AVA.\n\nREGLAS:\n- No diseñes TO BE.\n- No hagas contrato SB.\n- Cada hallazgo debe tener evidencia o actividad relacionada cuando sea posible.\n- Usa listas estructuradas, no párrafos sueltos.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "wastes": [],\n    "problems": [],\n    "risks": [],\n    "evidence_highlights": [],\n    "manual_dependencies": [],\n    "hidden_controls": [],\n    "contradictions_detected": []\n  }\n}`},
       B4:{label:'B4 · Restricciones y causa probable', stageCode:'lmp_analysis_b4', instruction:`ACTÚA COMO especialista TOC, causa raíz y flujo operativo.\n\nOBJETIVO B4:\nIdentificar restricciones, cuellos de botella, causas probables y puntos de bloqueo del proceso.\n\nREGLAS:\n- Diferencia restricción real de problema general.\n- No propongas aún el plan TO BE completo.\n- Relaciona restricciones con actividades cuando aplique.\n- Declara brevemente la evidencia o supuesto utilizado.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "restrictions": [],\n    "suspected_constraints": [],\n    "bottlenecks": [],\n    "rootCauseHypotheses": [],\n    "controlIssues": [],\n    "dataGaps": []\n  }\n}`},
       B5:{label:'B5 · Mejoras candidatas para TO BE', stageCode:'lmp_analysis_b5', instruction:`ACTÚA COMO consultor senior de mejora continua.\n\nOBJETIVO B5:\nConvertir hallazgos, problemas, desperdicios y restricciones en mejoras candidatas para que el usuario las apruebe, ajuste o rechace en TO BE.\n\nREGLAS:\n- No generes mejoras genéricas.\n- Cada mejora debe estar conectada a un problema, desperdicio o restricción detectada.\n- Distingue quick win, mejora gradual y proyecto estructural.\n- La salida debe alimentar directamente la pantalla TO BE.\n- Genera mejoras suficientes si existen hallazgos; no devuelvas improvements vacío salvo que no exista evidencia.\n\nSALIDA JSON ESTRICTA:\n{\n  "quickWins": [],\n  "improvements": [\n    {\n      "title": "",\n      "summary": "",\n      "problem": "",\n      "currentState": "",\n      "proposedState": "",\n      "support": "",\n      "impact": "",\n      "justification": "",\n      "type": "quick_win|gradual|strategic",\n      "status": "pending"\n    }\n  ]\n}`},
-      B6:{label:'B6 · Prompt Builder SIPOC', stageCode:'lmp_analysis_b6', instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder.\n\nOBJETIVO B6:\nConstruir el bloque sipoc_input usando el AS IS validado y los datos SIPOC disponibles.\n\nREGLAS:\n- Devuelve SOLO sipoc_input.\n- No incluyas análisis, métricas ni mejoras.\n- previous y next deben ser arrays.\n- activities debe conservar todas las actividades AS IS.\n\nSALIDA JSON ESTRICTA:\n{\n  "sipoc_input": {\n    "process_code": "",\n    "process_name": "",\n    "purpose": "",\n    "start_event": "",\n    "end_event": "",\n    "notes": "",\n    "suppliers": [],\n    "inputs": [],\n    "outputs": [],\n    "customers": [],\n    "actors": [],\n    "documents": [],\n    "activities": []\n  }\n}`}
+      B6:{label:'B6 · Contrato para SIPOC Builder', stageCode:'lmp_analysis_b6', instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder.\n\nOBJETIVO B6:\nConstruir el bloque sipoc_input usando el AS IS validado y los datos SIPOC disponibles.\n\nREGLAS:\n- Devuelve SOLO sipoc_input.\n- No incluyas análisis, métricas ni mejoras.\n- previous y next deben ser arrays.\n- activities debe conservar todas las actividades AS IS.\n\nSALIDA JSON ESTRICTA:\n{\n  "sipoc_input": {\n    "process_code": "",\n    "process_name": "",\n    "purpose": "",\n    "start_event": "",\n    "end_event": "",\n    "notes": "",\n    "suppliers": [],\n    "inputs": [],\n    "outputs": [],\n    "customers": [],\n    "actors": [],\n    "documents": [],\n    "activities": []\n  }\n}`}
     };
   }
   window.sgmpGetAnalysisStageDefinitions = stageDefinitions;
@@ -2325,7 +2325,7 @@ ${script}
       if(current==='analisis_b1') return window.showSection('asis');
       const idx=SCREEN_ORDER.indexOf(current); if(idx>0) window.showSection(SCREEN_ORDER[idx-1]);
     };
-    window.labelStage=function(id){ return {inicio:'Inicio',documentacion_existente:'Documentación existente',preparacion:'Preparación y contexto',carga:'Carga y consolidación',asis:'AS IS',analisis:'B1 · Validación AS IS',analisis_b1:'B1 · Validación AS IS',analisis_b2:'B2 · AVA',analisis_b3:'B3 · Desperdicios',analisis_b4:'B4 · Restricciones',analisis_b5:'B5 · Mejoras',analisis_b6:'B6 · Prompt Builder SIPOC',decision:'Decisión',tobe:'TO BE',resultados:'Resultados'}[id] || id; };
+    window.labelStage=function(id){ return {inicio:'Inicio',documentacion_existente:'Documentación existente',preparacion:'Preparación y contexto',carga:'Carga y consolidación',asis:'AS IS',analisis:'B1 · Validación AS IS',analisis_b1:'B1 · Validación AS IS',analisis_b2:'B2 · AVA',analisis_b3:'B3 · Desperdicios',analisis_b4:'B4 · Restricciones',analisis_b5:'B5 · Mejoras',analisis_b6:'B6 · Builder SB',decision:'Decisión',tobe:'TO BE',resultados:'Resultados'}[id] || id; };
   }
   function install(){
     installStageButtons();
@@ -3038,21 +3038,62 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 <textarea id="briefEditor" placeholder="Aquí aparecerá el Brief estructurado y editable." style="width:100%;min-height:240px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
 </article>
 
-<article class="card">
-<h3>Flujo de análisis B · Prompt por pantalla</h3>
-<p>El análisis ya no se ejecuta desde esta pantalla. Cada etapa tiene su propia pantalla con prompt visible, ejecución automática vía API, respuesta IA, resultado editable y botones de copiar.</p>
-<div class="note">
-<strong>Secuencia obligatoria:</strong><br/>
-B1 · Validación AS IS → B2 · AVA → B3 · Desperdicios → B4 · Restricciones → B5 · Mejoras → B6 · Prompt Builder SIPOC.
-<br/><br/>
-B6 reemplaza al antiguo “Prompt Builder” de esta pantalla: genera el contrato final <code>sipoc_input</code> para SIPOC Builder usando el AS IS validado y los resultados acumulados de B1–B5.
+<article class="card half">
+<h3>Prompt B · Análisis del Brief</h3>
+<p>Se habilita cuando el Brief fue aprobado. Usa el brief oficial y los complementos cargados para generar el análisis completo.</p>
+<div class="actions" style="border-top:none;padding-top:0;margin-top:0">
+<div class="actions-left">
+<button class="btn" id="btnGenerateAnalysisPrompt" onclick="generateAnalysisStagePrompt('B1')" type="button">Generar B1 · AS IS</button>
+<button class="btn-ghost" id="btnCopyAnalysisPrompt" onclick="copyTextFromId('analysisPromptEditor','cargaMsg','Prompt B copiado correctamente.')" type="button">Copiar prompt</button>
 </div>
+</div>
+<textarea id="analysisPromptEditor" placeholder="Aquí aparecerá el Prompt B una vez aprobado el Brief." style="width:100%;min-height:300px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+<div class="note" id="analysisStageHelp"><strong>Análisis por etapas</strong><br/>Genera y procesa una etapa a la vez: B1 AS IS, B2 AVA, B3 desperdicios/problemas, B4 restricciones, B5 mejoras candidatas y B6 contrato SB. Los prompts están embebidos temporalmente en el HTML.</div>
 <div class="actions" style="border-top:none;padding-top:8px;margin-top:8px">
   <div class="actions-left">
-    <button class="btn" onclick="showSection('analisis_b1')" type="button">Ir a B1 · Validación AS IS</button>
-    <button class="btn-ghost" onclick="showSection('analisis_b6')" type="button">Ir a B6 · Prompt Builder SIPOC</button>
+    <button class="btn-ghost" onclick="generateAnalysisStagePrompt('B1')" type="button">B1 · AS IS</button>
+    <button class="btn-ghost" onclick="generateAnalysisStagePrompt('B2')" type="button">B2 · AVA</button>
+    <button class="btn-ghost" onclick="generateAnalysisStagePrompt('B3')" type="button">B3 · Desperdicios</button>
+    <button class="btn-ghost" onclick="generateAnalysisStagePrompt('B4')" type="button">B4 · Restricciones</button>
+    <button class="btn-ghost" onclick="generateAnalysisStagePrompt('B5')" type="button">B5 · Mejoras</button>
+    <button class="btn-ghost" onclick="generateAnalysisStagePrompt('B6')" type="button">B6 · Builder</button>
   </div>
 </div>
+</article>
+
+<article class="card half">
+<h3>JSON maestro generado por IA</h3>
+<p>Pega aquí la respuesta del Prompt B. El sistema debe poder procesar estructuras parciales sin romper el flujo.</p>
+<textarea id="iaResponseEditor" placeholder="Pega aquí la respuesta completa de la IA..." style="width:100%;min-height:300px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+<div class="actions">
+<div class="actions-left"><button class="btn-ok" id="btnProcessAnalysis" onclick="processIAResponse()" type="button">Procesar análisis completo</button><button class="btn-warn" id="btnProcessAnalysisStage" onclick="processAnalysisStageResponse()" type="button">Procesar etapa actual</button></div>
+<div class="actions-right"><button class="btn" id="btnApplyAnalysis" onclick="applyIAResponseAndContinue()" type="button">Aplicar al LMP y continuar</button></div>
+</div>
+<div class="msg" id="iaMsg"></div><div class="msg" id="analysisValidationMsg"></div>
+</article>
+
+<article class="card">
+<h3>Contrato final LMP -> SB</h3>
+<p>Genera el prompt builder dedicado, pega la respuesta IA y aprueba el contrato final que consumira SIPOC Builder.</p>
+<div class="actions" style="border-top:none;padding-top:0;margin-top:0">
+<div class="actions-left">
+<button class="btn" id="btnGenerateSbContractPrompt" onclick="generateSbContractBuilderPrompt()" type="button">Generar prompt builder</button>
+<button class="btn-ghost" id="btnCopySbContractPrompt" onclick="copyTextFromId('sbContractPromptEditor','sbContractMsg','Prompt builder copiado correctamente.')" type="button">Copiar prompt</button>
+</div>
+</div>
+<textarea id="sbContractPromptEditor" placeholder="Aqui aparecera el prompt prompt_sb_contract_builder." style="width:100%;min-height:260px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+<div class="field-grid">
+<div class="field w-12"><label>Respuesta IA del builder</label><textarea id="sbContractResponseEditor" placeholder="Pega aqui el JSON final para SB generado por la IA." style="width:100%;min-height:220px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea></div>
+</div>
+<div class="actions">
+<div class="actions-left">
+<button class="btn-ok" id="btnValidateSbContract" onclick="validateSbContractBuilderResponse()" type="button">Validar JSON</button>
+<button class="btn" id="btnApproveSbContract" onclick="approveSbContractBuilderResponse()" type="button">Aprobar contrato</button>
+</div>
+<div class="actions-right"><button class="btn-ghost" id="btnDownloadSbContractBuilder" onclick="downloadSbContractBuilderJson()" type="button">Descargar LMP_TO_SB.json</button></div>
+</div>
+<div class="msg" id="sbContractMsg"></div>
+<div class="pre" id="sbContractPreview" style="margin-top:14px;min-height:180px"></div>
 </article>
 
 <article class="card">
@@ -3349,31 +3390,31 @@ B6 reemplaza al antiguo “Prompt Builder” de esta pantalla: genera el contrat
 <section class="section analysis-stage-section" id="analisis_b6" data-analysis-stage="B6">
   <div class="section-head">
     <div>
-      <h2>B6 · Prompt Builder SIPOC</h2>
+      <h2>B6 · Builder SB</h2>
       <p>Construye el contrato final LMP → SIPOC Builder usando el AS IS validado.</p>
     </div>
     <div class="step-pill">Paso 5.6</div>
   </div>
   <div class="cards">
     <article class="card half">
-      <h3>Prompt Builder B6</h3>
+      <h3>Prompt B6</h3>
       <p>Genera el prompt de esta etapa y ejecútalo con la API. El prompt queda visible para revisión y depuración.</p>
       <div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left">
         <button class="btn" onclick="generateAnalysisScreenPrompt('B6')" type="button">Generar prompt</button>
         <button class="btn-ok" onclick="runAnalysisScreenStage('B6')" type="button">Generar y ejecutar IA</button>
-        <button class="btn-ghost" onclick="copyTextFromId('analysisPrompt_B6','analysisMsg_B6','Prompt Builder B6 copiado correctamente.')" type="button">Copiar prompt</button>
+        <button class="btn-ghost" onclick="copyTextFromId('analysisPrompt_B6','analysisMsg_B6','Prompt B6 copiado correctamente.')" type="button">Copiar prompt</button>
       </div></div>
-      <textarea id="analysisPrompt_B6" placeholder="Aquí aparecerá el Prompt Builder B6." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+      <textarea id="analysisPrompt_B6" placeholder="Aquí aparecerá el prompt B6." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
     </article>
     <article class="card half">
-      <h3>Respuesta IA del Prompt Builder B6</h3>
+      <h3>Respuesta IA B6</h3>
       <p>La respuesta aparece automáticamente si la API responde. También puedes pegar una respuesta manual y procesarla.</p>
-      <textarea id="analysisResponse_B6" placeholder="Aquí aparecerá o se pegará la respuesta JSON del Prompt Builder B6." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
+      <textarea id="analysisResponse_B6" placeholder="Aquí aparecerá o se pegará la respuesta JSON de la IA para B6." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
       <div class="actions"><div class="actions-left"><button class="btn-warn" onclick="processAnalysisScreenStage('B6')" type="button">Procesar respuesta B6</button></div><div class="actions-right"><button class="btn-ghost" onclick="downloadAnalysisStageJson('B6')" type="button">Descargar resultado</button></div></div>
       <div class="msg" id="analysisMsg_B6"></div>
     </article>
     <article class="card">
-      <h3>Contrato SIPOC editable generado por B6</h3>
+      <h3>Resultado editable B6</h3>
       <p>Resultado normalizado de esta etapa. Puedes revisarlo antes de avanzar.</p>
       <textarea id="analysisResult_B6" placeholder="Resultado procesado de B6." style="width:100%;min-height:280px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
     </article>
@@ -3850,7 +3891,7 @@ sgmpLoadPrompts('LMP', async function() {
   if(typeof fillFixedDocPrompts === 'function') fillFixedDocPrompts(true);
 });
 
-const stageOrder = ['inicio','preparacion','documentacion_existente','carga','asis','analisis_b1','analisis_b2','analisis_b3','analisis_b4','analisis_b5','analisis_b6','decision','tobe','resultados'];
+const stageOrder = ['inicio','preparacion','documentacion_existente','carga','asis','analisis','decision','tobe','resultados'];
 
 const preQuestionMap = {
   'Operativo': [
@@ -4179,7 +4220,7 @@ function printDoc(id, title){
       B3:{label:'B3 · Desperdicios y problemas', stageCode:'lmp_analysis_b3', instruction:`ACTÚA COMO experto Lean, análisis de desperdicios y diagnóstico operativo.\n\nOBJETIVO B3:\nDetectar desperdicios, problemas, riesgos, dependencias manuales, controles ocultos y evidencias desde el AS IS, el brief y el análisis AVA.\n\nREGLAS:\n- No diseñes TO BE.\n- No hagas contrato SB.\n- Cada hallazgo debe tener evidencia o actividad relacionada cuando sea posible.\n- Usa listas estructuradas, no párrafos sueltos.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "wastes": [],\n    "problems": [],\n    "risks": [],\n    "evidence_highlights": [],\n    "manual_dependencies": [],\n    "hidden_controls": [],\n    "contradictions_detected": []\n  }\n}`},
       B4:{label:'B4 · Restricciones y causa probable', stageCode:'lmp_analysis_b4', instruction:`ACTÚA COMO especialista TOC, causa raíz y flujo operativo.\n\nOBJETIVO B4:\nIdentificar restricciones, cuellos de botella, causas probables y puntos de bloqueo del proceso.\n\nREGLAS:\n- Diferencia restricción real de problema general.\n- No propongas aún el plan TO BE completo.\n- Relaciona restricciones con actividades cuando aplique.\n- Declara brevemente la evidencia o supuesto utilizado.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "restrictions": [],\n    "suspected_constraints": [],\n    "bottlenecks": [],\n    "rootCauseHypotheses": [],\n    "controlIssues": [],\n    "dataGaps": []\n  }\n}`},
       B5:{label:'B5 · Mejoras candidatas para TO BE', stageCode:'lmp_analysis_b5', instruction:`ACTÚA COMO consultor senior de mejora continua.\n\nOBJETIVO B5:\nConvertir hallazgos, problemas, desperdicios y restricciones en mejoras candidatas para que el usuario las apruebe, ajuste o rechace en TO BE.\n\nREGLAS:\n- No generes mejoras genéricas.\n- Cada mejora debe estar conectada a un problema, desperdicio o restricción detectada.\n- Distingue quick win, mejora gradual y proyecto estructural.\n- La salida debe alimentar directamente la pantalla TO BE.\n- Genera mejoras suficientes si existen hallazgos; no devuelvas improvements vacío salvo que no exista evidencia.\n\nSALIDA JSON ESTRICTA:\n{\n  "quickWins": [],\n  "improvements": [\n    {\n      "title": "",\n      "summary": "",\n      "problem": "",\n      "currentState": "",\n      "proposedState": "",\n      "support": "",\n      "impact": "",\n      "justification": "",\n      "type": "quick_win|gradual|strategic",\n      "status": "pending"\n    }\n  ]\n}`},
-      B6:{label:'B6 · Prompt Builder SIPOC', stageCode:'lmp_analysis_b6', instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder.\n\nOBJETIVO B6:\nConstruir el bloque sipoc_input usando el AS IS validado y los datos SIPOC disponibles.\n\nREGLAS:\n- Devuelve SOLO sipoc_input.\n- No incluyas análisis, métricas ni mejoras.\n- previous y next deben ser arrays.\n- activities debe conservar todas las actividades AS IS.\n\nSALIDA JSON ESTRICTA:\n{\n  "sipoc_input": {\n    "process_code": "",\n    "process_name": "",\n    "purpose": "",\n    "start_event": "",\n    "end_event": "",\n    "notes": "",\n    "suppliers": [],\n    "inputs": [],\n    "outputs": [],\n    "customers": [],\n    "actors": [],\n    "documents": [],\n    "activities": []\n  }\n}`}
+      B6:{label:'B6 · Contrato para SIPOC Builder', stageCode:'lmp_analysis_b6', instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder.\n\nOBJETIVO B6:\nConstruir el bloque sipoc_input usando el AS IS validado y los datos SIPOC disponibles.\n\nREGLAS:\n- Devuelve SOLO sipoc_input.\n- No incluyas análisis, métricas ni mejoras.\n- previous y next deben ser arrays.\n- activities debe conservar todas las actividades AS IS.\n\nSALIDA JSON ESTRICTA:\n{\n  "sipoc_input": {\n    "process_code": "",\n    "process_name": "",\n    "purpose": "",\n    "start_event": "",\n    "end_event": "",\n    "notes": "",\n    "suppliers": [],\n    "inputs": [],\n    "outputs": [],\n    "customers": [],\n    "actors": [],\n    "documents": [],\n    "activities": []\n  }\n}`}
     };
   }
   window.sgmpGetAnalysisStageDefinitions = stageDefinitions;
@@ -4388,7 +4429,7 @@ function printDoc(id, title){
       if(current==='analisis_b1') return window.showSection('asis');
       const idx=SCREEN_ORDER.indexOf(current); if(idx>0) window.showSection(SCREEN_ORDER[idx-1]);
     };
-    window.labelStage=function(id){ return {inicio:'Inicio',documentacion_existente:'Documentación existente',preparacion:'Preparación y contexto',carga:'Carga y consolidación',asis:'AS IS',analisis:'B1 · Validación AS IS',analisis_b1:'B1 · Validación AS IS',analisis_b2:'B2 · AVA',analisis_b3:'B3 · Desperdicios',analisis_b4:'B4 · Restricciones',analisis_b5:'B5 · Mejoras',analisis_b6:'B6 · Prompt Builder SIPOC',decision:'Decisión',tobe:'TO BE',resultados:'Resultados'}[id] || id; };
+    window.labelStage=function(id){ return {inicio:'Inicio',documentacion_existente:'Documentación existente',preparacion:'Preparación y contexto',carga:'Carga y consolidación',asis:'AS IS',analisis:'B1 · Validación AS IS',analisis_b1:'B1 · Validación AS IS',analisis_b2:'B2 · AVA',analisis_b3:'B3 · Desperdicios',analisis_b4:'B4 · Restricciones',analisis_b5:'B5 · Mejoras',analisis_b6:'B6 · Builder SB',decision:'Decisión',tobe:'TO BE',resultados:'Resultados'}[id] || id; };
   }
   function install(){
     installStageButtons();
@@ -8872,7 +8913,7 @@ function sgmpGetAnalysisStageDefinitions(){
       instruction:`ACTÚA COMO consultor senior de mejora continua.\n\nOBJETIVO B5:\nConvertir hallazgos, problemas, desperdicios y restricciones en mejoras candidatas para que el usuario las apruebe, ajuste o rechace en TO BE.\n\nREGLAS:\n- No generes mejoras genéricas.\n- Cada mejora debe estar conectada a un problema, desperdicio o restricción.\n- Distingue quick win de mejora gradual y proyecto estructural.\n- La salida debe alimentar directamente la pantalla TO BE.\n\nSALIDA JSON ESTRICTA:\n{\n  "quickWins": [],\n  "improvements": [\n    {\n      "title": "",\n      "summary": "",\n      "problem": "",\n      "currentState": "",\n      "proposedState": "",\n      "support": "",\n      "impact": "",\n      "justification": "",\n      "type": "quick_win|gradual|strategic",\n      "status": "pending"\n    }\n  ]\n}`
     },
     B6:{
-      label:'B6 · Prompt Builder SIPOC',
+      label:'B6 · Contrato para SIPOC Builder',
       stageCode:'lmp_analysis_b6',
       instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder.\n\nOBJETIVO B6:\nConstruir el bloque sipoc_input usando el AS IS validado y los datos SIPOC disponibles.\n\nREGLAS:\n- Devuelve SOLO sipoc_input.\n- No incluyas análisis, métricas ni mejoras.\n- previous y next deben ser arrays.\n- activities debe conservar todas las actividades AS IS.\n\nSALIDA JSON ESTRICTA:\n{\n  "sipoc_input": {\n    "process_code": "",\n    "process_name": "",\n    "purpose": "",\n    "start_event": "",\n    "end_event": "",\n    "notes": "",\n    "suppliers": [],\n    "inputs": [],\n    "outputs": [],\n    "customers": [],\n    "actors": [],\n    "documents": [],\n    "activities": []\n  }\n}`
     }
@@ -10283,7 +10324,7 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
     const key = ANALYSIS_KEY_BY_SECTION[id];
     if(key){ state.analysisStages = state.analysisStages || { current:key, results:{} }; state.analysisStages.current = key; if(!el('analysisPrompt_' + key)?.value) window.generateAnalysisScreenPrompt(key); window.renderAnalysisScreenAccumulated(key); }
   };
-  window.labelStage = function(id){ return { inicio:'Inicio', documentacion_existente:'Documentación existente', preparacion:'Preparación y contexto', carga:'Carga y consolidación', asis:'AS IS', analisis:'Análisis', analisis_b1:'B1 · Validación AS IS', analisis_b2:'B2 · AVA', analisis_b3:'B3 · Desperdicios', analisis_b4:'B4 · Restricciones', analisis_b5:'B5 · Mejoras', analisis_b6:'B6 · Prompt Builder SIPOC', decision:'Decisión', tobe:'TO BE', resultados:'Resultados' }[id] || id; };
+  window.labelStage = function(id){ return { inicio:'Inicio', documentacion_existente:'Documentación existente', preparacion:'Preparación y contexto', carga:'Carga y consolidación', asis:'AS IS', analisis:'Análisis', analisis_b1:'B1 · Validación AS IS', analisis_b2:'B2 · AVA', analisis_b3:'B3 · Desperdicios', analisis_b4:'B4 · Restricciones', analisis_b5:'B5 · Mejoras', analisis_b6:'B6 · Builder SB', decision:'Decisión', tobe:'TO BE', resultados:'Resultados' }[id] || id; };
   window.goToNext = function(current){
     if(typeof syncVisibleStage === 'function') syncVisibleStage();
     if(current === 'preparacion'){ if(state.metadata.route === 'doc'){ showSection('documentacion_existente'); return; } showSection('carga'); return; }
@@ -10423,7 +10464,7 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
       B3:{label:'B3 · Desperdicios y problemas', stageCode:'lmp_analysis_b3', instruction:`ACTÚA COMO experto Lean, análisis de desperdicios y diagnóstico operativo.\n\nOBJETIVO B3:\nDetectar desperdicios, problemas, riesgos, dependencias manuales, controles ocultos y evidencias desde el AS IS, el brief y el análisis AVA.\n\nREGLAS:\n- No diseñes TO BE.\n- No hagas contrato SB.\n- Cada hallazgo debe tener evidencia o actividad relacionada cuando sea posible.\n- Usa listas estructuradas, no párrafos sueltos.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "wastes": [],\n    "problems": [],\n    "risks": [],\n    "evidence_highlights": [],\n    "manual_dependencies": [],\n    "hidden_controls": [],\n    "contradictions_detected": []\n  }\n}`},
       B4:{label:'B4 · Restricciones y causa probable', stageCode:'lmp_analysis_b4', instruction:`ACTÚA COMO especialista TOC, causa raíz y flujo operativo.\n\nOBJETIVO B4:\nIdentificar restricciones, cuellos de botella, causas probables y puntos de bloqueo del proceso.\n\nREGLAS:\n- Diferencia restricción real de problema general.\n- No propongas aún el plan TO BE completo.\n- Relaciona restricciones con actividades cuando aplique.\n- Declara brevemente la evidencia o supuesto utilizado.\n\nSALIDA JSON ESTRICTA:\n{\n  "findings": {\n    "restrictions": [],\n    "suspected_constraints": [],\n    "bottlenecks": [],\n    "rootCauseHypotheses": [],\n    "controlIssues": [],\n    "dataGaps": []\n  }\n}`},
       B5:{label:'B5 · Mejoras candidatas para TO BE', stageCode:'lmp_analysis_b5', instruction:`ACTÚA COMO consultor senior de mejora continua.\n\nOBJETIVO B5:\nConvertir hallazgos, problemas, desperdicios y restricciones en mejoras candidatas para que el usuario las apruebe, ajuste o rechace en TO BE.\n\nREGLAS:\n- No generes mejoras genéricas.\n- Cada mejora debe estar conectada a un problema, desperdicio o restricción detectada.\n- Distingue quick win, mejora gradual y proyecto estructural.\n- La salida debe alimentar directamente la pantalla TO BE.\n- Genera mejoras suficientes si existen hallazgos; no devuelvas improvements vacío salvo que no exista evidencia.\n\nSALIDA JSON ESTRICTA:\n{\n  "quickWins": [],\n  "improvements": [\n    {\n      "title": "",\n      "summary": "",\n      "problem": "",\n      "currentState": "",\n      "proposedState": "",\n      "support": "",\n      "impact": "",\n      "justification": "",\n      "type": "quick_win|gradual|strategic",\n      "status": "pending"\n    }\n  ]\n}`},
-      B6:{label:'B6 · Prompt Builder SIPOC', stageCode:'lmp_analysis_b6', instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder.\n\nOBJETIVO B6:\nConstruir el bloque sipoc_input usando el AS IS validado y los datos SIPOC disponibles.\n\nREGLAS:\n- Devuelve SOLO sipoc_input.\n- No incluyas análisis, métricas ni mejoras.\n- previous y next deben ser arrays.\n- activities debe conservar todas las actividades AS IS.\n\nSALIDA JSON ESTRICTA:\n{\n  "sipoc_input": {\n    "process_code": "",\n    "process_name": "",\n    "purpose": "",\n    "start_event": "",\n    "end_event": "",\n    "notes": "",\n    "suppliers": [],\n    "inputs": [],\n    "outputs": [],\n    "customers": [],\n    "actors": [],\n    "documents": [],\n    "activities": []\n  }\n}`}
+      B6:{label:'B6 · Contrato para SIPOC Builder', stageCode:'lmp_analysis_b6', instruction:`ACTÚA COMO builder contractual final LMP → SIPOC Builder.\n\nOBJETIVO B6:\nConstruir el bloque sipoc_input usando el AS IS validado y los datos SIPOC disponibles.\n\nREGLAS:\n- Devuelve SOLO sipoc_input.\n- No incluyas análisis, métricas ni mejoras.\n- previous y next deben ser arrays.\n- activities debe conservar todas las actividades AS IS.\n\nSALIDA JSON ESTRICTA:\n{\n  "sipoc_input": {\n    "process_code": "",\n    "process_name": "",\n    "purpose": "",\n    "start_event": "",\n    "end_event": "",\n    "notes": "",\n    "suppliers": [],\n    "inputs": [],\n    "outputs": [],\n    "customers": [],\n    "actors": [],\n    "documents": [],\n    "activities": []\n  }\n}`}
     };
   }
   window.sgmpGetAnalysisStageDefinitions = stageDefinitions;
@@ -10632,7 +10673,7 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
       if(current==='analisis_b1') return window.showSection('asis');
       const idx=SCREEN_ORDER.indexOf(current); if(idx>0) window.showSection(SCREEN_ORDER[idx-1]);
     };
-    window.labelStage=function(id){ return {inicio:'Inicio',documentacion_existente:'Documentación existente',preparacion:'Preparación y contexto',carga:'Carga y consolidación',asis:'AS IS',analisis:'B1 · Validación AS IS',analisis_b1:'B1 · Validación AS IS',analisis_b2:'B2 · AVA',analisis_b3:'B3 · Desperdicios',analisis_b4:'B4 · Restricciones',analisis_b5:'B5 · Mejoras',analisis_b6:'B6 · Prompt Builder SIPOC',decision:'Decisión',tobe:'TO BE',resultados:'Resultados'}[id] || id; };
+    window.labelStage=function(id){ return {inicio:'Inicio',documentacion_existente:'Documentación existente',preparacion:'Preparación y contexto',carga:'Carga y consolidación',asis:'AS IS',analisis:'B1 · Validación AS IS',analisis_b1:'B1 · Validación AS IS',analisis_b2:'B2 · AVA',analisis_b3:'B3 · Desperdicios',analisis_b4:'B4 · Restricciones',analisis_b5:'B5 · Mejoras',analisis_b6:'B6 · Builder SB',decision:'Decisión',tobe:'TO BE',resultados:'Resultados'}[id] || id; };
   }
   function install(){
     installStageButtons();
