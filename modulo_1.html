@@ -1468,6 +1468,55 @@ body .app .layout > aside.sidebar .step-list::-webkit-scrollbar-thumb:hover{
   }
 </style>
 
+
+<style id="sgmp-human-readable-result-sections">
+  /* Resultados humanos: el informe y el plan no deben mostrar JSON crudo.
+     Las cajas JSON técnicas se mantienen separadas. */
+  .human-output-card{
+    border:1px solid #d7e3f3;
+    border-left:4px solid #1A56DB;
+    border-radius:14px;
+    padding:12px 14px;
+    margin:10px 0;
+    background:#F8FBFF;
+  }
+  .human-output-card h4{
+    margin:0 0 8px;
+    color:#0B2E59;
+  }
+  .human-output-card p{
+    margin:5px 0;
+  }
+  .human-output-card ul{
+    margin:6px 0 0 20px;
+  }
+  .human-output-table{
+    width:100%;
+    border-collapse:collapse;
+    margin:10px 0 12px;
+    font-size:.92rem;
+  }
+  .human-output-table th,
+  .human-output-table td{
+    border:1px solid #d7e3f3;
+    padding:8px 10px;
+    text-align:left;
+    vertical-align:top;
+  }
+  .human-output-table th{
+    background:#eef4ff;
+    color:#0B2E59;
+  }
+  .human-readable-note{
+    background:#F0F9FF;
+    border:1px solid #BAE6FD;
+    color:#075985;
+    border-radius:12px;
+    padding:10px 12px;
+    margin:8px 0 12px;
+  }
+</style>
+
 </head>
 <body>
 <div class="app">
@@ -5765,6 +5814,91 @@ function buildImpactText(){
 }
 
 
+
+function renderDocumentProposalHuman(documentProposal){
+  const docs = safeArray(documentProposal);
+  if(!docs.length){
+    return '<p>No se generó propuesta documental porque no hay mejoras aprobadas o no se identificaron documentos requeridos.</p>';
+  }
+  return `
+    <div class="human-readable-note">
+      Esta sección está redactada para lectura humana. La caja JSON para el Evaluador Documental se mantiene como entregable técnico independiente en Resultados.
+    </div>
+    ${docs.map((d, i) => {
+      const name = firstText(d.document_name, d.documentName, d.name, d.title, `Documento ${i+1}`);
+      const type = firstText(d.document_type, d.documentType, d.type, 'Documento de soporte');
+      const purpose = firstText(d.purpose, d.objective, d.objetivo, 'Definir propósito y uso del documento.');
+      const reason = firstText(d.reason_for_existence, d.reasonForExistence, d.reason, d.justification, 'Soportar la estandarización, trazabilidad y control de la mejora.');
+      const required = safeArray(d.required_contents || d.requiredContents || d.contents || d.contenidos);
+      const support = d.support_basis || d.supportBasis || {};
+      const supportItems = [
+        firstText(support.logical_need, support.logicalNeed, support.need),
+        firstText(support.industry_practice, support.industryPractice),
+        firstText(support.normative_reference, support.normativeReference),
+        firstText(support.cross_industry_practice, support.crossIndustryPractice)
+      ].filter(Boolean);
+      return `
+        <div class="human-output-card">
+          <h4>${i+1}. ${escapeHtml(name)}</h4>
+          <p><strong>Tipo documental:</strong> ${escapeHtml(type)}</p>
+          <p><strong>Propósito:</strong> ${escapeHtml(purpose)}</p>
+          <p><strong>Razón de ser:</strong> ${escapeHtml(reason)}</p>
+          ${required.length ? `<p><strong>Contenido mínimo sugerido:</strong></p><ul>${required.map(x => `<li>${escapeHtml(sgmpTextOf(x))}</li>`).join('')}</ul>` : ''}
+          ${supportItems.length ? `<p><strong>Sustento:</strong></p><ul>${supportItems.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : ''}
+        </div>
+      `;
+    }).join('')}
+  `;
+}
+
+function renderIntegrationInputHuman(payload){
+  const integrationInput = payload?.integration_input || payload?.integrationInput || payload || {};
+  const analysisBase = payload?.integration_analysis_base || payload?.integrationAnalysisBase || {};
+  const activities = safeArray(integrationInput.activities);
+  const inputs = safeArray(integrationInput.inputs);
+  const outputs = safeArray(integrationInput.outputs);
+  const actors = safeArray(integrationInput.actors);
+  const dependencies = safeArray(analysisBase.detected_dependencies || analysisBase.detectedDependencies);
+  const impacts = safeArray(analysisBase.cross_impacts || analysisBase.crossImpacts);
+  const missing = safeArray(analysisBase.missing_elements || analysisBase.missingElements);
+  const activityRows = activities.length
+    ? activities.map((a, i) => `
+        <tr>
+          <td>${i+1}</td>
+          <td>${escapeHtml(firstText(a.name, a.activity, a.title, '-'))}</td>
+          <td>${escapeHtml(firstText(a.actor, a.owner, '-'))}</td>
+          <td>${escapeHtml(firstText(a.type, a.category, '-'))}</td>
+          <td>${escapeHtml(firstText(a.note, a.notes, '-'))}</td>
+        </tr>`).join('')
+    : '<tr><td colspan="5">No se registraron actividades para el Integrador.</td></tr>';
+  const list = arr => arr.length ? `<ul>${arr.map(x => `<li>${escapeHtml(sgmpTextOf(x))}</li>`).join('')}</ul>` : '<p>-</p>';
+
+  return `
+    <div class="human-readable-note">
+      Esta sección resume para una persona qué debe revisar el Integrador. La caja JSON para el Integrador se mantiene como entregable técnico independiente en Resultados.
+    </div>
+    <div class="human-output-card">
+      <h4>Resumen de integración</h4>
+      <p><strong>Proceso:</strong> ${escapeHtml(firstText(integrationInput.process_name, integrationInput.processName, state.context?.processName, '-'))}</p>
+      <p><strong>Modo:</strong> ${escapeHtml(firstText(integrationInput.mode, '-'))}</p>
+      <p><strong>Actores involucrados:</strong> ${escapeHtml(actors.join(', ') || '-')}</p>
+      <p><strong>Entradas principales:</strong> ${escapeHtml(inputs.join(', ') || '-')}</p>
+      <p><strong>Salidas principales:</strong> ${escapeHtml(outputs.join(', ') || '-')}</p>
+    </div>
+    <h3>Actividades que deben revisarse en integración</h3>
+    <table class="human-output-table">
+      <thead><tr><th>#</th><th>Actividad</th><th>Actor</th><th>Tipo</th><th>Nota</th></tr></thead>
+      <tbody>${activityRows}</tbody>
+    </table>
+    <h3>Dependencias detectadas</h3>
+    ${list(dependencies)}
+    <h3>Impactos cruzados posibles</h3>
+    ${list(impacts)}
+    <h3>Elementos pendientes de validar</h3>
+    ${list(missing)}
+  `;
+}
+
 function buildTechnicalHtml(){
   const acts = state.asis.activities.map((a,i)=>`<li><strong>${i+1}. ${escapeHtml(a.name)}</strong> · ${escapeHtml(a.actor)} · ${escapeHtml(a.type)}${a.problems ? ` · ${escapeHtml(a.problems)}`:''}</li>`).join('');
   const listHtml = arr => safeArray(arr).length ? `<ul>${safeArray(arr).map(x=>`<li>${escapeHtml(typeof x === 'string' ? x : sgmpTextOf(x))}</li>`).join('')}</ul>` : '<p>-</p>';
@@ -5831,14 +5965,14 @@ function buildTechnicalHtml(){
     <h3>Beneficios esperados</h3>
     ${artifacts.benefits}
 
-    <h2>Salida para evaluador documental</h2>
-    <pre>${escapeHtml(JSON.stringify(artifacts.documentProposal, null, 2))}</pre>
+    <h2>Lectura humana para Evaluador Documental</h2>
+    ${renderDocumentProposalHuman(artifacts.documentProposal)}
 
-    <h2>Salida para integrador</h2>
-    <pre>${escapeHtml(JSON.stringify({
+    <h2>Lectura humana para Integrador</h2>
+    ${renderIntegrationInputHuman({
       integration_input: artifacts.integrationInput,
       integration_analysis_base: artifacts.integrationAnalysisBase
-    }, null, 2))}</pre>
+    })}
   `;
 }
 
@@ -5874,11 +6008,14 @@ function buildImplementationHtml(){
     <h2>Plan Modo A y Modo B</h2>
     ${artifacts.plan}
 
-    <h2>Salida para Evaluador Documental</h2>
-    <pre>${docJson}</pre>
+    <h2>Lectura humana para Evaluador Documental</h2>
+    ${renderDocumentProposalHuman(artifacts.documentProposal)}
 
-    <h2>Salida para Integrador</h2>
-    <pre>${integJson}</pre>
+    <h2>Lectura humana para Integrador</h2>
+    ${renderIntegrationInputHuman({
+      integration_input: artifacts.integrationInput,
+      integration_analysis_base: artifacts.integrationAnalysisBase
+    })}
 
     <h2>Mejoras rechazadas</h2>
     ${rejectedHtml}
