@@ -6963,11 +6963,78 @@ async function generateBriefPromptFromMaster(){
   }
 }
 
+
+/* SGMP FIX · Separación estricta Brief A vs B1 AS IS */
+function sgmpLooksLikeAsIsStagePayload(payload){
+  try{
+    if(!payload || typeof payload !== 'object') return false;
+    const acts = payload?.as_is?.activities || payload?.activities;
+    const hasActivities = Array.isArray(acts) && acts.length > 0;
+    const hasBriefFields = !!(
+      payload?.brief ||
+      payload?.summary ||
+      payload?.brief_reference ||
+      payload?.executiveSummary ||
+      payload?.processPurpose ||
+      payload?.purposeSummary
+    );
+    return hasActivities && !hasBriefFields;
+  }catch(_){ return false; }
+}
+function sgmpLooksLikeBriefPayload(payload){
+  try{
+    if(!payload || typeof payload !== 'object') return false;
+    const b = payload.brief || payload;
+    const s = b.summary || payload.summary || {};
+    return !!(
+      payload.brief ||
+      payload.summary ||
+      s.executiveSummary ||
+      s.purposeSummary ||
+      b.executiveSummary ||
+      b.processPurpose ||
+      b.purposeSummary ||
+      b.flowSummary ||
+      b.sipoc ||
+      b.activities_preliminary
+    );
+  }catch(_){ return false; }
+}
+function sgmpExtractBriefFromEditors(){
+  const candidates = [];
+  const add = (value) => {
+    const txt = String(value || '').trim();
+    if(!txt) return;
+    try{
+      const parsed = extractJsonFromText(txt);
+      if(sgmpLooksLikeBriefPayload(parsed) && !sgmpLooksLikeAsIsStagePayload(parsed)){
+        candidates.push(normalizeBriefPayload(parsed));
+      }
+    }catch(_){ }
+  };
+  add(qs('briefEditor')?.value);
+  add(qs('briefResponseEditor')?.value);
+  if(state?.briefReview?.raw && sgmpLooksLikeBriefPayload(state.briefReview.raw)){
+    candidates.push(normalizeBriefPayload(state.briefReview.raw));
+  }
+  if(state?.brief && sgmpLooksLikeBriefPayload(state.brief)){
+    candidates.push(normalizeBriefPayload(state.brief));
+  }
+  return candidates.find(x => !evaluateBriefCompleteness(x).length) || candidates[0] || null;
+}
+
 function processBriefResponse(){
   const rawText = qs('briefResponseEditor')?.value.trim() || '';
   if(!rawText){ showMsg('briefIaMsg','warn','Pega primero el JSON de Brief generado por la IA.'); return; }
   try{
     const parsed = extractJsonFromText(rawText);
+
+    // Protección crítica: una respuesta B1/AS IS no puede sobrescribir el Brief A.
+    if(sgmpLooksLikeAsIsStagePayload(parsed)){
+      showMsg('briefIaMsg','err','La respuesta pegada parece ser de B1 / AS IS, no del Brief A. No se sobrescribió el Brief. Pégala en la pantalla B1 o ejecuta nuevamente el Prompt A.');
+      return;
+    }
+
     const normalized = normalizeBriefPayload(parsed);
     const issues = evaluateBriefCompleteness(normalized);
     console.log('[SGMP][BRIEF] parsed', parsed);
@@ -6991,15 +7058,35 @@ function approveBriefAndUnlockAnalysis(){
   const rawText = qs('briefEditor')?.value.trim() || '';
   if(!rawText){ showMsg('briefIaMsg','warn','No hay Brief para aprobar.'); return; }
   try{
-    const parsed = JSON.parse(rawText);
+    const parsed = extractJsonFromText(rawText);
+
+    // Protección crítica: si el editor contiene B1/AS IS, no debe validarse como Brief.
+    if(sgmpLooksLikeAsIsStagePayload(parsed)){
+      const fallbackBrief = sgmpExtractBriefFromEditors();
+      if(fallbackBrief && !evaluateBriefCompleteness(fallbackBrief).length){
+        state.briefReview = { raw: fallbackBrief, approved: true };
+        state.brief = fallbackBrief;
+        if(qs('briefEditor')) qs('briefEditor').value = JSON.stringify(fallbackBrief, null, 2);
+        renderBriefDraft();
+        renderBriefValidation();
+        refreshCargaFlowState();
+        showMsg('briefIaMsg','ok','Se recuperó y aprobó el Brief válido previo. La respuesta AS IS/B1 no sobrescribió el Brief.');
+        return;
+      }
+      showMsg('briefIaMsg','err','El contenido actual corresponde a B1 / AS IS y no puede aprobarse como Brief. Vuelve a generar/procesar el Prompt A o pega aquí el JSON del Brief.');
+      return;
+    }
+
     let normalized = normalizeBriefPayload(parsed);
     const responseRawText = qs('briefResponseEditor')?.value.trim() || '';
     if(!String(normalized.summary?.executiveSummary || '').trim() && responseRawText){
       try{
         const responseParsed = extractJsonFromText(responseRawText);
-        const responseNormalized = normalizeBriefPayload(responseParsed);
-        if(String(responseNormalized.summary?.executiveSummary || '').trim()){
-          normalized = responseNormalized;
+        if(!sgmpLooksLikeAsIsStagePayload(responseParsed)){
+          const responseNormalized = normalizeBriefPayload(responseParsed);
+          if(String(responseNormalized.summary?.executiveSummary || '').trim()){
+            normalized = responseNormalized;
+          }
         }
       }catch(_){ }
     }
@@ -7016,7 +7103,7 @@ function approveBriefAndUnlockAnalysis(){
       showMsg('briefIaMsg','warn','No se puede aprobar el Brief porque está incompleto.');
       return;
     }
-    showMsg('briefIaMsg','ok','Brief aprobado correctamente. Ya puedes generar el análisis completo.');
+    showMsg('briefIaMsg','ok','Brief aprobado correctamente. Ya puedes continuar a B1 · Validación AS IS.');
   }catch(error){
     showMsg('briefIaMsg','err','El Brief editable no contiene un JSON válido. Detalle: ' + error.message);
   }
