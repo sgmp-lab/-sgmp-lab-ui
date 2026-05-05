@@ -6535,6 +6535,57 @@ function normalizeBriefPayload(parsed){
   const mergeText = (...values) => values.map(asString).filter(Boolean).join('\n');
   const mergeArray = (...values) => values.flatMap(asArray).filter(item => item !== undefined && item !== null && item !== '');
 
+  // SGMP FIX: si la API del Brief devuelve por error una respuesta B1/AS IS,
+  // no debe romper el Brief ni quedar como "brief incompleto".
+  // Se convierte en un Brief mínimo válido, preservando las actividades y marcando advertencia.
+  const asIsOnlyActivities = sgmpCanonicalizeActivityList(
+    source.as_is?.activities || source.asIs?.activities || b.as_is?.activities || b.asIs?.activities || []
+  );
+  const hasBriefShape = !!(source.brief || source.summary || b.summary || source.sipoc || b.sipoc || source.sipoc_preliminary || b.sipoc_preliminary);
+  if(asIsOnlyActivities.length && !hasBriefShape){
+    const processName = asString(source.as_is?.process_name || source.as_is?.processName || b.process_name || b.processName || context.processName || state.context?.processName || state.master?.context?.processName || 'Proceso no definido');
+    const processCode = asString(source.as_is?.process_code || source.as_is?.processCode || b.process_code || b.processCode || context.processCode || state.context?.processCode || state.master?.context?.processCode || '');
+    const startAct = asIsOnlyActivities.find(a => a.is_start) || asIsOnlyActivities[0] || {};
+    const endAct = asIsOnlyActivities.find(a => a.is_end) || asIsOnlyActivities[asIsOnlyActivities.length - 1] || {};
+    const actors = [...new Set(asIsOnlyActivities.map(a => asString(a.actor || a.role)).filter(Boolean))];
+    const docs = [...new Set(asIsOnlyActivities.map(a => asString(a.document || a.documents)).filter(Boolean))];
+    const masterSipoc = state.master?.sipoc || {};
+    const convertedBrief = {
+      summary: {
+        executiveSummary: `El proceso ${processName} fue estructurado a partir del flujo AS IS recibido por la API. Se identificaron ${asIsOnlyActivities.length} actividades conectadas desde ${asString(startAct.name) || 'el inicio del flujo'} hasta ${asString(endAct.name) || 'el cierre del flujo'}.`,
+        purposeSummary: asString(context.purpose || state.master?.context?.purpose || `Gestionar el proceso ${processName}, asegurando continuidad operativa, trazabilidad y cumplimiento del resultado esperado.`),
+        expectedResult: '',
+        trigger: asString(startAct.name),
+        closure: asString(endAct.name),
+        flowSummary: asIsOnlyActivities.map((a, i) => `${i + 1}. ${asString(a.name)}`).join('\n')
+      },
+      sipoc: {
+        suppliers: asString(masterSipoc.suppliers || masterSipoc.proveedores || 'Por validar'),
+        inputs: asString(masterSipoc.inputs || masterSipoc.entradas || 'Por validar'),
+        process: processName,
+        outputs: asString(masterSipoc.outputs || masterSipoc.salidas || 'Por validar'),
+        customers: asString(masterSipoc.customers || masterSipoc.clientes || 'Por validar'),
+        actors: actors.join('\n') || asString(masterSipoc.actors || masterSipoc.actores || 'Por validar'),
+        documentsSystems: docs.join('\n') || asString(masterSipoc.documentsSystems || masterSipoc.documents || masterSipoc.systems || '')
+      },
+      activities_preliminary: asIsOnlyActivities,
+      as_is: { activities: asIsOnlyActivities },
+      insights: { keyIssues: '', quickWins: '', constraints: '' },
+      futureState: { futureVision: '' },
+      indicators: '',
+      informationGaps: ['La API devolvió estructura AS IS durante la etapa Brief. Se generó un Brief mínimo automáticamente; validar SIPOC preliminar.'],
+      openQuestions: [],
+      validation: {
+        canProceedToAnalysis: true,
+        warnings: ['Brief convertido automáticamente desde una respuesta AS IS/B1.'],
+        blockingIssues: [],
+        convertedFromAsIs: true,
+        process_code: processCode
+      }
+    };
+    return sgmpEnsureBriefHasSourceActivities(convertedBrief);
+  }
+
   const executiveSummary = firstFilled(
     summarySource.executiveSummary,
     summarySource.executive_summary,
