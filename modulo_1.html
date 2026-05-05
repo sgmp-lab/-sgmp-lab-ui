@@ -9973,7 +9973,13 @@ function renderAllFromState(){
   if(typeof hydrateContextFromState === 'function') hydrateContextFromState();
   if(typeof window.hydratePreparationFromState === 'function') window.hydratePreparationFromState();
   updateLoadKpis();
-  if(state.master){ qs('masterEditor').value = JSON.stringify(state.master, null, 2); qs('masterPreview').textContent = JSON.stringify(state.master, null, 2); }
+  if(state.master){
+    const masterEditor = qs('masterEditor');
+    const masterPreview = qs('masterPreview');
+    const masterJson = JSON.stringify(state.master, null, 2);
+    if(masterEditor) masterEditor.value = masterJson;
+    if(masterPreview) masterPreview.textContent = masterJson;
+  }
   renderAsIsActivities();
   renderAnalysisFromState();
   if(state.decision.route) setDecisionRoute(state.decision.route, false);
