@@ -1393,6 +1393,49 @@ body.sgmp-v3-processing button:not(.sgmp-v3-allow),body.sgmp-v3-processing input
 @media print{#sgmp_v3_timer,.sgmp-timing-actions{display:none!important}}
 </style>
 
+
+
+<style id="sgmp-sidebar-scroll-hard-fix">
+/* SGMP · FIX DURO: sidebar con scroll interno real.
+   Debe ir al final porque estilos previos usaban overflow:hidden!important. */
+body .app .layout > aside.sidebar{
+  height:calc(100dvh - 32px) !important;
+  max-height:calc(100dvh - 32px) !important;
+  min-height:0 !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  position:sticky !important;
+  top:16px !important;
+  align-self:start !important;
+  padding-bottom:24px !important;
+  scrollbar-width:thin !important;
+  scrollbar-color:rgba(0,194,255,.70) rgba(255,255,255,.08) !important;
+}
+body .app .layout > aside.sidebar::-webkit-scrollbar{
+  width:8px !important;
+}
+body .app .layout > aside.sidebar::-webkit-scrollbar-thumb{
+  background:rgba(0,194,255,.70) !important;
+  border-radius:999px !important;
+}
+body .app .layout > aside.sidebar::-webkit-scrollbar-track{
+  background:rgba(255,255,255,.08) !important;
+  border-radius:999px !important;
+}
+body .app .layout > aside.sidebar .summary-list{
+  padding-bottom:18px !important;
+}
+@media(max-width:1220px){
+  body .app .layout > aside.sidebar{
+    position:relative !important;
+    top:0 !important;
+    height:auto !important;
+    max-height:70dvh !important;
+    overflow-y:auto !important;
+  }
+}
+</style>
+
 </head>
 <body>
 <div class="app">
