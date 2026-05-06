@@ -2087,6 +2087,250 @@ function gatherContext(prefix){
 
 ${script}
 <\/script>
+
+
+<script id="sgmp-v2-auto-api-orchestration-patch">
+/* SGMP LMP v2 · Auto API orchestration patch
+   Objetivo: cada botón "Generar prompt" ejecuta IA automáticamente cuando el backend call_ai responde.
+   Si no hay conexión/API/cuota/configuración, conserva el prompt visible y mantiene el flujo manual. */
+(function(){
+  if(window.__SGMP_V2_AUTO_API_ORCHESTRATION_PATCH__) return;
+  window.__SGMP_V2_AUTO_API_ORCHESTRATION_PATCH__ = true;
+
+  function byId(id){ return document.getElementById(id); }
+  function txt(v){ return String(v == null ? '' : v); }
+  function yes(v){ return ['YES','SI','SÍ','TRUE','1','ON','API','HYBRID','AUTO'].includes(txt(v).trim().toUpperCase()); }
+  function no(v){ return ['NO','FALSE','0','OFF','MANUAL','DISABLED'].includes(txt(v).trim().toUpperCase()); }
+  function msg(id,type,text){ if(typeof showMsg === 'function') showMsg(id,type,text); }
+  function loader(title,detail){ if(typeof showLoader === 'function') showLoader(title, detail || 'Procesando con IA.'); }
+  function hide(){ if(typeof hideLoader === 'function') hideLoader(); }
+  function getApiUrl(){ return window.SGMP_API_URL || (typeof SGMP_API_URL !== 'undefined' ? SGMP_API_URL : ''); }
+  function arr(v){ return Array.isArray(v) ? v : (v ? [v] : []); }
+
+  window.sgmpLoadRuntimeConfig = async function(){
+    window.SGMP_GLOBAL_CONFIG = window.SGMP_GLOBAL_CONFIG || {};
+    window.SGMP_STAGE_CONFIG_RUNTIME = window.SGMP_STAGE_CONFIG_RUNTIME || {};
+    var api = getApiUrl();
+    if(!api) return { global: window.SGMP_GLOBAL_CONFIG, stages: window.SGMP_STAGE_CONFIG_RUNTIME };
+    try{
+      var globalRes = await sgmpFetchJson(api + '?action=get_global&_ts=' + Date.now());
+      window.SGMP_GLOBAL_CONFIG = globalRes.data !== undefined ? globalRes.data : globalRes;
+    }catch(e){ console.warn('[SGMP] No se pudo cargar CONFIG_GLOBAL. Se intentará API por defecto.', e); }
+    var stages = ['lmp_brief','lmp_analysis','lmp_analysis_b1','lmp_analysis_b2','lmp_analysis_b3','lmp_analysis_b4','lmp_analysis_b5','lmp_analysis_b6','lmp_sb_contract','lmp_results_as_is','lmp_results_to_be'];
+    await Promise.all(stages.map(async function(stage){
+      try{
+        var res = await sgmpFetchJson(api + '?action=get_execution_mode&module_code=LMP&stage_code=' + encodeURIComponent(stage) + '&_ts=' + Date.now());
+        window.SGMP_STAGE_CONFIG_RUNTIME[stage] = res.data !== undefined ? res.data : res;
+      }catch(e){ window.SGMP_STAGE_CONFIG_RUNTIME[stage] = window.SGMP_STAGE_CONFIG_RUNTIME[stage] || {}; }
+    }));
+    return { global: window.SGMP_GLOBAL_CONFIG, stages: window.SGMP_STAGE_CONFIG_RUNTIME };
+  };
+
+  window.sgmpGlobalApiEnabled = function(){
+    var g = window.SGMP_GLOBAL_CONFIG || {};
+    var value = g.USE_API_GLOBAL ?? g.use_api_global ?? g.useApiGlobal ?? g.api_enabled ?? g.apiEnabled ?? window.USE_API_GLOBAL ?? window.SGMP_USE_API_GLOBAL;
+    if(value === undefined || value === null || txt(value).trim() === '') return true; // intento API por defecto
+    return !no(value);
+  };
+
+  window.sgmpStageUseApi = function(stageCode){
+    var runtime = (window.SGMP_STAGE_CONFIG_RUNTIME || {})[stageCode] || {};
+    var direct = runtime.use_api ?? runtime.useApi ?? runtime.api_enabled ?? runtime.apiEnabled;
+    if(direct !== undefined && direct !== null && txt(direct).trim() !== '') return yes(direct);
+    var mode = runtime.execution_mode || runtime.executionMode || runtime.mode || runtime.DEFAULT_EXECUTION_MODE;
+    if(mode) return !no(mode);
+    var meta = (window.SGMP_STAGE_CONFIG || {})[stageCode] || (window.SGMP_PROMPT_META || {})[stageCode] || {};
+    var metaValue = meta.use_api ?? meta.useApi ?? meta.api_enabled ?? meta.apiEnabled;
+    if(metaValue !== undefined && metaValue !== null && txt(metaValue).trim() !== '') return yes(metaValue);
+    return true; // intento API por defecto para v2 híbrida
+  };
+
+  window.sgmpStageApiEnabled = function(stageCode){
+    return window.sgmpGlobalApiEnabled() && window.sgmpStageUseApi(stageCode);
+  };
+
+  window.sgmpExtractAIText = function(res){
+    if(res === undefined || res === null) throw new Error('Respuesta vacía del backend.');
+    if(typeof res === 'string') return res;
+    if(res.ok === false) throw new Error(res.error || res.message || 'Backend call_ai respondió con error.');
+    var data = res.data !== undefined ? res.data : res;
+    if(typeof data === 'string') return data;
+    return data.text || data.output || data.response || data.result || data.content || data.answer || data.raw || JSON.stringify(data);
+  };
+
+  window.sgmpAIResultText = function(result){
+    if(result && typeof result === 'object' && result.text !== undefined) return result.text;
+    return window.sgmpExtractAIText(result);
+  };
+
+  window.sgmpCallAI = async function(stageCode, prompt){
+    var api = getApiUrl();
+    if(!api) throw new Error('SGMP_API_URL no está definido.');
+    if(!window.sgmpStageApiEnabled(stageCode)) throw new Error('La API está desactivada para la etapa ' + stageCode + '.');
+    var payload = {
+      session_id: (typeof sgmpSessionId === 'function' ? sgmpSessionId() : ''),
+      user_id: (typeof sgmpUserId === 'function' ? sgmpUserId() : 'u_admin') || 'u_admin',
+      module_code: 'LMP',
+      stage_code: stageCode,
+      prompt: prompt
+    };
+    var postError = null;
+    try{
+      var response = await fetch(api + '?action=call_ai', {
+        method:'POST',
+        headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+        body:JSON.stringify(payload)
+      });
+      var text = await response.text();
+      var parsed = text ? JSON.parse(text) : {};
+      if(!response.ok) throw new Error(parsed.error || parsed.message || ('HTTP ' + response.status));
+      if(parsed.fallback_manual === true) throw new Error(parsed.error || parsed.message || 'El backend solicitó modo manual.');
+      return { text: window.sgmpExtractAIText(parsed), raw: parsed };
+    }catch(e){
+      postError = e;
+      console.warn('[SGMP call_ai] POST falló, intento GET payload.', e);
+    }
+    try{
+      var url = api + '?action=call_ai&payload=' + encodeURIComponent(JSON.stringify(payload));
+      var response2 = await fetch(url);
+      var text2 = await response2.text();
+      var parsed2 = text2 ? JSON.parse(text2) : {};
+      if(!response2.ok) throw new Error(parsed2.error || parsed2.message || ('HTTP ' + response2.status));
+      if(parsed2.fallback_manual === true) throw new Error(parsed2.error || parsed2.message || 'El backend solicitó modo manual.');
+      return { text: window.sgmpExtractAIText(parsed2), raw: parsed2 };
+    }catch(e2){
+      throw new Error((postError && postError.message ? postError.message + ' | ' : '') + (e2.message || 'No fue posible conectar con la API.'));
+    }
+  };
+
+  function manualFallback(promptId, msgId, prompt, detail){
+    var box = byId(promptId); if(box) box.value = prompt || box.value || '';
+    msg(msgId,'warn','No se pudo ejecutar con API. Se mantiene modo manual: copia el prompt, ejecútalo en una IA externa y pega el JSON de respuesta. Detalle: ' + (detail || 'sin detalle'));
+  }
+
+  window.generateBriefPromptFromMaster = async function(){
+    var btn = byId('btnGenerateBriefPrompt');
+    try{
+      if(btn) btn.disabled = true;
+      loader('Generando Brief con IA...', 'Prompt A · Conectando con API y procesando respuesta.');
+      if(typeof sgmpLoadRuntimeConfig === 'function') await sgmpLoadRuntimeConfig();
+      var master = state.master || (typeof mergeMaster === 'function' ? mergeMaster() : {});
+      var prompt = buildBriefPrompt(master);
+      if(byId('briefPromptEditor')) byId('briefPromptEditor').value = prompt;
+      msg('cargaMsg','ok','Ejecutando IA para Brief...');
+      var result = await sgmpCallAI('lmp_brief', prompt);
+      var text = sgmpAIResultText(result);
+      if(!txt(text).trim()) throw new Error('La API respondió vacío para lmp_brief.');
+      if(byId('briefResponseEditor')) byId('briefResponseEditor').value = text;
+      processBriefResponse();
+      var issues = (typeof evaluateBriefCompleteness === 'function') ? evaluateBriefCompleteness(state.briefReview?.raw || state.brief || {}) : [];
+      if(!issues.length){ approveBriefAndUnlockAnalysis(); }
+      if(typeof refreshCargaFlowState === 'function') refreshCargaFlowState();
+      msg('cargaMsg', issues.length ? 'warn' : 'ok', issues.length ? 'Brief generado y procesado por IA, pero tiene vacíos. Revisa antes de continuar.' : 'Brief generado, validado y aprobado automáticamente. Puedes continuar al siguiente paso.');
+    }catch(e){
+      console.error('[LMP Brief auto] fallback manual:', e);
+      try{ var m = state.master || (typeof mergeMaster === 'function' ? mergeMaster() : {}); manualFallback('briefPromptEditor','cargaMsg', buildBriefPrompt(m), e.message); }catch(e2){ msg('cargaMsg','err','No se pudo generar el prompt de Brief. Detalle: ' + e.message); }
+      if(typeof refreshCargaFlowState === 'function') refreshCargaFlowState();
+    }finally{ hide(); if(btn) btn.disabled = false; }
+  };
+
+  var manualAnalysisPromptBuilder = window.generateAnalysisScreenPrompt;
+  function buildAnalysisPromptOnly(stageKey){
+    if(typeof manualAnalysisPromptBuilder === 'function') return manualAnalysisPromptBuilder(stageKey);
+    if(typeof window.sgmpBuildAnalysisStagePrompt === 'function'){
+      var prompt = window.sgmpBuildAnalysisStagePrompt(stageKey);
+      var box = byId('analysisPrompt_' + stageKey); if(box) box.value = prompt;
+      return prompt;
+    }
+    throw new Error('No existe generador de prompt para ' + stageKey + '.');
+  }
+
+  window.runAnalysisScreenStage = async function(stageKey){
+    var defs = (typeof sgmpGetAnalysisStageDefinitions === 'function') ? sgmpGetAnalysisStageDefinitions() : {};
+    var def = defs[stageKey] || { stageCode:'lmp_analysis_' + txt(stageKey).toLowerCase() };
+    var stageCode = def.stageCode || ('lmp_analysis_' + txt(stageKey).toLowerCase());
+    var msgId = 'analysisMsg_' + stageKey;
+    try{
+      if(!(state.briefReview && state.briefReview.approved)){ msg(msgId,'warn','Debes aprobar primero el Brief.'); return; }
+      if(typeof sgmpLoadRuntimeConfig === 'function') await sgmpLoadRuntimeConfig();
+      state.analysisStages = state.analysisStages || { current:'B1', results:{} };
+      state.analysisStages.current = stageKey;
+      var prompt = buildAnalysisPromptOnly(stageKey);
+      if(!prompt) return;
+      loader('Ejecutando ' + stageKey + ' con IA...', 'Procesando etapa individual del análisis.');
+      msg(msgId,'ok','Ejecutando IA para ' + stageKey + '...');
+      var result = await sgmpCallAI(stageCode, prompt);
+      var text = sgmpAIResultText(result);
+      if(!txt(text).trim()) throw new Error('La API respondió vacío para ' + stageCode + '.');
+      var responseBox = byId('analysisResponse_' + stageKey); if(responseBox) responseBox.value = text;
+      processAnalysisScreenStage(stageKey);
+      msg(msgId,'ok','Etapa ' + stageKey + ' generada, validada y cargada automáticamente.');
+    }catch(e){
+      console.error('[LMP ' + stageKey + ' auto] fallback manual:', e);
+      try{ manualFallback('analysisPrompt_' + stageKey, msgId, buildAnalysisPromptOnly(stageKey), e.message); }catch(e2){ msg(msgId,'err','No se pudo generar/ejecutar ' + stageKey + '. Detalle: ' + e.message); }
+    }finally{ hide(); }
+  };
+
+  window.generateAnalysisScreenPrompt = function(stageKey){
+    return window.runAnalysisScreenStage(stageKey);
+  };
+
+  var originalSbPrompt = window.generateSbContractBuilderPrompt;
+  window.generateSbContractBuilderPrompt = async function(){
+    try{
+      if(typeof sgmpLoadRuntimeConfig === 'function') await sgmpLoadRuntimeConfig();
+      var prompt = buildSbContractBuilderPrompt();
+      if(byId('sbContractPromptEditor')) byId('sbContractPromptEditor').value = prompt;
+      loader('Generando contrato SB con IA...', 'B6/Builder · Normalizando contrato LMP → SIPOC Builder.');
+      msg('sbContractMsg','ok','Ejecutando IA para contrato SB...');
+      var result = await sgmpCallAI('lmp_sb_contract', prompt);
+      var text = sgmpAIResultText(result);
+      if(!txt(text).trim()) throw new Error('La API respondió vacío para lmp_sb_contract.');
+      if(byId('sbContractResponseEditor')) byId('sbContractResponseEditor').value = text;
+      validateSbContractBuilderResponse();
+      if(state.sbContractBuilder?.validation && !state.sbContractBuilder.validation.errors.length){ approveSbContractBuilderResponse(); }
+    }catch(e){
+      console.error('[LMP SB contract auto] fallback manual:', e);
+      try{ manualFallback('sbContractPromptEditor','sbContractMsg', buildSbContractBuilderPrompt(), e.message); }catch(e2){ if(originalSbPrompt) originalSbPrompt(); }
+    }finally{ hide(); if(typeof refreshCargaFlowState === 'function') refreshCargaFlowState(); }
+  };
+
+  var originalFinalPromptFor = window.generateFinalResultsPromptFor;
+  window.generateFinalResultsPromptFor = async function(mode){
+    mode = mode || (typeof routeMode === 'function' ? routeMode() : 'as_is');
+    var promptId = mode === 'to_be' ? 'finalPromptToBeEditor' : 'finalPromptAsIsEditor';
+    var responseId = mode === 'to_be' ? 'finalResponseToBeEditor' : 'finalResponseAsIsEditor';
+    var stageCode = mode === 'to_be' ? 'lmp_results_to_be' : 'lmp_results_as_is';
+    try{
+      if(typeof originalFinalPromptFor === 'function') originalFinalPromptFor(mode);
+      var prompt = byId(promptId)?.value || byId('finalPromptEditor')?.value || '';
+      if(!txt(prompt).trim()) throw new Error('No se generó prompt final para ' + mode + '.');
+      if(typeof sgmpLoadRuntimeConfig === 'function') await sgmpLoadRuntimeConfig();
+      loader('Generando resultados ' + (mode === 'to_be' ? 'TO BE' : 'AS IS') + ' con IA...', 'Informes y outputs finales.');
+      msg('finalPromptMsg','ok','Ejecutando IA para resultados ' + (mode === 'to_be' ? 'TO BE' : 'AS IS') + '...');
+      var result = await sgmpCallAI(stageCode, prompt);
+      var text = sgmpAIResultText(result);
+      if(!txt(text).trim()) throw new Error('La API respondió vacío para ' + stageCode + '.');
+      if(byId(responseId)) byId(responseId).value = text;
+      processFinalResultsResponseFor(mode);
+      msg('finalPromptMsg','ok','Resultados ' + (mode === 'to_be' ? 'TO BE' : 'AS IS') + ' generados, validados y cargados automáticamente.');
+    }catch(e){
+      console.error('[LMP final ' + mode + ' auto] fallback manual:', e);
+      var prompt = byId(promptId)?.value || byId('finalPromptEditor')?.value || '';
+      manualFallback(promptId,'finalPromptMsg', prompt, e.message);
+    }finally{ hide(); }
+  };
+
+  // Botones visibles: conserva el texto, pero la acción ahora intenta API primero.
+  ['B1','B2','B3','B4','B5','B6'].forEach(function(stage){
+    document.querySelectorAll('button[onclick="generateAnalysisScreenPrompt(\'' + stage + '\')"]').forEach(function(btn){
+      btn.setAttribute('onclick', "runAnalysisScreenStage('" + stage + "')");
+      btn.title = 'Genera el prompt y ejecuta IA automáticamente. Si falla, queda disponible para modo manual.';
+    });
+  });
+})();
+</script>
+
 </body>
 </html>`;
       }
