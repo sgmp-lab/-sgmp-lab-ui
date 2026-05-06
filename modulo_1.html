@@ -1396,11 +1396,11 @@ body.sgmp-v3-processing button:not(.sgmp-v3-allow),body.sgmp-v3-processing input
 
 
 <style id="sgmp-lmp-sidebar-scroll-fix-final">
-/* ======
+/* =========================================
    FIX DEFINITIVO SIDEBAR SCROLL SGMP LMP
    Objetivo: permitir explorar las fases del lado izquierdo
    con scroll interno, sin obligar a bajar toda la pantalla.
-   ====== */
+   ========================================= */
 
 body .app .layout > aside.sidebar{
   position: sticky !important;
@@ -1530,8 +1530,15 @@ body .app .layout > aside.sidebar .step-list::-webkit-scrollbar-thumb:hover{
 <button class="step-btn" data-target="analisis_b6">B6 · Builder SB<small>Prompt y respuesta del contrato SIPOC.</small></button>
 <button class="step-btn" data-target="decision">Decisión<small>Cerrar con AS IS o pasar a TO BE.</small></button>
 <button class="step-btn" data-target="tobe">TO BE<small>Evaluación de mejoras.</small></button>
-<button class="step-btn" data-target="resultados">Resultados<small>Informes AS IS / TO BE.</small></button>
-<button class="step-btn" data-target="outputs">Outputs<small>JSON para otros módulos.</small></button>
+<button class="step-btn" data-target="resultados">Resultados<small>SB, informes y plan.</small></button>
+</div>
+<div class="sidebar-title" style="margin-top:18px">Resumen</div>
+<div class="summary-list">
+<div class="summary-card"><strong>Proceso</strong><small id="sumProcess">No definido</small></div>
+<div class="summary-card"><strong>Actividades</strong><small id="sumActivities">0 actividades</small></div>
+<div class="summary-card"><strong>Indicadores globales</strong><small id="sumIndicators">0 definidos</small></div>
+<div class="summary-card"><strong>Mejoras</strong><small id="sumImprovements">0 registradas</small></div>
+<div class="summary-card"><strong>JSON maestro</strong><small id="sumMaster">No generado</small></div>
 </div>
 </aside>
 <main class="workspace">
@@ -1782,10 +1789,6 @@ body .app .layout > aside.sidebar .step-list::-webkit-scrollbar-thumb:hover{
 <p>Guarda los parámetros para habilitar la generación de instrumentos.</p>
 <div class="actions"><div class="actions-left"><button class="btn" id="prep_save_btn" type="button">Guardar parámetros</button></div></div>
 </article>
-<article class="card" id="prep_doc_route_notice" style="display:none">
-<h3>Ruta de documentaciÃ³n existente activa</h3>
-<p>No se generan instrumentos de entrevista/cuestionario. ContinÃºa con la conversiÃ³n de documentaciÃ³n existente.</p>
-</article>
 <article class="card" id="prep_generation_card">
 <h3>Generación de instrumentos</h3>
 <p>Cada botón genera un HTML externo independiente, con contexto precargado, listo para descargarse y usarse fuera del LMP.</p>
@@ -1864,16 +1867,6 @@ body .app .layout > aside.sidebar .step-list::-webkit-scrollbar-thumb:hover{
         });
       }
 
-      function refreshPreparationRouteMode(){
-        const route = window.state?.metadata?.initial_route || window.state?.metadata?.route || null;
-        const isDocRoute = route === "doc";
-        const generationCard = document.getElementById("prep_generation_card");
-        const docNotice = document.getElementById("prep_doc_route_notice");
-        if (generationCard) generationCard.style.display = isDocRoute ? "none" : "";
-        if (docNotice) docNotice.style.display = isDocRoute ? "" : "none";
-        if (isDocRoute) prepSetGeneratedEnabled(false);
-      }
-
       function getPreparationContext(){
         return {
           company: document.getElementById("prep_company")?.value?.trim() || "",
@@ -1917,8 +1910,7 @@ body .app .layout > aside.sidebar .step-list::-webkit-scrollbar-thumb:hover{
         }
 
         prepPreviewContext(context);
-        prepSetGeneratedEnabled((window.state?.metadata?.initial_route || window.state?.metadata?.route) !== "doc");
-        refreshPreparationRouteMode();
+        prepSetGeneratedEnabled(true);
         if (typeof window.hydrateContextFromState === "function") {
           window.hydrateContextFromState();
         }
@@ -2087,250 +2079,6 @@ function gatherContext(prefix){
 
 ${script}
 <\/script>
-
-
-<script id="sgmp-v2-auto-api-orchestration-patch">
-/* SGMP LMP v2 · Auto API orchestration patch
-   Objetivo: cada botón "Generar prompt" ejecuta IA automáticamente cuando el backend call_ai responde.
-   Si no hay conexión/API/cuota/configuración, conserva el prompt visible y mantiene el flujo manual. */
-(function(){
-  if(window.__SGMP_V2_AUTO_API_ORCHESTRATION_PATCH__) return;
-  window.__SGMP_V2_AUTO_API_ORCHESTRATION_PATCH__ = true;
-
-  function byId(id){ return document.getElementById(id); }
-  function txt(v){ return String(v == null ? '' : v); }
-  function yes(v){ return ['YES','SI','SÍ','TRUE','1','ON','API','HYBRID','AUTO'].includes(txt(v).trim().toUpperCase()); }
-  function no(v){ return ['NO','FALSE','0','OFF','MANUAL','DISABLED'].includes(txt(v).trim().toUpperCase()); }
-  function msg(id,type,text){ if(typeof showMsg === 'function') showMsg(id,type,text); }
-  function loader(title,detail){ if(typeof showLoader === 'function') showLoader(title, detail || 'Procesando con IA.'); }
-  function hide(){ if(typeof hideLoader === 'function') hideLoader(); }
-  function getApiUrl(){ return window.SGMP_API_URL || (typeof SGMP_API_URL !== 'undefined' ? SGMP_API_URL : ''); }
-  function arr(v){ return Array.isArray(v) ? v : (v ? [v] : []); }
-
-  window.sgmpLoadRuntimeConfig = async function(){
-    window.SGMP_GLOBAL_CONFIG = window.SGMP_GLOBAL_CONFIG || {};
-    window.SGMP_STAGE_CONFIG_RUNTIME = window.SGMP_STAGE_CONFIG_RUNTIME || {};
-    var api = getApiUrl();
-    if(!api) return { global: window.SGMP_GLOBAL_CONFIG, stages: window.SGMP_STAGE_CONFIG_RUNTIME };
-    try{
-      var globalRes = await sgmpFetchJson(api + '?action=get_global&_ts=' + Date.now());
-      window.SGMP_GLOBAL_CONFIG = globalRes.data !== undefined ? globalRes.data : globalRes;
-    }catch(e){ console.warn('[SGMP] No se pudo cargar CONFIG_GLOBAL. Se intentará API por defecto.', e); }
-    var stages = ['lmp_brief','lmp_analysis','lmp_analysis_b1','lmp_analysis_b2','lmp_analysis_b3','lmp_analysis_b4','lmp_analysis_b5','lmp_analysis_b6','lmp_sb_contract','lmp_results_as_is','lmp_results_to_be'];
-    await Promise.all(stages.map(async function(stage){
-      try{
-        var res = await sgmpFetchJson(api + '?action=get_execution_mode&module_code=LMP&stage_code=' + encodeURIComponent(stage) + '&_ts=' + Date.now());
-        window.SGMP_STAGE_CONFIG_RUNTIME[stage] = res.data !== undefined ? res.data : res;
-      }catch(e){ window.SGMP_STAGE_CONFIG_RUNTIME[stage] = window.SGMP_STAGE_CONFIG_RUNTIME[stage] || {}; }
-    }));
-    return { global: window.SGMP_GLOBAL_CONFIG, stages: window.SGMP_STAGE_CONFIG_RUNTIME };
-  };
-
-  window.sgmpGlobalApiEnabled = function(){
-    var g = window.SGMP_GLOBAL_CONFIG || {};
-    var value = g.USE_API_GLOBAL ?? g.use_api_global ?? g.useApiGlobal ?? g.api_enabled ?? g.apiEnabled ?? window.USE_API_GLOBAL ?? window.SGMP_USE_API_GLOBAL;
-    if(value === undefined || value === null || txt(value).trim() === '') return true; // intento API por defecto
-    return !no(value);
-  };
-
-  window.sgmpStageUseApi = function(stageCode){
-    var runtime = (window.SGMP_STAGE_CONFIG_RUNTIME || {})[stageCode] || {};
-    var direct = runtime.use_api ?? runtime.useApi ?? runtime.api_enabled ?? runtime.apiEnabled;
-    if(direct !== undefined && direct !== null && txt(direct).trim() !== '') return yes(direct);
-    var mode = runtime.execution_mode || runtime.executionMode || runtime.mode || runtime.DEFAULT_EXECUTION_MODE;
-    if(mode) return !no(mode);
-    var meta = (window.SGMP_STAGE_CONFIG || {})[stageCode] || (window.SGMP_PROMPT_META || {})[stageCode] || {};
-    var metaValue = meta.use_api ?? meta.useApi ?? meta.api_enabled ?? meta.apiEnabled;
-    if(metaValue !== undefined && metaValue !== null && txt(metaValue).trim() !== '') return yes(metaValue);
-    return true; // intento API por defecto para v2 híbrida
-  };
-
-  window.sgmpStageApiEnabled = function(stageCode){
-    return window.sgmpGlobalApiEnabled() && window.sgmpStageUseApi(stageCode);
-  };
-
-  window.sgmpExtractAIText = function(res){
-    if(res === undefined || res === null) throw new Error('Respuesta vacía del backend.');
-    if(typeof res === 'string') return res;
-    if(res.ok === false) throw new Error(res.error || res.message || 'Backend call_ai respondió con error.');
-    var data = res.data !== undefined ? res.data : res;
-    if(typeof data === 'string') return data;
-    return data.text || data.output || data.response || data.result || data.content || data.answer || data.raw || JSON.stringify(data);
-  };
-
-  window.sgmpAIResultText = function(result){
-    if(result && typeof result === 'object' && result.text !== undefined) return result.text;
-    return window.sgmpExtractAIText(result);
-  };
-
-  window.sgmpCallAI = async function(stageCode, prompt){
-    var api = getApiUrl();
-    if(!api) throw new Error('SGMP_API_URL no está definido.');
-    if(!window.sgmpStageApiEnabled(stageCode)) throw new Error('La API está desactivada para la etapa ' + stageCode + '.');
-    var payload = {
-      session_id: (typeof sgmpSessionId === 'function' ? sgmpSessionId() : ''),
-      user_id: (typeof sgmpUserId === 'function' ? sgmpUserId() : 'u_admin') || 'u_admin',
-      module_code: 'LMP',
-      stage_code: stageCode,
-      prompt: prompt
-    };
-    var postError = null;
-    try{
-      var response = await fetch(api + '?action=call_ai', {
-        method:'POST',
-        headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-        body:JSON.stringify(payload)
-      });
-      var text = await response.text();
-      var parsed = text ? JSON.parse(text) : {};
-      if(!response.ok) throw new Error(parsed.error || parsed.message || ('HTTP ' + response.status));
-      if(parsed.fallback_manual === true) throw new Error(parsed.error || parsed.message || 'El backend solicitó modo manual.');
-      return { text: window.sgmpExtractAIText(parsed), raw: parsed };
-    }catch(e){
-      postError = e;
-      console.warn('[SGMP call_ai] POST falló, intento GET payload.', e);
-    }
-    try{
-      var url = api + '?action=call_ai&payload=' + encodeURIComponent(JSON.stringify(payload));
-      var response2 = await fetch(url);
-      var text2 = await response2.text();
-      var parsed2 = text2 ? JSON.parse(text2) : {};
-      if(!response2.ok) throw new Error(parsed2.error || parsed2.message || ('HTTP ' + response2.status));
-      if(parsed2.fallback_manual === true) throw new Error(parsed2.error || parsed2.message || 'El backend solicitó modo manual.');
-      return { text: window.sgmpExtractAIText(parsed2), raw: parsed2 };
-    }catch(e2){
-      throw new Error((postError && postError.message ? postError.message + ' | ' : '') + (e2.message || 'No fue posible conectar con la API.'));
-    }
-  };
-
-  function manualFallback(promptId, msgId, prompt, detail){
-    var box = byId(promptId); if(box) box.value = prompt || box.value || '';
-    msg(msgId,'warn','No se pudo ejecutar con API. Se mantiene modo manual: copia el prompt, ejecútalo en una IA externa y pega el JSON de respuesta. Detalle: ' + (detail || 'sin detalle'));
-  }
-
-  window.generateBriefPromptFromMaster = async function(){
-    var btn = byId('btnGenerateBriefPrompt');
-    try{
-      if(btn) btn.disabled = true;
-      loader('Generando Brief con IA...', 'Prompt A · Conectando con API y procesando respuesta.');
-      if(typeof sgmpLoadRuntimeConfig === 'function') await sgmpLoadRuntimeConfig();
-      var master = state.master || (typeof mergeMaster === 'function' ? mergeMaster() : {});
-      var prompt = buildBriefPrompt(master);
-      if(byId('briefPromptEditor')) byId('briefPromptEditor').value = prompt;
-      msg('cargaMsg','ok','Ejecutando IA para Brief...');
-      var result = await sgmpCallAI('lmp_brief', prompt);
-      var text = sgmpAIResultText(result);
-      if(!txt(text).trim()) throw new Error('La API respondió vacío para lmp_brief.');
-      if(byId('briefResponseEditor')) byId('briefResponseEditor').value = text;
-      processBriefResponse();
-      var issues = (typeof evaluateBriefCompleteness === 'function') ? evaluateBriefCompleteness(state.briefReview?.raw || state.brief || {}) : [];
-      if(!issues.length){ approveBriefAndUnlockAnalysis(); }
-      if(typeof refreshCargaFlowState === 'function') refreshCargaFlowState();
-      msg('cargaMsg', issues.length ? 'warn' : 'ok', issues.length ? 'Brief generado y procesado por IA, pero tiene vacíos. Revisa antes de continuar.' : 'Brief generado, validado y aprobado automáticamente. Puedes continuar al siguiente paso.');
-    }catch(e){
-      console.error('[LMP Brief auto] fallback manual:', e);
-      try{ var m = state.master || (typeof mergeMaster === 'function' ? mergeMaster() : {}); manualFallback('briefPromptEditor','cargaMsg', buildBriefPrompt(m), e.message); }catch(e2){ msg('cargaMsg','err','No se pudo generar el prompt de Brief. Detalle: ' + e.message); }
-      if(typeof refreshCargaFlowState === 'function') refreshCargaFlowState();
-    }finally{ hide(); if(btn) btn.disabled = false; }
-  };
-
-  var manualAnalysisPromptBuilder = window.generateAnalysisScreenPrompt;
-  function buildAnalysisPromptOnly(stageKey){
-    if(typeof manualAnalysisPromptBuilder === 'function') return manualAnalysisPromptBuilder(stageKey);
-    if(typeof window.sgmpBuildAnalysisStagePrompt === 'function'){
-      var prompt = window.sgmpBuildAnalysisStagePrompt(stageKey);
-      var box = byId('analysisPrompt_' + stageKey); if(box) box.value = prompt;
-      return prompt;
-    }
-    throw new Error('No existe generador de prompt para ' + stageKey + '.');
-  }
-
-  window.runAnalysisScreenStage = async function(stageKey){
-    var defs = (typeof sgmpGetAnalysisStageDefinitions === 'function') ? sgmpGetAnalysisStageDefinitions() : {};
-    var def = defs[stageKey] || { stageCode:'lmp_analysis_' + txt(stageKey).toLowerCase() };
-    var stageCode = def.stageCode || ('lmp_analysis_' + txt(stageKey).toLowerCase());
-    var msgId = 'analysisMsg_' + stageKey;
-    try{
-      if(!(state.briefReview && state.briefReview.approved)){ msg(msgId,'warn','Debes aprobar primero el Brief.'); return; }
-      if(typeof sgmpLoadRuntimeConfig === 'function') await sgmpLoadRuntimeConfig();
-      state.analysisStages = state.analysisStages || { current:'B1', results:{} };
-      state.analysisStages.current = stageKey;
-      var prompt = buildAnalysisPromptOnly(stageKey);
-      if(!prompt) return;
-      loader('Ejecutando ' + stageKey + ' con IA...', 'Procesando etapa individual del análisis.');
-      msg(msgId,'ok','Ejecutando IA para ' + stageKey + '...');
-      var result = await sgmpCallAI(stageCode, prompt);
-      var text = sgmpAIResultText(result);
-      if(!txt(text).trim()) throw new Error('La API respondió vacío para ' + stageCode + '.');
-      var responseBox = byId('analysisResponse_' + stageKey); if(responseBox) responseBox.value = text;
-      processAnalysisScreenStage(stageKey);
-      msg(msgId,'ok','Etapa ' + stageKey + ' generada, validada y cargada automáticamente.');
-    }catch(e){
-      console.error('[LMP ' + stageKey + ' auto] fallback manual:', e);
-      try{ manualFallback('analysisPrompt_' + stageKey, msgId, buildAnalysisPromptOnly(stageKey), e.message); }catch(e2){ msg(msgId,'err','No se pudo generar/ejecutar ' + stageKey + '. Detalle: ' + e.message); }
-    }finally{ hide(); }
-  };
-
-  window.generateAnalysisScreenPrompt = function(stageKey){
-    return window.runAnalysisScreenStage(stageKey);
-  };
-
-  var originalSbPrompt = window.generateSbContractBuilderPrompt;
-  window.generateSbContractBuilderPrompt = async function(){
-    try{
-      if(typeof sgmpLoadRuntimeConfig === 'function') await sgmpLoadRuntimeConfig();
-      var prompt = buildSbContractBuilderPrompt();
-      if(byId('sbContractPromptEditor')) byId('sbContractPromptEditor').value = prompt;
-      loader('Generando contrato SB con IA...', 'B6/Builder · Normalizando contrato LMP → SIPOC Builder.');
-      msg('sbContractMsg','ok','Ejecutando IA para contrato SB...');
-      var result = await sgmpCallAI('lmp_sb_contract', prompt);
-      var text = sgmpAIResultText(result);
-      if(!txt(text).trim()) throw new Error('La API respondió vacío para lmp_sb_contract.');
-      if(byId('sbContractResponseEditor')) byId('sbContractResponseEditor').value = text;
-      validateSbContractBuilderResponse();
-      if(state.sbContractBuilder?.validation && !state.sbContractBuilder.validation.errors.length){ approveSbContractBuilderResponse(); }
-    }catch(e){
-      console.error('[LMP SB contract auto] fallback manual:', e);
-      try{ manualFallback('sbContractPromptEditor','sbContractMsg', buildSbContractBuilderPrompt(), e.message); }catch(e2){ if(originalSbPrompt) originalSbPrompt(); }
-    }finally{ hide(); if(typeof refreshCargaFlowState === 'function') refreshCargaFlowState(); }
-  };
-
-  var originalFinalPromptFor = window.generateFinalResultsPromptFor;
-  window.generateFinalResultsPromptFor = async function(mode){
-    mode = mode || (typeof routeMode === 'function' ? routeMode() : 'as_is');
-    var promptId = mode === 'to_be' ? 'finalPromptToBeEditor' : 'finalPromptAsIsEditor';
-    var responseId = mode === 'to_be' ? 'finalResponseToBeEditor' : 'finalResponseAsIsEditor';
-    var stageCode = mode === 'to_be' ? 'lmp_results_to_be' : 'lmp_results_as_is';
-    try{
-      if(typeof originalFinalPromptFor === 'function') originalFinalPromptFor(mode);
-      var prompt = byId(promptId)?.value || byId('finalPromptEditor')?.value || '';
-      if(!txt(prompt).trim()) throw new Error('No se generó prompt final para ' + mode + '.');
-      if(typeof sgmpLoadRuntimeConfig === 'function') await sgmpLoadRuntimeConfig();
-      loader('Generando resultados ' + (mode === 'to_be' ? 'TO BE' : 'AS IS') + ' con IA...', 'Informes y outputs finales.');
-      msg('finalPromptMsg','ok','Ejecutando IA para resultados ' + (mode === 'to_be' ? 'TO BE' : 'AS IS') + '...');
-      var result = await sgmpCallAI(stageCode, prompt);
-      var text = sgmpAIResultText(result);
-      if(!txt(text).trim()) throw new Error('La API respondió vacío para ' + stageCode + '.');
-      if(byId(responseId)) byId(responseId).value = text;
-      processFinalResultsResponseFor(mode);
-      msg('finalPromptMsg','ok','Resultados ' + (mode === 'to_be' ? 'TO BE' : 'AS IS') + ' generados, validados y cargados automáticamente.');
-    }catch(e){
-      console.error('[LMP final ' + mode + ' auto] fallback manual:', e);
-      var prompt = byId(promptId)?.value || byId('finalPromptEditor')?.value || '';
-      manualFallback(promptId,'finalPromptMsg', prompt, e.message);
-    }finally{ hide(); }
-  };
-
-  // Botones visibles: conserva el texto, pero la acción ahora intenta API primero.
-  ['B1','B2','B3','B4','B5','B6'].forEach(function(stage){
-    document.querySelectorAll('button[onclick="generateAnalysisScreenPrompt(\'' + stage + '\')"]').forEach(function(btn){
-      btn.setAttribute('onclick', "runAnalysisScreenStage('" + stage + "')");
-      btn.title = 'Genera el prompt y ejecuta IA automáticamente. Si falla, queda disponible para modo manual.';
-    });
-  });
-})();
-</script>
-
 </body>
 </html>`;
       }
@@ -2850,11 +2598,6 @@ ${script}
       }
 
       function generatePreInterviewFromPreparation(){
-        if ((window.state?.metadata?.initial_route || window.state?.metadata?.route) === "doc") {
-          prepShowMessage("warn", "Ruta de documentaciÃ³n existente activa: no se generan instrumentos de entrevista/cuestionario.");
-          refreshPreparationRouteMode();
-          return;
-        }
         const context = savePreparationContext();
         if (!validatePreparationContext(context)) return;
         const html = buildPreInterviewHTML(context);
@@ -2863,11 +2606,6 @@ ${script}
       }
 
       function generateInterviewFromPreparation(){
-        if ((window.state?.metadata?.initial_route || window.state?.metadata?.route) === "doc") {
-          prepShowMessage("warn", "Ruta de documentaciÃ³n existente activa: no se generan instrumentos de entrevista/cuestionario.");
-          refreshPreparationRouteMode();
-          return;
-        }
         const context = savePreparationContext();
         if (!validatePreparationContext(context)) return;
         const html = buildInterviewHTML(context);
@@ -2894,7 +2632,6 @@ ${script}
         set("ctx_observation", c.observation);
         if (typeof window.renderIndicatorsChips === "function") window.renderIndicatorsChips();
         prepPreviewContext(getPreparationContext());
-        refreshPreparationRouteMode();
       }
 
       const saveBtn = document.getElementById("prep_save_btn");
@@ -2933,13 +2670,11 @@ ${script}
       } else {
         prepSetGeneratedEnabled(false);
       }
-      refreshPreparationRouteMode();
 
       window.getPreparationContext = getPreparationContext;
       window.savePreparationContext = savePreparationContext;
       window.generatePreInterviewFromPreparation = generatePreInterviewFromPreparation;
       window.generateInterviewFromPreparation = generateInterviewFromPreparation;
-      window.refreshPreparationRouteMode = refreshPreparationRouteMode;
 window.buildPreInterviewHTML = buildPreInterviewHTML;
       window.buildInterviewHTML = buildInterviewHTML;
 window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
@@ -3037,7 +2772,6 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 <div class="kpi-card"><h4>Vacíos</h4><div class="big" id="briefGapsKpi">0</div><small>detectados</small></div>
 </div>
 <div class="box" id="briefGapsList" style="margin-top:14px">Sin vacíos detectados.</div>
-<div class="actions" style="border-top:none;padding-top:8px;margin-top:8px"><div class="actions-left"><button class="btn-ghost" onclick="downloadBriefChecklist()" type="button">Descargar checklist</button></div></div>
 <div class="msg" id="briefValidationMsg"></div>
 </article>
 
@@ -3057,7 +2791,7 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 </div>
 </div>
 <textarea id="analysisPromptEditor" placeholder="Aquí aparecerá el Prompt B una vez aprobado el Brief." style="width:100%;min-height:300px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
-<div class="note" id="analysisStageHelp"><strong>Análisis por etapas</strong><br/>Genera y procesa una etapa a la vez: B1 AS IS, B2 AVA, B3 desperdicios/problemas, B4 restricciones, B5 mejoras aplicadas y B6 contrato SB. Los prompts se cargan desde Sheet vía Apps Script. El flujo manual permite generar prompt, copiar, pegar en una IA externa, recibir JSON y validar/cargar.</div>
+<div class="note" id="analysisStageHelp"><strong>Análisis por etapas</strong><br/>Genera y procesa una etapa a la vez: B1 AS IS, B2 AVA, B3 desperdicios/problemas, B4 restricciones, B5 mejoras aplicadas y B6 contrato SB. Los prompts se cargan desde Apps Script / Google Sheets cuando existen; si no están disponibles, se usa fallback interno por bloque.</div>
 <div class="actions" style="border-top:none;padding-top:8px;margin-top:8px">
   <div class="actions-left">
     <button class="btn-ghost" onclick="generateAnalysisStagePrompt('B1')" type="button">B1 · AS IS</button>
@@ -3176,16 +2910,17 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
   <div class="cards">
     <article class="card half">
       <h3>Prompt B1</h3>
-      <p>Genera el prompt de esta etapa, cópialo y ejecútalo manualmente en una IA externa. El prompt queda visible para revisión y depuración.</p>
+      <p>Genera el prompt de esta etapa y ejecútalo con la API. El prompt queda visible para revisión y depuración.</p>
       <div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left">
         <button class="btn" onclick="generateAnalysisScreenPrompt('B1')" type="button">Generar prompt</button>
+        <button class="btn-ok" onclick="runAnalysisScreenStage('B1')" type="button">Generar y ejecutar IA</button>
         <button class="btn-ghost" onclick="copyTextFromId('analysisPrompt_B1','analysisMsg_B1','Prompt B1 copiado correctamente.')" type="button">Copiar prompt</button>
       </div></div>
       <textarea id="analysisPrompt_B1" placeholder="Aquí aparecerá el prompt B1." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
     </article>
     <article class="card half">
       <h3>Respuesta IA B1</h3>
-      <p>Pega manualmente la respuesta JSON devuelta por la IA externa y procésala en esta etapa.</p>
+      <p>La respuesta aparece automáticamente si la API responde. También puedes pegar una respuesta manual y procesarla.</p>
       <textarea id="analysisResponse_B1" placeholder="Aquí aparecerá o se pegará la respuesta JSON de la IA para B1." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
       <div class="actions"><div class="actions-left"><button class="btn-warn" onclick="processAnalysisScreenStage('B1')" type="button">Procesar respuesta B1</button></div><div class="actions-right"><button class="btn-ghost" onclick="downloadAnalysisStageJson('B1')" type="button">Descargar resultado</button></div></div>
       <div class="msg" id="analysisMsg_B1"></div>
@@ -3221,16 +2956,17 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
   <div class="cards">
     <article class="card half">
       <h3>Prompt B2</h3>
-      <p>Genera el prompt de esta etapa, cópialo y ejecútalo manualmente en una IA externa. El prompt queda visible para revisión y depuración.</p>
+      <p>Genera el prompt de esta etapa y ejecútalo con la API. El prompt queda visible para revisión y depuración.</p>
       <div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left">
         <button class="btn" onclick="generateAnalysisScreenPrompt('B2')" type="button">Generar prompt</button>
+        <button class="btn-ok" onclick="runAnalysisScreenStage('B2')" type="button">Generar y ejecutar IA</button>
         <button class="btn-ghost" onclick="copyTextFromId('analysisPrompt_B2','analysisMsg_B2','Prompt B2 copiado correctamente.')" type="button">Copiar prompt</button>
       </div></div>
       <textarea id="analysisPrompt_B2" placeholder="Aquí aparecerá el prompt B2." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
     </article>
     <article class="card half">
       <h3>Respuesta IA B2</h3>
-      <p>Pega manualmente la respuesta JSON devuelta por la IA externa y procésala en esta etapa.</p>
+      <p>La respuesta aparece automáticamente si la API responde. También puedes pegar una respuesta manual y procesarla.</p>
       <textarea id="analysisResponse_B2" placeholder="Aquí aparecerá o se pegará la respuesta JSON de la IA para B2." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
       <div class="actions"><div class="actions-left"><button class="btn-warn" onclick="processAnalysisScreenStage('B2')" type="button">Procesar respuesta B2</button></div><div class="actions-right"><button class="btn-ghost" onclick="downloadAnalysisStageJson('B2')" type="button">Descargar resultado</button></div></div>
       <div class="msg" id="analysisMsg_B2"></div>
@@ -3266,16 +3002,17 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
   <div class="cards">
     <article class="card half">
       <h3>Prompt B3</h3>
-      <p>Genera el prompt de esta etapa, cópialo y ejecútalo manualmente en una IA externa. El prompt queda visible para revisión y depuración.</p>
+      <p>Genera el prompt de esta etapa y ejecútalo con la API. El prompt queda visible para revisión y depuración.</p>
       <div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left">
         <button class="btn" onclick="generateAnalysisScreenPrompt('B3')" type="button">Generar prompt</button>
+        <button class="btn-ok" onclick="runAnalysisScreenStage('B3')" type="button">Generar y ejecutar IA</button>
         <button class="btn-ghost" onclick="copyTextFromId('analysisPrompt_B3','analysisMsg_B3','Prompt B3 copiado correctamente.')" type="button">Copiar prompt</button>
       </div></div>
       <textarea id="analysisPrompt_B3" placeholder="Aquí aparecerá el prompt B3." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
     </article>
     <article class="card half">
       <h3>Respuesta IA B3</h3>
-      <p>Pega manualmente la respuesta JSON devuelta por la IA externa y procésala en esta etapa.</p>
+      <p>La respuesta aparece automáticamente si la API responde. También puedes pegar una respuesta manual y procesarla.</p>
       <textarea id="analysisResponse_B3" placeholder="Aquí aparecerá o se pegará la respuesta JSON de la IA para B3." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
       <div class="actions"><div class="actions-left"><button class="btn-warn" onclick="processAnalysisScreenStage('B3')" type="button">Procesar respuesta B3</button></div><div class="actions-right"><button class="btn-ghost" onclick="downloadAnalysisStageJson('B3')" type="button">Descargar resultado</button></div></div>
       <div class="msg" id="analysisMsg_B3"></div>
@@ -3311,16 +3048,17 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
   <div class="cards">
     <article class="card half">
       <h3>Prompt B4</h3>
-      <p>Genera el prompt de esta etapa, cópialo y ejecútalo manualmente en una IA externa. El prompt queda visible para revisión y depuración.</p>
+      <p>Genera el prompt de esta etapa y ejecútalo con la API. El prompt queda visible para revisión y depuración.</p>
       <div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left">
         <button class="btn" onclick="generateAnalysisScreenPrompt('B4')" type="button">Generar prompt</button>
+        <button class="btn-ok" onclick="runAnalysisScreenStage('B4')" type="button">Generar y ejecutar IA</button>
         <button class="btn-ghost" onclick="copyTextFromId('analysisPrompt_B4','analysisMsg_B4','Prompt B4 copiado correctamente.')" type="button">Copiar prompt</button>
       </div></div>
       <textarea id="analysisPrompt_B4" placeholder="Aquí aparecerá el prompt B4." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
     </article>
     <article class="card half">
       <h3>Respuesta IA B4</h3>
-      <p>Pega manualmente la respuesta JSON devuelta por la IA externa y procésala en esta etapa.</p>
+      <p>La respuesta aparece automáticamente si la API responde. También puedes pegar una respuesta manual y procesarla.</p>
       <textarea id="analysisResponse_B4" placeholder="Aquí aparecerá o se pegará la respuesta JSON de la IA para B4." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
       <div class="actions"><div class="actions-left"><button class="btn-warn" onclick="processAnalysisScreenStage('B4')" type="button">Procesar respuesta B4</button></div><div class="actions-right"><button class="btn-ghost" onclick="downloadAnalysisStageJson('B4')" type="button">Descargar resultado</button></div></div>
       <div class="msg" id="analysisMsg_B4"></div>
@@ -3356,16 +3094,17 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
   <div class="cards">
     <article class="card half">
       <h3>Prompt B5</h3>
-      <p>Genera el prompt de esta etapa, cópialo y ejecútalo manualmente en una IA externa. El prompt queda visible para revisión y depuración.</p>
+      <p>Genera el prompt de esta etapa y ejecútalo con la API. El prompt queda visible para revisión y depuración.</p>
       <div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left">
         <button class="btn" onclick="generateAnalysisScreenPrompt('B5')" type="button">Generar prompt</button>
+        <button class="btn-ok" onclick="runAnalysisScreenStage('B5')" type="button">Generar y ejecutar IA</button>
         <button class="btn-ghost" onclick="copyTextFromId('analysisPrompt_B5','analysisMsg_B5','Prompt B5 copiado correctamente.')" type="button">Copiar prompt</button>
       </div></div>
       <textarea id="analysisPrompt_B5" placeholder="Aquí aparecerá el prompt B5." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
     </article>
     <article class="card half">
       <h3>Respuesta IA B5</h3>
-      <p>Pega manualmente la respuesta JSON devuelta por la IA externa y procésala en esta etapa.</p>
+      <p>La respuesta aparece automáticamente si la API responde. También puedes pegar una respuesta manual y procesarla.</p>
       <textarea id="analysisResponse_B5" placeholder="Aquí aparecerá o se pegará la respuesta JSON de la IA para B5." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
       <div class="actions"><div class="actions-left"><button class="btn-warn" onclick="processAnalysisScreenStage('B5')" type="button">Procesar respuesta B5</button></div><div class="actions-right"><button class="btn-ghost" onclick="downloadAnalysisStageJson('B5')" type="button">Descargar resultado</button></div></div>
       <div class="msg" id="analysisMsg_B5"></div>
@@ -3401,16 +3140,17 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
   <div class="cards">
     <article class="card half">
       <h3>Prompt B6</h3>
-      <p>Genera el prompt de esta etapa, cópialo y ejecútalo manualmente en una IA externa. El prompt queda visible para revisión y depuración.</p>
+      <p>Genera el prompt de esta etapa y ejecútalo con la API. El prompt queda visible para revisión y depuración.</p>
       <div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left">
         <button class="btn" onclick="generateAnalysisScreenPrompt('B6')" type="button">Generar prompt</button>
+        <button class="btn-ok" onclick="runAnalysisScreenStage('B6')" type="button">Generar y ejecutar IA</button>
         <button class="btn-ghost" onclick="copyTextFromId('analysisPrompt_B6','analysisMsg_B6','Prompt B6 copiado correctamente.')" type="button">Copiar prompt</button>
       </div></div>
       <textarea id="analysisPrompt_B6" placeholder="Aquí aparecerá el prompt B6." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
     </article>
     <article class="card half">
       <h3>Respuesta IA B6</h3>
-      <p>Pega manualmente la respuesta JSON devuelta por la IA externa y procésala en esta etapa.</p>
+      <p>La respuesta aparece automáticamente si la API responde. También puedes pegar una respuesta manual y procesarla.</p>
       <textarea id="analysisResponse_B6" placeholder="Aquí aparecerá o se pegará la respuesta JSON de la IA para B6." style="width:100%;min-height:360px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
       <div class="actions"><div class="actions-left"><button class="btn-warn" onclick="processAnalysisScreenStage('B6')" type="button">Procesar respuesta B6</button></div><div class="actions-right"><button class="btn-ghost" onclick="downloadAnalysisStageJson('B6')" type="button">Descargar resultado</button></div></div>
       <div class="msg" id="analysisMsg_B6"></div>
@@ -3467,16 +3207,16 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 <section class="section" id="tobe">
 <div class="section-head">
 <div>
-<h2>Construcción TO BE</h2>
-<p>Construye el flujo futuro a partir de mejoras aceptadas o personalizadas. Esta etapa no genera informes finales; solo estructura el TO BE operativo.</p>
+<h2>One page de mejoras / TO BE</h2>
+<p>Evalúa cada mejora propuesta. El usuario decide si la ejecuta, la ajusta o la descarta. Solo las aceptadas o ajustadas alimentarán los resultados.</p>
 </div>
 <div class="step-pill">Paso 7</div>
 </div>
 <div class="card">
-<h3>Mejoras seleccionadas</h3>
+<h3>Mejoras</h3>
 <div class="actions">
 <div class="actions-left">
-<button class="btn" onclick="seedImprovementsFromAnalysis()" type="button">Construir mejoras desde análisis</button>
+<button class="btn" onclick="seedImprovementsFromAnalysis()" type="button">Generar propuestas desde análisis</button>
 <button class="btn-ghost" onclick="addImprovement()" type="button">Agregar mejora manual</button>
 </div>
 </div>
@@ -3484,104 +3224,112 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 <div class="list" id="improvementList"></div>
 
 <div class="cards" style="margin-top:16px;">
-  <article class="card half"><h3>Flujo TO BE propuesto</h3><div class="doc-box" id="tobeFutureFlowView"></div></article>
-  <article class="card half"><h3>Actividades que se mantienen</h3><div class="doc-box" id="tobeKeptActivitiesView"></div></article>
-  <article class="card half"><h3>Actividades que se ajustan</h3><div class="doc-box" id="tobeAdjustedActivitiesView"></div></article>
-  <article class="card half"><h3>Actividades que se eliminan</h3><div class="doc-box" id="tobeRemovedActivitiesView"></div></article>
-  <article class="card half"><h3>Actividades que se crean</h3><div class="doc-box" id="tobeCreatedActivitiesView"></div></article>
-  <article class="card half"><h3>Razón del cambio por actividad</h3><div class="doc-box" id="tobeChangeReasonView"></div></article>
-  <article class="card half"><h3>Modo A</h3><div class="doc-box" id="tobeModeAView"></div></article>
-  <article class="card half"><h3>Modo B</h3><div class="doc-box" id="tobeModeBView"></div></article>
-  <article class="card"><h3>Validaciones pendientes</h3><div class="doc-box" id="tobeValidationsView"></div></article>
+  <article class="card half">
+    <h3>Flujo futuro propuesto</h3>
+    <div class="doc-box" id="tobeFutureFlowView"></div>
+  </article>
+  <article class="card half">
+    <h3>Diferencias vs AS IS</h3>
+    <div class="doc-box" id="tobeDiffView"></div>
+  </article>
+  <article class="card half">
+    <h3>Beneficios esperados</h3>
+    <div class="doc-box" id="tobeBenefitsView"></div>
+  </article>
+  <article class="card half">
+    <h3>Propuesta documental inicial</h3>
+    <div class="doc-box" id="tobeDocsView"></div>
+  </article>
+  <article class="card">
+    <h3>Plan de implementación TO BE</h3>
+    <div class="doc-box" id="tobePlanView"></div>
+  </article>
 </div>
-<div class="hidden" id="tobeDiffView"></div>
-<div class="hidden" id="tobeBenefitsView"></div>
-<div class="hidden" id="tobeDocsView"></div>
-<div class="hidden" id="tobePlanView"></div>
 </div>
 <div class="actions">
 <div class="actions-left"><button class="btn-ghost" onclick="goToPrev('tobe')" type="button">Volver</button></div>
 <div class="actions-right"><button class="btn" onclick="saveToBeAndContinue()" type="button">Guardar y continuar</button></div>
 </div>
 </section>
+<!-- RESULTADOS -->
 <section class="section" id="resultados">
 <div class="section-head">
 <div>
-<h2>Resultados AS IS / TO BE</h2>
-<p>Genera prompts finales separados por ruta. El módulo no llama APIs: copia el prompt, pega la respuesta JSON, valida y aplica el resultado.</p>
+<h2>Resultados finales</h2>
+<p>Genera JSON SB compatible, informe ejecutivo, informe técnico, plan de implementación y los entregables listos para el Evaluador Documental y el Integrador.</p>
 </div>
 <div class="step-pill">Paso 8</div>
 </div>
 <div class="cards">
-<article class="card half">
-<h3>Resultados AS IS</h3>
-<p>Prompt específico para informe ejecutivo AS IS, informe técnico AS IS y salidas modulares del estado actual.</p>
-<div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left">
-<button class="btn" onclick="generateFinalResultsPromptFor('as_is')" type="button">Generar prompt AS IS</button>
-<button class="btn-ghost" onclick="copyTextFromId('finalPromptAsIsEditor','finalPromptMsg','Prompt AS IS copiado correctamente.')" type="button">Copiar prompt</button>
-</div></div>
-<textarea id="finalPromptAsIsEditor" placeholder="Aquí aparecerá el prompt final AS IS." style="width:100%;min-height:260px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
-<label style="display:block;margin-top:12px;font-weight:800;color:#42617F">Respuesta JSON AS IS</label>
-<textarea id="finalResponseAsIsEditor" placeholder="Pega aquí el JSON final AS IS." style="width:100%;min-height:220px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
-<div class="actions"><div class="actions-left"><button class="btn-ok" onclick="processFinalResultsResponseFor('as_is')" type="button">Validar y cargar JSON AS IS</button></div></div>
-</article>
-
-<article class="card half">
-<h3>Resultados TO BE</h3>
-<p>Prompt específico para informe ejecutivo TO BE, informe técnico TO BE, comparación contra AS IS y salidas modulares del rediseño.</p>
-<div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left">
-<button class="btn" onclick="generateFinalResultsPromptFor('to_be')" type="button">Generar prompt TO BE</button>
-<button class="btn-ghost" onclick="copyTextFromId('finalPromptToBeEditor','finalPromptMsg','Prompt TO BE copiado correctamente.')" type="button">Copiar prompt</button>
-</div></div>
-<textarea id="finalPromptToBeEditor" placeholder="Aquí aparecerá el prompt final TO BE." style="width:100%;min-height:260px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
-<label style="display:block;margin-top:12px;font-weight:800;color:#42617F">Respuesta JSON TO BE</label>
-<textarea id="finalResponseToBeEditor" placeholder="Pega aquí el JSON final TO BE." style="width:100%;min-height:220px;background:#0d1b2a;color:#d6e7f7;border:1px solid #17355b;border-radius:14px;padding:14px;font-family:Consolas, monospace;"></textarea>
-<div class="actions"><div class="actions-left"><button class="btn-ok" onclick="processFinalResultsResponseFor('to_be')" type="button">Validar y cargar JSON TO BE</button></div></div>
-</article>
-
 <article class="card">
-<h3>Aplicación de resultados al módulo</h3>
+<h3>Generación de salidas</h3>
 <div class="actions">
 <div class="actions-left">
-<button class="btn-ok btn-xl" onclick="generateResults()" type="button">Generar resultado desde JSON</button>
-<button class="btn-ghost" onclick="showSection('outputs')" type="button">Ir a outputs</button>
+<button class="btn-ok" onclick="generateResults()" type="button">Generar resultados</button>
+<button class="btn-ghost" onclick="copySBJson()" type="button">Copiar JSON SB</button>
+</div>
+<div class="actions-right">
+<button class="btn-ok" onclick="openSBFromLMP()" type="button">Abrir en SIPOC Builder</button>
+<button class="btn-ok" onclick="downloadSBJson()" type="button">Descargar JSON SB</button>
 </div>
 </div>
-<div class="msg" id="finalPromptMsg"></div>
 <div class="msg" id="resultsMsg"></div>
-<textarea class="hidden" id="finalPromptEditor"></textarea>
-<textarea class="hidden" id="finalResponseEditor"></textarea>
 </article>
-
+<article class="card half">
+<h3>JSON SB compatible</h3>
+<div class="pre" id="sbJsonView"></div>
+</article>
+<article class="card half">
+<h3>Plan de implementación</h3>
+<div class="doc-box" id="implementationView"></div>
+</article>
 <article class="card half">
 <h3>Informe ejecutivo</h3>
-<div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left"><button class="btn-ghost" onclick="copyDocText('executiveText')" type="button">Copiar</button><button class="btn-warn" onclick="printDoc('executiveDoc', 'Informe Ejecutivo')" type="button">Imprimir / PDF</button></div></div>
-<div class="doc-box" id="executiveDoc"></div><textarea class="hidden" id="executiveText"></textarea>
+<div class="actions" style="border-top:none;padding-top:0;margin-top:0">
+<div class="actions-left">
+<button class="btn-ghost" onclick="copyDocText('executiveText')" type="button">Copiar</button>
+<button class="btn-warn" onclick="printDoc('executiveDoc', 'Informe Ejecutivo')" type="button">Imprimir / PDF</button>
+</div>
+</div>
+<div class="doc-box" id="executiveDoc"></div>
+<textarea class="hidden" id="executiveText"></textarea>
 </article>
 <article class="card half">
 <h3>Informe técnico</h3>
-<div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left"><button class="btn-ghost" onclick="copyDocText('technicalText')" type="button">Copiar</button><button class="btn-warn" onclick="printDoc('technicalDoc', 'Informe Técnico')" type="button">Imprimir / PDF</button></div></div>
-<div class="doc-box" id="technicalDoc"></div><textarea class="hidden" id="technicalText"></textarea>
+<div class="actions" style="border-top:none;padding-top:0;margin-top:0">
+<div class="actions-left">
+<button class="btn-ghost" onclick="copyDocText('technicalText')" type="button">Copiar</button>
+<button class="btn-warn" onclick="printDoc('technicalDoc', 'Informe Técnico')" type="button">Imprimir / PDF</button>
+</div>
+</div>
+<div class="doc-box" id="technicalDoc"></div>
+<textarea class="hidden" id="technicalText"></textarea>
 </article>
-<article class="card"><h3>Modo A / Modo B y plan</h3><div class="doc-box" id="implementationView"></div></article>
-<div class="hidden" id="sbJsonView"></div><div class="hidden" id="documentProposalView"></div><div class="hidden" id="integrationInputView"></div>
+<article class="card half">
+<h3>Propuesta documental para Evaluador documental</h3>
+<div class="actions" style="border-top:none;padding-top:0;margin-top:0">
+<div class="actions-left">
+<button class="btn-ghost" onclick="copyDocumentProposalJson()" type="button">Copiar JSON</button>
+<button class="btn-ok" onclick="downloadDocumentProposalJson()" type="button">Descargar JSON</button>
 </div>
-<div class="actions"><div class="actions-left"><button class="btn-ghost" onclick="goToPrev('resultados')" type="button">Volver</button></div><div class="actions-right"><button class="btn" onclick="showSection('outputs')" type="button">Continuar a outputs</button></div></div>
-</section>
-
-<section class="section" id="outputs">
-<div class="section-head"><div><h2>Outputs / Salidas modulares</h2><p>Última sección del módulo. Consolida, copia y descarga contratos compatibles con los módulos posteriores del SGMP.</p></div><div class="step-pill">Paso 9</div></div>
-<div class="cards">
-<article class="card"><h3>Generar salidas modulares</h3><div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left"><button class="btn-ok" onclick="generateResults()" type="button">Generar outputs</button><button class="btn-ghost" onclick="downloadBackup()" type="button">Guardar respaldo</button></div></div><div class="msg" id="outputsMsg"></div></article>
-<article class="card half"><h3>SIPOC Builder</h3><div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left"><button class="btn-ghost" onclick="copySBJson()" type="button">Copiar JSON</button><button class="btn-ok" onclick="downloadSBJson()" type="button">Descargar JSON</button></div></div><div class="pre" id="outputsSbView"></div></article>
-<article class="card half"><h3>Evaluador documental</h3><div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left"><button class="btn-ghost" onclick="copyDocumentProposalJson()" type="button">Copiar JSON</button><button class="btn-ok" onclick="downloadDocumentProposalJson()" type="button">Descargar JSON</button></div></div><div class="pre" id="outputsDocumentView"></div></article>
-<article class="card half"><h3>Integrador</h3><div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left"><button class="btn-ghost" onclick="copyIntegrationJson()" type="button">Copiar JSON</button><button class="btn-ok" onclick="downloadIntegrationJson()" type="button">Descargar JSON</button></div></div><div class="pre" id="outputsIntegrationView"></div></article>
-<article class="card half"><h3>Simulador de capacidad</h3><div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left"><button class="btn-ghost" onclick="copyCapacityJson()" type="button">Copiar JSON</button><button class="btn-ok" onclick="downloadCapacityJson()" type="button">Descargar JSON</button></div></div><div class="pre" id="outputsCapacityView"></div></article>
-<article class="card half"><h3>JSON maestro</h3><div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left"><button class="btn-ghost" onclick="copyMasterStateJson()" type="button">Copiar JSON</button><button class="btn-ok" onclick="downloadMasterStateJson()" type="button">Descargar JSON</button></div></div><div class="pre" id="outputsMasterView"></div></article>
-<article class="card half"><h3>Informes AS IS</h3><div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left"><button class="btn-ghost" onclick="copyReportsJson('as_is')" type="button">Copiar JSON</button><button class="btn-ok" onclick="downloadReportsJson('as_is')" type="button">Descargar JSON</button></div></div><div class="pre" id="outputsAsIsReportsView"></div></article>
-<article class="card half"><h3>Informes TO BE</h3><div class="actions" style="border-top:none;padding-top:0;margin-top:0"><div class="actions-left"><button class="btn-ghost" onclick="copyReportsJson('to_be')" type="button">Copiar JSON</button><button class="btn-ok" onclick="downloadReportsJson('to_be')" type="button">Descargar JSON</button></div></div><div class="pre" id="outputsToBeReportsView"></div></article>
 </div>
-<div class="actions"><div class="actions-left"><button class="btn-ghost" onclick="goToPrev('outputs')" type="button">Volver</button></div></div>
+<div class="pre" id="documentProposalView"></div>
+</article>
+<article class="card half">
+<h3>Input para Integrador</h3>
+<div class="actions" style="border-top:none;padding-top:0;margin-top:0">
+<div class="actions-left">
+<button class="btn-ghost" onclick="copyIntegrationJson()" type="button">Copiar JSON</button>
+<button class="btn-ok" onclick="downloadIntegrationJson()" type="button">Descargar JSON</button>
+</div>
+</div>
+<div class="pre" id="integrationInputView"></div>
+</article>
+</div>
+<div class="actions">
+<div class="actions-left"><button class="btn-ghost" onclick="goToPrev('resultados')" type="button">Volver</button></div>
+<div class="actions-right"><button class="btn-danger" onclick="downloadBackup()" type="button">Finalizar y guardar respaldo</button></div>
+</div>
 </section>
 </main>
 </div>
@@ -3589,178 +3337,150 @@ window.downloadGeneratedHtml = prepDownloadGeneratedHtml;
 <script>
 
 // ══════════════════════════════════════════════════════
-// SGMP · Loader de prompts desde Sheet / Apps Script
-// HTML sin prompts hardcodeados: todos los prompts se consultan en backend
+// SGMP · Loader de prompts desde Sheet
+// Incluir este bloque al inicio del <script> de cada módulo
 // ══════════════════════════════════════════════════════
-var SGMP_OFFLINE_MODE = false;
+var SGMP_API = 'https://script.google.com/macros/s/AKfycbwGOvr8ypGtibCLQp66s1oowmYJQUCXBWJ5ZUoR3oFxwmy71VQfOsXFqv4cyT_7JjoS/exec';
 var SGMP_PROMPTS = {};
 var SGMP_PROMPT_META = {};
 var SGMP_STAGE_CONFIG = {};
 window.SGMP_GLOBAL_CONFIG = window.SGMP_GLOBAL_CONFIG || {};
 window.SGMP_STAGE_CONFIG_RUNTIME = window.SGMP_STAGE_CONFIG_RUNTIME || {};
-var SGMP_LOADED = false;
+var SGMP_LOADED  = false;
 
-// IMPORTANTE: reemplaza esta URL por tu despliegue real /exec de Apps Script.
-// No uses aquí el ID del Google Sheet; el HTML debe llamar al Web App de Apps Script.
-const SGMP_API_URL = window.SGMP_API_URL || new URLSearchParams(window.location.search).get('api') || 'https://script.google.com/macros/s/AKfycbyQZi1flaILc4e3I7MFp8gLctkzC6VccjfFz5aHluMrGZLwOUeS3uQaHPsMZ3l5yfDw-Q/exec';
+function sgmpLoadPrompts(moduleCode, onReady) {
+  var cacheKey = 'sgmp_p_' + moduleCode;
+  try {
+    var cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      var arr = JSON.parse(cached);
+      arr.forEach(function(p) { sgmpRegisterPrompt(p); });
+      SGMP_LOADED = true;
+      onReady();
+      return;
+    }
+  } catch(e) {}
+
+  fetch(SGMP_API + '?action=get_prompts&module_code=' + encodeURIComponent(moduleCode))
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.ok && res.data && res.data.length) {
+        res.data.forEach(function(p) { sgmpRegisterPrompt(p); });
+        try { sessionStorage.setItem(cacheKey, JSON.stringify(res.data)); } catch(e) {}
+      }
+      SGMP_LOADED = true;
+      onReady();
+    })
+    .catch(function() {
+      SGMP_LOADED = true;
+      onReady(); // continúa con prompts vacíos — módulo funciona igual
+    });
+}
 
 function sgmpRegisterPrompt(p) {
-  if (!p || !p.prompt_key) return;
-  const key = String(p.prompt_key || '').trim();
-  if (!key) return;
-  SGMP_PROMPTS[key] = String(p.prompt_text || '');
-  SGMP_PROMPT_META[key] = p;
-  var stageMap = {
-    prompt_brief: 'lmp_brief',
-    prompt_analysis: 'lmp_analysis',
-    prompt_analysis_b1: 'lmp_analysis_b1',
-    prompt_analysis_b2: 'lmp_analysis_b2',
-    prompt_analysis_b3: 'lmp_analysis_b3',
-    prompt_analysis_b4: 'lmp_analysis_b4',
-    prompt_analysis_b5: 'lmp_analysis_b5',
-    prompt_improvements: 'lmp_analysis_b5',
-    prompt_analysis_b6: 'lmp_analysis_b6',
-    prompt_doc_sipoc: 'lmp_doc_sipoc',
-    prompt_doc_pr: 'lmp_doc_pr',
-    prompt_sb_contract_builder: 'lmp_sb_contract',
-    prompt_final_results_as_is: 'lmp_results_as_is',
-    prompt_final_results_to_be: 'lmp_results_to_be'
-  };
-  var stage = p.stage_code || p.stageCode || p.stage || p.prompt_stage || stageMap[key] || '';
-  if (stage) SGMP_STAGE_CONFIG[stage] = p;
+  if(!p || !p.prompt_key) return;
+  SGMP_PROMPTS[p.prompt_key] = p.prompt_text || '';
+  SGMP_PROMPT_META[p.prompt_key] = p;
+  var stageMap = { prompt_brief:'lmp_brief', prompt_analysis:'lmp_analysis', prompt_sb_contract_builder:'lmp_sb_contract' };
+  var stage = p.stage_code || p.stageCode || p.stage || p.prompt_stage || stageMap[p.prompt_key] || '';
+  if(stage) SGMP_STAGE_CONFIG[stage] = p;
 }
 
+// Obtener prompt — nunca falla, devuelve fallback si no hay nada
 function sgmpPrompt(key, fallback) {
-  const value = SGMP_PROMPTS[key];
-  if (value && String(value).trim()) return String(value);
-  return fallback || '';
+  return (SGMP_PROMPTS[key] && SGMP_PROMPTS[key].trim()) ? SGMP_PROMPTS[key] : (fallback || '');
 }
 
-function sgmpPromptRequired(keys, label) {
-  const arr = Array.isArray(keys) ? keys : [keys];
-  for (const key of arr) {
-    const value = sgmpPrompt(key, '');
-    if (String(value || '').trim()) return value;
-  }
-  throw new Error('No se encontró el prompt requerido en Sheet: ' + (label || arr.join(', ')));
-}
-
-function sgmpYes(value) {
+function sgmpYes(value){
   return ['YES','SI','SÍ','TRUE','1','ON'].includes(String(value ?? '').trim().toUpperCase());
 }
 
-function sgmpSessionValue(key) {
+function sgmpSessionValue(key){
   try { return sessionStorage.getItem(key) || ''; } catch(e) { return ''; }
 }
 
-function sgmpCurrentSession() {
+function sgmpCurrentSession(){
   var raw = sgmpSessionValue('sgmp_session_v1') || sgmpSessionValue('SGMP_SESSION') || sgmpSessionValue('session');
-  if (raw) {
+  if(raw){
     try { return JSON.parse(raw); } catch(e) { return { session_id: raw }; }
   }
   return {};
 }
 
-function sgmpSessionId() {
+function sgmpSessionId(){
   var session = sgmpCurrentSession();
   return session.session_id || session.sessionId || session.id || sgmpSessionValue('session_id') || '';
 }
 
-function sgmpUserId() {
+function sgmpUserId(){
   var session = sgmpCurrentSession();
   return session.user_id || session.userId || session.username || sgmpSessionValue('user_id') || 'u_admin';
 }
 
-async function sgmpFetchJson(url, options) {
-  const res = await fetch(url, options || { method: 'GET' });
-  const text = await res.text();
-  let parsed = {};
-  try {
-    parsed = text ? JSON.parse(text) : {};
-  } catch (e) {
-    throw new Error('Respuesta no es JSON válido desde Apps Script. Revisa despliegue /exec y permisos. Detalle: ' + e.message);
-  }
-  if (!res.ok || parsed.ok === false) {
-    throw new Error(parsed.error || parsed.message || ('HTTP ' + res.status));
-  }
-  return parsed;
-}
-
-function sgmpExpectedPromptKeys() {
-  return [
-    'prompt_brief',
-    'prompt_analysis',
-    'prompt_analysis_b1',
-    'prompt_analysis_b2',
-    'prompt_analysis_b3',
-    'prompt_analysis_b4',
-    'prompt_analysis_b5',
-    'prompt_analysis_b6',
-    'prompt_sb_contract_builder',
-    'prompt_doc_sipoc',
-    'prompt_final_results_as_is',
-    'prompt_final_results_to_be'
-  ];
-}
-
-function sgmpValidateLoadedPrompts(showUi) {
-  const expected = sgmpExpectedPromptKeys();
-  const missing = expected.filter(function(key){
-    return !SGMP_PROMPTS[key] || !String(SGMP_PROMPTS[key]).trim();
-  });
-  window.SGMP_PROMPT_LOAD_STATUS = {
-    loaded: Object.keys(SGMP_PROMPTS),
-    missing: missing,
-    checkedAt: new Date().toISOString(),
-    apiUrl: SGMP_API_URL
-  };
-  if (missing.length) {
-    console.warn('[SGMP] Prompts faltantes en Sheet:', missing);
-    if (showUi && typeof showMsg === 'function') {
-      showMsg('cargaMsg','warn','Prompts cargados parcialmente. Faltan en Sheet: ' + missing.join(', '));
-    }
-  } else {
-    console.log('[SGMP] Todos los prompts requeridos están cargados:', expected);
-    if (showUi && typeof showMsg === 'function') {
-      showMsg('cargaMsg','ok','Prompts cargados correctamente desde Apps Script / Sheet. Total: ' + Object.keys(SGMP_PROMPTS).length);
-    }
-  }
-  return missing;
-}
-
-async function sgmpLoadPrompts(moduleCode, onReady) {
-  try {
-    const url = SGMP_API_URL + '?action=get_prompts&module_code=' + encodeURIComponent(moduleCode) + '&_ts=' + Date.now();
-    const response = await sgmpFetchJson(url);
-    const prompts = Array.isArray(response.data) ? response.data : (Array.isArray(response.prompts) ? response.prompts : []);
-    SGMP_PROMPTS = {};
-    SGMP_PROMPT_META = {};
-    SGMP_STAGE_CONFIG = {};
-    prompts.forEach(sgmpRegisterPrompt);
-    SGMP_LOADED = prompts.length > 0;
-    console.log('[SGMP] Prompts cargados desde Sheet:', Object.keys(SGMP_PROMPTS));
-    sgmpValidateLoadedPrompts(false);
-    if (typeof onReady === 'function') onReady(null, SGMP_PROMPTS);
-    return SGMP_PROMPTS;
-  } catch (err) {
-    console.error('[SGMP] Error cargando prompts:', err);
-    SGMP_LOADED = false;
-    if (typeof showMsg === 'function') showMsg('cargaMsg','err','No se pudieron cargar prompts desde Apps Script: ' + err.message);
-    else alert('No se pudieron cargar los prompts desde Apps Script. Revisa URL del Web App, permisos y despliegue. Detalle: ' + err.message);
-    if (typeof onReady === 'function') onReady(err, {});
-    return {};
-  }
+async function sgmpFetchJson(url){
+  const response = await fetch(url);
+  const text = await response.text();
+  const parsed = text ? JSON.parse(text) : {};
+  if(!response.ok || parsed.ok === false) throw new Error(parsed.error || parsed.message || ('HTTP ' + response.status));
+  return parsed.data !== undefined ? parsed.data : parsed;
 }
 
 async function sgmpLoadRuntimeConfig(){
-  window.SGMP_GLOBAL_CONFIG = {};
-  window.SGMP_STAGE_CONFIG_RUNTIME = {};
-  return {global:{}, stages:{}};
+  window.SGMP_GLOBAL_CONFIG = window.SGMP_GLOBAL_CONFIG || {};
+  window.SGMP_STAGE_CONFIG_RUNTIME = window.SGMP_STAGE_CONFIG_RUNTIME || {};
+  try{
+    const globalData = await sgmpFetchJson(SGMP_API + '?action=get_global');
+    window.SGMP_GLOBAL_CONFIG = globalData || {};
+  }catch(error){
+    console.warn('No fue posible cargar CONFIG_GLOBAL SGMP.', error);
+  }
+  const stages = ['lmp_brief','lmp_analysis','lmp_sb_contract'];
+  await Promise.all(stages.map(async function(stageCode){
+    try{
+      const data = await sgmpFetchJson(SGMP_API + '?action=get_execution_mode&module_code=LMP&stage_code=' + encodeURIComponent(stageCode));
+      window.SGMP_STAGE_CONFIG_RUNTIME[stageCode] = data || {};
+    }catch(error){
+      console.warn('No fue posible cargar EXECUTION_MODE para ' + stageCode + '.', error);
+      window.SGMP_STAGE_CONFIG_RUNTIME[stageCode] = window.SGMP_STAGE_CONFIG_RUNTIME[stageCode] || {};
+    }
+  }));
+  return { global: window.SGMP_GLOBAL_CONFIG, stages: window.SGMP_STAGE_CONFIG_RUNTIME };
 }
 
-function sgmpGlobalApiEnabled(){ return false; }
-function sgmpStageUseApi(stageCode){ return false; }
-function sgmpStageApiEnabled(stageCode){ return false; }
+function sgmpGlobalApiEnabled(){
+  var runtime = window.SGMP_GLOBAL_CONFIG || {};
+  var value = runtime.USE_API_GLOBAL || runtime.use_api_global || runtime.useApiGlobal || runtime.api_enabled || runtime.apiEnabled || window.USE_API_GLOBAL || window.SGMP_USE_API_GLOBAL || SGMP_PROMPTS.USE_API_GLOBAL || SGMP_PROMPTS.use_api_global || sgmpSessionValue('USE_API_GLOBAL') || sgmpSessionValue('SGMP_USE_API_GLOBAL');
+  return sgmpYes(value);
+}
+
+function sgmpStageUseApi(stageCode){
+  var runtime = (window.SGMP_STAGE_CONFIG_RUNTIME || {})[stageCode] || {};
+
+  if(runtime.use_api !== undefined || runtime.useApi !== undefined || runtime.api_enabled !== undefined || runtime.apiEnabled !== undefined){
+    return sgmpYes(runtime.use_api || runtime.useApi || runtime.api_enabled || runtime.apiEnabled);
+  }
+
+  var mode = runtime.execution_mode || runtime.executionMode || runtime.mode || runtime.DEFAULT_EXECUTION_MODE;
+
+  if(String(mode || '').trim().toUpperCase() === 'HYBRID') return true;
+  if(String(mode || '').trim().toUpperCase() === 'API') return true;
+  if(String(mode || '').trim().toUpperCase() === 'AUTO') return true;
+
+  var meta = SGMP_STAGE_CONFIG[stageCode] || SGMP_PROMPT_META[stageCode] || {};
+  var value = meta.use_api || meta.useApi || meta.api_enabled || meta.apiEnabled;
+
+  if(value !== undefined) return sgmpYes(value);
+
+  if(['lmp_brief','lmp_analysis','lmp_sb_contract'].includes(stageCode)){
+    return true;
+  }
+
+  return false;
+}
+
+function sgmpStageApiEnabled(stageCode){
+  return sgmpGlobalApiEnabled() && sgmpStageUseApi(stageCode);
+}
 
 function sgmpAIResultText(result){
   if(result && typeof result === 'object' && result.text !== undefined) return result.text;
@@ -3768,24 +3488,90 @@ function sgmpAIResultText(result){
 }
 
 function sgmpExtractAIText(res){
-  if(res === undefined || res === null) throw new Error('Respuesta vacía del flujo manual.');
+  if(res === undefined || res === null) throw new Error('Respuesta vacía del backend.');
   if(typeof res === 'string') return res;
-  if(res.ok === false) throw new Error(res.error || res.message || 'Flujo manual respondió con error.');
+  if(res.ok === false) throw new Error(res.error || res.message || 'Backend call_ai respondió con error.');
   var data = res.data !== undefined ? res.data : res;
   if(typeof data === 'string') return data;
   return data.text || data.output || data.response || data.result || data.content || data.answer || data.raw || JSON.stringify(data);
 }
 
-async function sgmpOfflineManualOnly(stageCode, prompt){
-  throw new Error('Modo manual: copia el prompt y pega manualmente el JSON devuelto por una IA externa.');
+async function sgmpCallAI(stageCode, prompt){
+  const payload = {
+    session_id: sgmpSessionId(),
+    user_id: sgmpUserId() || 'u_admin',
+    module_code: 'LMP',
+    stage_code: stageCode,
+    prompt: prompt
+  };
+
+  let postError = null;
+
+  // Apps Script + GitHub Pages: usar text/plain evita preflight CORS por application/json.
+  try{
+    const response = await fetch(SGMP_API + '?action=call_ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+
+    const text = await response.text();
+    const parsed = text ? JSON.parse(text) : {};
+
+    if(!response.ok){
+      throw new Error(parsed.error || parsed.message || ('HTTP ' + response.status));
+    }
+
+    if(parsed.fallback_manual === true){
+      const fallbackError = new Error(parsed.error || parsed.message || 'El backend solicitó fallback manual.');
+      fallbackError.skipGetFallback = true;
+      throw fallbackError;
+    }
+
+    return { text: sgmpExtractAIText(parsed), raw: parsed };
+  }catch(error){
+    postError = error;
+    if(error && error.skipGetFallback){
+      console.warn('[sgmpCallAI] POST text/plain devolvió fallback manual.', error);
+      throw new Error(error.message || 'La API solicitó continuar en modo manual.');
+    }
+    console.warn('[sgmpCallAI] POST text/plain falló. Se intentará GET payload.', error);
+  }
+
+  // Respaldo técnico: GET con payload codificado, útil cuando Apps Script/WebApp bloquea POST.
+  try{
+    const url = SGMP_API + '?action=call_ai&payload=' + encodeURIComponent(JSON.stringify(payload));
+    const response = await fetch(url);
+    const text = await response.text();
+    const parsed = text ? JSON.parse(text) : {};
+
+    if(!response.ok){
+      throw new Error(parsed.error || parsed.message || ('HTTP ' + response.status));
+    }
+
+    if(parsed.fallback_manual === true){
+      throw new Error(parsed.error || parsed.message || 'El backend solicitó fallback manual.');
+    }
+
+    return { text: sgmpExtractAIText(parsed), raw: parsed };
+  }catch(error){
+    console.error('[sgmpCallAI] Error final:', error);
+    throw new Error((postError && postError.message ? postError.message + ' | ' : '') + (error.message || 'No fue posible conectar con la API.'));
+  }
 }
 
-// Auth admin local desactivado
-function sgmpAuthAdmin(username, password, onOk, onErr) { if (typeof onOk === 'function') onOk({ok:true, offline:true}); }
+// Auth admin contra Sheet
+function sgmpAuthAdmin(username, password, onOk, onErr) {
+  var url = SGMP_API + '?action=auth_admin&username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password);
+  fetch(url).then(function(r){return r.json();}).then(function(res){
+    if (res.ok) { sessionStorage.setItem('sgmp_admin_token', res.data.token); onOk(res.data); }
+    else onErr(res.error || 'Credenciales incorrectas.');
+  }).catch(function(){ onErr('Error de conexión.'); });
+}
 
-/* ====
+/* =========================
    ESTADO CENTRAL DEL LMP
-==== */
+========================= */
 const state = {
   metadata: {
     module: 'LMP',
@@ -3838,13 +3624,12 @@ const state = {
   }
 };
 
-/* ====
+/* =========================
    CONFIG BÁSICA
-==== */
-// Cargar prompts embebidos y configuración offline al iniciar
-sgmpLoadPrompts('LMP', async function(err) {
+========================= */
+// Cargar prompts y configuracion runtime del backend v3 al iniciar
+sgmpLoadPrompts('LMP', async function() {
   await sgmpLoadRuntimeConfig();
-  if (!err && typeof sgmpValidateLoadedPrompts === 'function') sgmpValidateLoadedPrompts(true);
   if(typeof fillFixedDocPrompts === 'function') fillFixedDocPrompts(true);
 });
 
@@ -3903,9 +3688,9 @@ const preQuestionMap = {
   ]
 };
 
-/* ====
+/* =========================
    UTILIDADES
-==== */
+========================= */
 function qs(id){ return document.getElementById(id); }
 function qsa(sel){ return Array.from(document.querySelectorAll(sel)); }
 
@@ -4089,8 +3874,8 @@ function showLoader(message, detail){
   if(!overlay) return;
   const msg = qs('sgmpLoaderMessage');
   const det = qs('sgmpLoaderDetail');
-  if(msg) msg.textContent = message || 'Procesando etapa manual...';
-  if(det) det.textContent = detail || 'Validando información local del módulo.';
+  if(msg) msg.textContent = message || 'Procesando con IA...';
+  if(det) det.textContent = detail || 'Esto puede tomar unos segundos. No cierres esta ventana.';
   overlay.style.display = 'flex';
   overlay.setAttribute('aria-busy', 'true');
 }
@@ -4102,9 +3887,9 @@ function hideLoader(){
   overlay.setAttribute('aria-busy', 'false');
 }
 
-/* ====
+/* =========================
    NAVEGACIÓN
-==== */
+========================= */
 qsa('.step-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     if(btn.classList.contains('disabled')) return;
@@ -4169,9 +3954,9 @@ function goToPrev(current){
   if(idx > 0) showSection(stageOrder[idx - 1]);
 }
 
-/* ====
+/* =========================
    RUTAS DE INICIO
-==== */
+========================= */
 function selectRoute(route){
   state.metadata.route = route;
 
@@ -4371,29 +4156,201 @@ async function loadRouteJson(mode){
   }
 }
 
-/* ====
+/* =========================
    DOCUMENTACIÓN EXISTENTE
-==== */
+========================= */
 function buildDocPrompt(type){
-  return '';
+  const profiles = {
+    pdf_sipoc: {
+      sourceType: 'pdf_sipoc_flujo',
+      title: 'PDF SIPOC / flujo del proceso',
+      focus: `
+Interpreta el PDF como SIPOC, flujo de proceso o diagrama exportado.
+Extrae Suppliers, Inputs, Process, Outputs, Customers, actores internos, documentos, sistemas y secuencia de actividades.
+Si el PDF contiene un flujo visual, convierte cada nodo ejecutable en una actividad.
+Si hay decisiones, controles o documentos, clasifícalos con type = decision, control o document.
+`
+    },
+    pdf_documento: {
+      sourceType: 'pdf_documento_operativo',
+      title: 'PDF documento operativo',
+      focus: `
+Interpreta el PDF como documento operativo: manual, procedimiento, instructivo, política, registro, formato, especificación o PR.
+Extrae objetivo, alcance, responsables, reglas, actividades, controles, entradas, salidas, documentos usados, sistemas y evidencias.
+No conviertas definiciones, políticas generales o campos de un formato en actividades si no representan pasos ejecutables.
+`
+    },
+    json_consolidacion: {
+      sourceType: 'json_consolidacion_documental',
+      title: 'Consolidar JSON documentales',
+      focus: `
+Consolida varios JSON documentales parciales generados previamente desde PDFs.
+Unifica contexto, SIPOC, actividades, documentos, actores, entradas, salidas y trazabilidad.
+Detecta duplicados, contradicciones, vacíos y diferencias entre fuentes.
+No fuerces una sola versión si existen contradicciones: consérvalas en traceability.contradictions_detected.
+`
+    }
+  };
+
+  const profile = profiles[type] || profiles.pdf_documento;
+
+  return `
+ACTÚA COMO:
+1. Arquitecto senior de procesos.
+2. Especialista en documentación operativa.
+3. Experto en conversión PDF/JSON para LMP y SIPOC Builder.
+
+TIPO DE CONVERSIÓN:
+${profile.title}
+
+OBJETIVO:
+Convertir la información fuente en un JSON documental limpio, trazable y compatible con la etapa Carga y consolidación del LMP.
+
+ENFOQUE:
+${profile.focus}
+
+REGLAS CRÍTICAS:
+- Responde SOLO con JSON válido.
+- No agregues explicación fuera del JSON.
+- No hagas análisis de mejora.
+- No propongas soluciones.
+- No diseñes TO BE.
+- No inventes información.
+- Si falta información, usa "pendiente_validacion".
+- Si el actor no está claro, usa "Responsable pendiente de validación".
+- No uses "pendiente_validacion" como actor.
+- Diferencia Suppliers, Inputs, Outputs y Customers de actores internos.
+- No confundas documentos, sistemas o registros con actividades.
+- Cada actividad debe tener actor válido, aunque sea "Responsable pendiente de validación".
+- Cada actividad debe tener previous y next como arrays.
+- En previous y next usa nombres de actividades, no IDs.
+- Cada actividad debe incluir siempre ext_suppliers, ext_inputs, ext_outputs y ext_customers, aunque sean arrays vacíos.
+- Si una actividad recibe un input externo, decláralo en ext_inputs.
+- Si una actividad genera una salida externa, declárala en ext_outputs.
+- Si una actividad inicia el proceso, is_start debe ser true.
+- Si una actividad cierra el proceso, is_end debe ser true.
+- Clasifica type usando solo: operation, decision, control, document, end.
+- No pongas todas las actividades como operation si existen controles, decisiones o documentos.
+
+ESTRUCTURA JSON OBLIGATORIA:
+{
+  "instrument": "document_conversion",
+  "version": "1.1",
+  "source_type": "${profile.sourceType}",
+  "context": {
+    "company": "pendiente_validacion",
+    "processName": "pendiente_validacion",
+    "processCode": "pendiente_validacion",
+    "owner": "pendiente_validacion",
+    "analyst": "pendiente_validacion",
+    "industry": "pendiente_validacion",
+    "processType": "pendiente_validacion",
+    "activity": "pendiente_validacion",
+    "purpose": "pendiente_validacion",
+    "startEvent": "pendiente_validacion",
+    "endEvent": "pendiente_validacion"
+  },
+  "catalogs": {
+    "suppliers": [],
+    "inputs": [],
+    "outputs": [],
+    "customers": [],
+    "actors": [],
+    "documents_systems": []
+  },
+  "documented_as_is": {
+    "summary": "",
+    "sequence_quality": "completa | parcial | ambigua | incompleta",
+    "activities": [
+      {
+        "id": "A1",
+        "name": "",
+        "type": "operation | decision | control | document | end",
+        "actor": "Responsable pendiente de validación",
+        "document": "",
+        "previous": [],
+        "next": [],
+        "ext_suppliers": [],
+        "ext_inputs": [],
+        "ext_outputs": [],
+        "ext_customers": [],
+        "is_start": true,
+        "is_end": false,
+        "evidence": "",
+        "source_status": "evidenciado | inferido | pendiente_validacion",
+        "notes": ""
+      }
+    ]
+  },
+  "operational_context": {
+    "controls": [],
+    "approvals": [],
+    "handoffs": [],
+    "exceptions": [],
+    "decision_criteria": [],
+    "manual_dependencies": [],
+    "rules_detected": []
+  },
+  "traceability": {
+    "evidence_highlights": [],
+    "contradictions_detected": [],
+    "open_questions": [],
+    "missing_information": [],
+    "assumptions": []
+  },
+  "lmp_load_input": {
+    "target_stage": "carga_y_consolidacion",
+    "brief_seed": {
+      "context": {},
+      "sipoc": {
+        "suppliers": [],
+        "inputs": [],
+        "outputs": [],
+        "customers": [],
+        "actors": [],
+        "documentsSystems": []
+      },
+      "activities": [],
+      "observations": []
+    }
+  },
+  "conversion_status": {
+    "status": "listo_para_master_a | requiere_validacion | bloqueado",
+    "blocking_issues": [],
+    "warnings": [],
+    "next_action": ""
+  }
 }
 
+VALIDACIÓN ANTES DE RESPONDER:
+1. El JSON debe ser parseable.
+2. No debe existir texto fuera del JSON.
+3. Todas las actividades deben tener actor distinto de vacío.
+4. Ninguna actividad debe tener actor = "pendiente_validacion".
+5. previous y next deben contener nombres de actividades, no IDs.
+6. Todas las actividades deben incluir ext_suppliers, ext_inputs, ext_outputs y ext_customers.
+7. Los catálogos deben estar alineados con las actividades.
+8. No mezcles AS IS con propuestas de mejora.
+
+FUENTE A CONVERTIR:
+Adjunto o pego a continuación el PDF, texto extraído del PDF o JSON documental parcial.
+`;
+}
 
 function promptFromSheet(keys, fallback){
-  for(const key of keys || []){
+  for(const key of keys){
     const prompt = sgmpPrompt(key, '');
     if(String(prompt || '').trim()) return prompt;
   }
-  return '';
+  return fallback;
 }
-
 
 function fillFixedDocPrompts(force=false){
   const sipoc = qs('docPromptSipoc');
   const pr = qs('docPromptPr');
 
-  const sipocPrompt = promptFromSheet(['prompt_doc_sipoc','prompt_documentacion_sipoc','prompt_visio_sipoc'], '');
-  const prPrompt = promptFromSheet(['prompt_doc_pr','prompt_documentacion_pr','prompt_pr_procedimiento'], '');
+  const sipocPrompt = promptFromSheet(['prompt_doc_sipoc','prompt_documentacion_sipoc','prompt_visio_sipoc'], buildDocPrompt('pdf_sipoc'));
+  const prPrompt = promptFromSheet(['prompt_doc_pr','prompt_documentacion_pr','prompt_pr_procedimiento'], buildDocPrompt('pdf_documento'));
 
   if(sipoc && (force || !sipoc.value.trim())) sipoc.value = sipocPrompt;
   if(pr && (force || !pr.value.trim())) pr.value = prPrompt;
@@ -4414,11 +4371,10 @@ function generateDocPrompt(targetId, type, previewId, msgId){
     pdf_sipoc: ['prompt_doc_sipoc','prompt_documentacion_sipoc','prompt_visio_sipoc'],
     pdf_documento: ['prompt_doc_pr','prompt_documentacion_pr','prompt_pr_procedimiento']
   };
-  const prompt = promptFromSheet(keyMap[type] || [], '');
-  if(!String(prompt || '').trim()){ showMsg(msgId,'err','No se encontró el prompt en Sheet para esta opción. Revisa PROMPTS.'); return; }
+  const prompt = promptFromSheet(keyMap[type] || [], buildDocPrompt(type));
   el.value = prompt;
   renderDocPromptPreview(previewId, prompt);
-  showMsg(msgId,'ok','Prompt generado correctamente desde Sheet.');
+  showMsg(msgId,'ok','Prompt generado correctamente.');
 }
 
 function copyFixedDocPrompt(targetId, msgId){
@@ -4471,9 +4427,9 @@ function mergeLoadedState(loaded){
   if(!state.metadata.currentStage) state.metadata.currentStage = 'inicio';
 }
 
-/* ====
+/* =========================
    PREPARACIÓN · TABS
-==== */
+========================= */
 qsa('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     qsa('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -4660,14 +4616,14 @@ function exportBrief(){
   downloadText('lmp_brief.json', JSON.stringify(state.brief, null, 2), 'application/json;charset=utf-8');
 }
 
-/* ====
+/* =========================
    CONTEXTO
-==== */
+========================= */
 
 
-/* ====
+/* =========================
    CARGA Y CONSOLIDACIÓN
-==== */
+========================= */
 function buildMaster(){
   mergeMaster();
   if(qs('masterEditor')) qs('masterEditor').value = JSON.stringify(state.master, null, 2);
@@ -4705,9 +4661,9 @@ function saveMasterAndContinue(){
 
 
 
-/* ====
+/* =========================
    AS IS · BUILDER EDITABLE
-==== */
+========================= */
 function asisActivityTemplate(data = {}, index = 0){
   const safe = normalizeActivity(data || {});
   const id = safe.id || data.id || ('A' + (index + 1));
@@ -4942,9 +4898,9 @@ function saveAsIsAndContinue(){
   goToNext('asis');
 }
 
-/* ====
+/* =========================
    ANÁLISIS
-==== */
+========================= */
 
 
 function saveAnalysisAndContinue(){
@@ -4960,9 +4916,9 @@ function saveAnalysisAndContinue(){
   }
 }
 
-/* ====
+/* =========================
    DECISIÓN
-==== */
+========================= */
 function setDecisionRoute(route, navigate = true){
   state.decision.route = route;
   qs('decision_asis')?.classList.toggle('active', route === 'asis');
@@ -4982,9 +4938,9 @@ function setDecisionRoute(route, navigate = true){
 
 
 
-/* ====
+/* =========================
    TO BE
-==== */
+========================= */
 function improvementTemplate(data = {}){
   const id = String(data.id || cryptoRandom());
   data.id = id;
@@ -5283,9 +5239,9 @@ function renderToBeSummary(){
 
 
 
-/* ====
+/* =========================
    RESULTADOS
-==== */
+========================= */
 
 function normalizeContractString(value){
   return String(value ?? '')
@@ -6044,9 +6000,9 @@ function downloadSBJson(){
 }
 
 
-/* ====
+/* =========================
    HANDOFF LMP -> SB
-==== */
+========================= */
 const SGMP_SB_HANDOFF_URL = './modulo_2.html?handoff_key=SGMP_SB_INPUT';
 
 function getSBContractForHandoff(){
@@ -6164,9 +6120,9 @@ function stripHtml(html){
   return div.innerText;
 }
 
-/* ====
+/* =========================
    RESPALDOS Y CARGA
-==== */
+========================= */
 function syncVisibleStage(){
   const active = document.querySelector('.section.active')?.id;
   if(active === 'preparacion'){
@@ -6214,9 +6170,9 @@ function deepMerge(target, source){
 
 
 
-/* ====
+/* =========================
    DEEP RESET
-==== */
+========================= */
 function resetAll(){
   const fresh = {
     metadata:{module:'LMP',version:'1.0',currentStage:'inicio',route:null,lastSavedAt:null},
@@ -6265,24 +6221,24 @@ function resetAll(){
   showSection('inicio');
 }
 
-/* ====
+/* =========================
    RESULTADOS AUXILIARES
-==== */
+========================= */
 function continueFromAnalysisIfNeeded(){
   if(!state.analysis) runAnalysis();
 }
 
-/* ====
+/* =========================
    INICIO APP
-==== */
+========================= */
 addAsisActivity();
 updateTopStatus();
 if(typeof window.hydratePreparationFromState === 'function'){ window.hydratePreparationFromState(); }
 
 
-/* ====
+/* =========================
    PATCH DE INTEGRACIÓN IA Y REFACTOR CONTEXTO/CARGA
-==== */
+========================= */
 
 function renderContextReadOnly(){
   const wrap = qs('contextReadOnly');
@@ -6484,10 +6440,10 @@ function safeArray(value){
 }
 
 
-/* ====
+/* =========================
    SGMP · Blindaje de granularidad AS IS
    Objetivo: evitar que el Brief o el Prompt B reduzcan el flujo estructurado a pasos macro.
-==== */
+========================= */
 function sgmpActivityIdentityText(activity){
   const a = activity || {};
   return normalizeContractString(a.id || a.codigo || a.code || a.activity_id || a.name || a.nombre || '').trim();
@@ -7106,8 +7062,8 @@ function renderAnalysisValidation(){
   const raw = state.analysisRun?.raw || state.analysis?.raw || state.analysis || state.master || (state.asis?.activities?.length ? { activities: state.asis.activities } : null);
   const issues = evaluateAnalysisCompleteness(raw);
   const msgId = 'analysisValidationMsg';
-  if(!raw){ showMsg(msgId,'warn','Validación pendiente. Aún no se ha cargado el JSON maestro.'); return issues; }
-  if(issues.length){ showMsg(msgId,'warn','Validación pendiente. Revisa:\n- ' + issues.join('\n- ')); }
+  if(!raw){ showMsg(msgId,'warn','Estado: análisis incompleto. Aún no se ha procesado un JSON maestro.'); return issues; }
+  if(issues.length){ showMsg(msgId,'warn','Estado: análisis incompleto. Revisa o reanaliza:\n- ' + issues.join('\n- ')); }
   else { showMsg(msgId,'ok','Estado: análisis por bloques disponible. Continúa con la etapa correspondiente.'); }
   return issues;
 }
@@ -7152,48 +7108,175 @@ function buildBriefPrompt(master){
   const docs = safeArray(master.notes?.additionalDocuments).map(d => `DOCUMENTO: ${d.name}\n${d.content || d.preview || ''}`).join('\n\n----------------\n\n') || '[Sin documentos adicionales]';
   const prePack = JSON.stringify(safeArray(master.preInterview || master.pre || []), null, 2);
   const interviewPack = JSON.stringify(safeArray(master.interview || []), null, 2);
+
   const sourceActivities = sgmpCanonicalizeActivityList(master.activities || []);
   const dynamicSection = `FUENTE ESTRUCTURAL OBLIGATORIA DE ACTIVIDADES DEL PROCESO:
 ${JSON.stringify({ source_activity_count: sourceActivities.length, source_activities: sourceActivities }, null, 2)}
 
-CONTEXTO DEL PROCESO:
-${JSON.stringify(c, null, 2)}
+ENTRADA CONSOLIDADA COMPLETA (NO RESUMIR PREMATURAMENTE):
+${JSON.stringify(master, null, 2)}
 
-PREENTREVISTAS / CUESTIONARIOS:
+EVIDENCIA DE PREENTREVISTAS (PRESERVAR MATICES, DIFERENCIAS Y CONTRADICCIONES):
 ${prePack}
 
-ENTREVISTA / SIPOC / FUENTE PRINCIPAL:
+EVIDENCIA DE ENTREVISTAS (PRESERVAR EXCEPCIONES, REGLAS IMPLÍCITAS, CONTROLES NO DOCUMENTADOS Y DECISIONES REALES):
 ${interviewPack}
 
 DOCUMENTOS ADICIONALES:
 ${docs}`;
 
-  const staticBase = sgmpPromptRequired('prompt_brief', 'prompt_brief');
-  return staticBase
-    .replace('{{industry}}', c.industry || '[INDUSTRIA]')
-    .replace('{{activity}}', c.activity || '[ACTIVIDAD]')
-    .replace('{{processType}}', c.processType || '[TIPO_PROCESO]')
-    + '\n\n' + dynamicSection;
-}
+  const hardening = `
 
+REGLAS CRÍTICAS DE PRESERVACIÓN DE EVIDENCIA:
+- FUENTE ESTRUCTURAL OBLIGATORIA: si existe source_activities, debes copiar TODAS esas actividades en activities_preliminary y as_is.activities.
+- PROHIBIDO devolver activities_preliminary vacío si source_activity_count es mayor que 0.
+- PROHIBIDO devolver as_is.activities vacío si source_activity_count es mayor que 0.
+- PROHIBIDO reconstruir el flujo solo desde flowSummary o sipoc_preliminary.process cuando source_activities exista.
+- Si source_activity_count es mayor a 10, la salida debe contener al menos esa misma cantidad de actividades en activities_preliminary y as_is.activities.
+- Conserva id, name, actor, type, document, previous, next, is_start, is_end y note de cada actividad fuente.
+- flowSummary debe ser resumen ejecutivo; NO sustituye el flujo operativo.
+- NO resumas demasiado pronto.
+- NO sustituyas diferencias entre entrevistados por una sola versión armonizada si hay contradicción relevante.
+- PRESERVA explícitamente excepciones, handoffs, controles manuales, aprobaciones informales, retrabajos, demoras, dependencias de personas y reglas implícitas.
+- DISTINGUE entre: hecho declarado, inferencia razonable, supuesto y vacío de información.
+- SI detectas contradicciones, repórtalas en lugar de ocultarlas.
+- SI una conclusión depende de una sola fuente, indícalo.
+- NO conviertas el brief en texto bonito; conviértelo en una base consultiva defendible.
+- NO confundas áreas o departamentos con procesos reales.
+- NO aceptes definiciones vagas del tipo “gestionar”, “coordinar”, “dar seguimiento” sin concretar qué ocurre realmente.
+- INCLUYE lo que todavía debe validarse antes del análisis profundo.
+
+DEBES ENTREGAR ADEMÁS:
+- flowSummary
+- contradictionsDetected
+- openQuestions
+- visibleRisks
+- processCriticality
+- hiddenControls
+- manualDependencies
+- suspectedConstraints
+- evidenceHighlights
+
+JSON OBLIGATORIO DEL BRIEF:
+{
+  "brief": {
+    "executiveSummary": "",
+    "processPurpose": "",
+    "scope": "",
+    "actors": [],
+    "sipoc_preliminary": {"suppliers": [], "inputs": [], "process": [], "outputs": [], "customers": []},
+    "flowSummary": [],
+    "mainPainPoints": [],
+    "preliminaryRestrictions": [],
+    "preliminaryQuickWins": [],
+    "mentionedIndicators": [],
+    "informationGaps": [],
+    "assumptions": [],
+    "contradictionsDetected": [],
+    "openQuestions": [],
+    "visibleRisks": [],
+    "processCriticality": "",
+    "hiddenControls": [],
+    "manualDependencies": [],
+    "suspectedConstraints": [],
+    "evidenceHighlights": [],
+    "activities_preliminary": [
+      {"id":"", "name":"", "type":"operation", "actor":"", "document":"", "previous":[], "next":[], "is_start":false, "is_end":false, "note":""}
+    ],
+    "as_is": {
+      "activities": [
+        {"id":"", "name":"", "type":"operation", "actor":"", "document":"", "previous":[], "next":[], "is_start":false, "is_end":false, "note":""}
+      ]
+    },
+    "validation": {
+      "sourceActivityCount": 0,
+      "briefActivityCount": 0,
+      "canProceedToAnalysis": false,
+      "blockingGaps": [],
+      "warnings": []
+    }
+  }
+}`;
+
+  const staticBase = sgmpPrompt('prompt_brief', null);
+  if (staticBase) {
+    return staticBase
+      .replace('{{industry}}', c.industry || '[INDUSTRIA]')
+      .replace('{{activity}}', c.activity || '[ACTIVIDAD]')
+      .replace('{{processType}}', c.processType || '[TIPO_PROCESO]')
+      + hardening + '\n\n' + dynamicSection;
+  }
+
+  return `ACTÚA COMO:
+
+1. Consultor senior en procesos, Lean, Six Sigma y TOC
+2. Experto en la industria: ${c.industry || '[INDUSTRIA]'}
+3. Especialista en la actividad de negocio: ${c.activity || '[ACTIVIDAD]'}
+4. Experto en el tipo de proceso: ${c.processType || '[TIPO_PROCESO]'}
+
+OBJETIVO GENERAL:
+Analizar la información proveniente de preentrevistas múltiples, entrevista principal y archivos adicionales relevantes para construir el BRIEF FORMAL DEL PROCESO como consolidado consultivo estructurado, no como resumen superficial.
+
+${hardening}
+
+${dynamicSection}`;
+}
 
 async function generateBriefPromptFromMaster(){
   const btn = qs('btnGenerateBriefPrompt');
 
   try{
     if(btn) btn.disabled = true;
-    showLoader('Generando prompt de Brief...', 'Etapa A · Generación local de prompt desde Sheet.');
+
+    showLoader('Generando Brief con IA...', 'Etapa A · Conectando con el backend SGMP y procesando la respuesta.');
+
+    if(typeof sgmpLoadRuntimeConfig === 'function'){
+      await sgmpLoadRuntimeConfig();
+    }
 
     const master = state.master || mergeMaster();
     const prompt = buildBriefPrompt(master);
 
-    if(qs('briefPromptEditor')) qs('briefPromptEditor').value = prompt;
+    // En flujo automático NO se muestra prompt manual
+    if(qs('briefPromptEditor')) qs('briefPromptEditor').value = '';
+
+    console.log('[LMP Brief] API global:', sgmpGlobalApiEnabled());
+    console.log('[LMP Brief] Stage API:', sgmpStageUseApi('lmp_brief'));
+    console.log('[LMP Brief] Ejecutando stage:', 'lmp_brief');
+
+    showMsg('cargaMsg','ok','Ejecutando IA para Brief...');
+
+    const result = await sgmpCallAI('lmp_brief', prompt);
+    const text = sgmpAIResultText(result);
+
+    console.log('[LMP Brief] Resultado API:', result);
+    console.log('[LMP Brief] Texto recibido:', text);
+
+    if(!text || !String(text).trim()){
+      throw new Error('La API respondió vacío para lmp_brief.');
+    }
+
+    if(qs('briefResponseEditor')){
+      qs('briefResponseEditor').value = text;
+    }
+
+    processBriefResponse();
     refreshCargaFlowState();
-    showMsg('cargaMsg','ok','Prompt de Brief generado desde Sheet. Cópialo, ejecútalo en la IA y pega la respuesta JSON.');
+
+    showMsg('cargaMsg','ok','Brief generado y procesado automáticamente.');
+
   }catch(error){
-    console.error('[LMP Brief] Error generando prompt:', error);
+    console.error('[LMP Brief] Error flujo automático:', error);
     refreshCargaFlowState();
-    showMsg('cargaMsg','err','No se pudo generar el prompt de Brief. Detalle: ' + error.message);
+
+    // Cero fallback manual
+    if(qs('briefPromptEditor')) qs('briefPromptEditor').value = '';
+
+    showMsg(
+      'cargaMsg',
+      'err',
+      'No se ejecutó el flujo automático del Brief. Detalle: ' + error.message
+    );
   }finally{
     hideLoader();
     if(btn) btn.disabled = false;
@@ -7282,23 +7365,96 @@ async function generateAnalysisPromptFromApprovedBrief(){
   const dynamic = `FUENTE ESTRUCTURAL OBLIGATORIA DEL AS IS:
 ${JSON.stringify({ source_activity_count: sourceActivities.length, source_activities: sourceActivities }, null, 2)}
 
-BRIEF APROBADO:
+BRIEF APROBADO (USAR COMO RESUMEN EJECUTIVO, NO COMO FUENTE ÚNICA DEL FLUJO):
 ${JSON.stringify(brief, null, 2)}
 
-EVIDENCIA OPERATIVA COMPLEMENTARIA:
+EVIDENCIA OPERATIVA COMPLEMENTARIA (NO PERDERLA POR RESUMEN EXCESIVO):
 ${JSON.stringify(evidencePack, null, 2)}`;
-  const staticBase = sgmpPromptRequired('prompt_analysis', 'prompt_analysis');
-  const prompt = staticBase
-    .replace('{{industry}}', c.industry || '[INDUSTRIA]')
-    .replace('{{activity}}', c.activity || '[ACTIVIDAD]')
-    .replace('{{processType}}', c.processType || '[TIPO_PROCESO]')
-    + '\n\n' + dynamic;
+  const hardening = `
+
+REGLAS CRÍTICAS DE ANÁLISIS CONSULTIVO:
+- FUENTE ESTRUCTURAL OBLIGATORIA: si existe source_activities, debes usar esa lista como base principal del AS IS.
+- PROHIBIDO reconstruir el flujo desde flowSummary o sipoc.process cuando source_activities exista.
+- PROHIBIDO reducir, agrupar o fusionar actividades de source_activities.
+- Si source_activity_count es mayor a 10, tu salida debe incluir al menos esa misma cantidad de actividades en as_is.activities, activities y sb_contract.sipoc_input.activities.
+- Cada actividad de source_activities debe conservar su id, name, actor, document, previous, next, is_start, is_end y note cuando existan.
+- flowSummary y sipoc.process son referencias ejecutivas, no reemplazan el flujo operativo.
+- NO resumas demasiado pronto ni borres evidencia operativa valiosa.
+- PRESERVA excepciones, retrabajos, controles manuales, aprobaciones informales, handoffs, variaciones y dependencias de personas.
+- DISTINGUE hechos observados, inferencias, supuestos y vacíos.
+- NO confundas áreas funcionales con procesos.
+- NO aceptes procesos mal definidos; si la definición es débil, señálalo explícitamente.
+- NO propongas mejoras decorativas, teóricas o genéricas.
+- NO llames “quick win” a algo que requiera rediseño complejo, dependencia transversal o cambio cultural profundo.
+- NO conviertas todas las actividades en operation; clasifica correctamente decision, control, document y end cuando aplique.
+- EVITA verbos genéricos como “gestionar”, “coordinar”, “dar seguimiento” si no explican la acción real.
+- INCLUYE handoffs, controles, excepciones, criterios de aprobación y reprocesos cuando aparezcan en la evidencia.
+- DEFINE indicadores de control además de indicadores resultado.
+- El TO BE debe ser implementable, conectado al AS IS y defendible operativamente.
+- La salida debe servir simultáneamente para LMP, Evaluador documental, Integrador y SIPOC Builder.
+
+OBLIGATORIO PRESERVAR Y REPORTAR:
+- evidence_highlights
+- contradictions_detected
+- hidden_controls
+- manual_dependencies
+- suspected_constraints
+- stage_details
+- handoffs
+- exceptions_and_criteria
+- undocumented_knowledge
+
+JSON DEBE INCLUIR, ADEMÁS DE LO YA DEFINIDO:
+- as_is.stage_details
+- as_is.handoffs
+- as_is.exceptions_and_criteria
+- ava.evidence
+- findings.evidence_highlights
+- findings.contradictions_detected
+- findings.hidden_controls
+- findings.manual_dependencies
+- findings.suspected_constraints
+- improvements.support_basis
+- to_be.assumptions
+- indicators.control_indicators
+- sipoc_builder_ready.sipoc_input_precheck
+`;
+  const staticBase = sgmpPrompt('prompt_analysis', '');
+  const fallback = `ACTÚA COMO:
+
+1. Consultor senior en procesos, Lean, Six Sigma y TOC
+2. Experto en la industria: ${c.industry || '[INDUSTRIA]'}
+3. Especialista en la actividad de negocio: ${c.activity || '[ACTIVIDAD]'}
+4. Experto en el tipo de proceso: ${c.processType || '[TIPO_PROCESO]'}
+
+OBJETIVO GENERAL
+Analizar el BRIEF APROBADO del proceso y la evidencia operativa complementaria para construir AS IS robusto, AVA serio, hallazgos defendibles, mejoras con sustento, one page útil, TO BE implementable, propuesta documental, input integrador, indicadores de control y un JSON contractual realmente usable.
+
+${hardening}`;
+  const prompt = (staticBase ? staticBase.replace('{{industry}}', c.industry || '[INDUSTRIA]').replace('{{activity}}', c.activity || '[ACTIVIDAD]').replace('{{processType}}', c.processType || '[TIPO_PROCESO]') + hardening : fallback) + '\n\n' + dynamic;
   try{ state.results = state.results || {}; state.results.sbNormalizationPrompt = buildSbNormalizationPrompt(); }catch(e){}
+  if(sgmpGlobalApiEnabled() && sgmpStageUseApi('lmp_analysis')){
+    showMsg('cargaMsg','ok','Ejecutando IA para análisis por bloques...');
+    showLoader('Generando análisis con IA...', 'Etapa B · Flujo por bloques.');
+    try{
+      const result = await sgmpCallAI('lmp_analysis', prompt);
+      if(qs('iaResponseEditor')) qs('iaResponseEditor').value = sgmpAIResultText(result);
+      // SGMP: procesamiento global eliminado. El usuario debe procesar por etapa.
+      refreshCargaFlowState();
+      hideLoader();
+      return;
+    }catch(error){
+      hideLoader();
+      if(qs('analysisPromptEditor')) qs('analysisPromptEditor').value = prompt;
+      refreshCargaFlowState();
+      showMsg('cargaMsg','warn','Modo manual activado. No fue posible ejecutar la IA automáticamente. Detalle: ' + error.message);
+      return;
+    }
+  }
   if(qs('analysisPromptEditor')) qs('analysisPromptEditor').value = prompt;
   refreshCargaFlowState();
-  showMsg('cargaMsg','ok','Prompt B generado correctamente desde Sheet.');
+  showMsg('cargaMsg','ok','Prompt B generado correctamente.');
 }
-
 
 function buildSbNormalizationPrompt(){
   const analysis = state.analysis || {};
@@ -7306,8 +7462,58 @@ function buildSbNormalizationPrompt(){
   const decision = state.decision || {};
   const tobe = state.tobe || {};
   const c = state.context || {};
-  const base = sgmpPromptRequired(['prompt_sb_normalization','prompt_sb_contract_builder'], 'prompt_sb_normalization / prompt_sb_contract_builder');
-  return base + '\n\nINSUMOS PARA NORMALIZACIÓN SB:\n' + JSON.stringify({context:c, analysis, asis, decision, tobe}, null, 2);
+  return `ACTÚA COMO normalizador contractual entre módulos SGMP.
+
+OBJETIVO:
+Tomar el análisis completo, el AS IS validado, el TO BE aprobado y las decisiones finales del proceso para construir SOLO un bloque sipoc_input limpio y compatible con SIPOC Builder.
+
+REGLAS CRÍTICAS:
+- Devuelve SOLO JSON válido.
+- Construye SOLO el bloque sipoc_input listo para el contrato LMP → SIPOC Builder.
+- NO copies métricas AVA, waste counts ni quick wins dentro de notes.
+- notes debe contener solo notas semánticas del proceso en texto.
+- process_name y purpose no pueden quedar vacíos.
+- activities debe tener al menos una actividad.
+- previous y next deben ser arrays.
+- type debe ser uno de: operation, decision, control, document, end.
+- Limpia y deduplica actors, documents, suppliers, inputs, outputs y customers.
+- No mezcles actores internos con proveedores o clientes externos.
+- Si falta evidencia para algún campo, completa con la mejor inferencia razonable y marca la limitación en notes.
+
+SALIDA ESPERADA:
+{
+  "sipoc_input": {
+    "process_code": "",
+    "process_name": "",
+    "purpose": "",
+    "start_event": "",
+    "end_event": "",
+    "notes": "",
+    "suppliers": [],
+    "inputs": [],
+    "outputs": [],
+    "customers": [],
+    "actors": [],
+    "documents": [],
+    "activities": []
+  }
+}
+
+INSUMOS:
+CONTEXT:
+${JSON.stringify(c, null, 2)}
+
+AS_IS:
+${JSON.stringify(asis, null, 2)}
+
+ANALYSIS:
+${JSON.stringify(analysis, null, 2)}
+
+DECISION:
+${JSON.stringify(decision, null, 2)}
+
+TO_BE:
+${JSON.stringify(tobe, null, 2)}`;
 }
 
 
@@ -7329,18 +7535,59 @@ function buildSbContractBuilderInput(){
 
 function buildSbContractBuilderPrompt(){
   const input = buildSbContractBuilderInput();
-  const staticBase = sgmpPromptRequired('prompt_sb_contract_builder', 'prompt_sb_contract_builder');
+  const fallback = [
+    'ACTUA COMO builder contractual final LMP -> SIPOC Builder.',
+    '',
+    'OBJETIVO:',
+    'Construir exactamente el JSON que consume SIPOC Builder, sin cambiar el contrato y sin omitir informacion operacional disponible.',
+    '',
+    'REGLAS CRITICAS:',
+    '- Devuelve SOLO JSON valido.',
+    '- La raiz debe ser { "sipoc_input": { ... } }.',
+    '- Debe existir al menos una actividad.',
+    '- Debe existir exactamente un is_start = true.',
+    '- Debe existir exactamente un is_end = true.',
+    '- actors debe construirse desde activities.actor.',
+    '- suppliers debe construirse desde activities.ext_suppliers.',
+    '- inputs debe construirse desde activities.ext_inputs.',
+    '- outputs debe construirse desde activities.ext_outputs.',
+    '- customers debe construirse desde activities.ext_customers.',
+    '- No dejes listas vacias si existe informacion en actividades.',
+    '- previous y next deben referenciar nombres reales de actividades.',
+    '- Cada actividad debe incluir: name, type, actor, document, previous, next, ext_suppliers, ext_inputs, ext_outputs, ext_customers, is_start, is_end, note.',
+    '- type debe ser uno de: operation, decision, control, document, end.',
+    '- No agregues campos fuera de sipoc_input.',
+    '',
+    'CONTRATO ESPERADO:',
+    '{',
+    '  "sipoc_input": {',
+    '    "process_code": "",',
+    '    "process_name": "",',
+    '    "purpose": "",',
+    '    "start_event": "",',
+    '    "end_event": "",',
+    '    "notes": "",',
+    '    "suppliers": [],',
+    '    "inputs": [],',
+    '    "outputs": [],',
+    '    "customers": [],',
+    '    "actors": [],',
+    '    "documents": [],',
+    '    "activities": []',
+    '  }',
+    '}'
+  ].join('\n');
+  const staticBase = sgmpPrompt('prompt_sb_contract_builder', fallback);
   return staticBase + '\n\nINSUMOS LMP PARA CONSTRUIR EL CONTRATO FINAL:\n' + JSON.stringify(input, null, 2);
 }
-
 
 async function generateSbContractBuilderPrompt(){
   const prompt = buildSbContractBuilderPrompt();
   if(sgmpGlobalApiEnabled() && sgmpStageUseApi('lmp_sb_contract')){
-    showMsg('sbContractMsg','ok','Prompt generado para contrato SB...');
+    showMsg('sbContractMsg','ok','Ejecutando IA para contrato SB...');
     showLoader('Generando contrato SB con IA...', 'Etapa C · Normalizando el contrato LMP → SIPOC Builder.');
     try{
-      const result = await sgmpOfflineManualOnly('lmp_sb_contract', prompt);
+      const result = await sgmpCallAI('lmp_sb_contract', prompt);
       if(qs('sbContractResponseEditor')) qs('sbContractResponseEditor').value = sgmpAIResultText(result);
       validateSbContractBuilderResponse();
       if(state.sbContractBuilder && state.sbContractBuilder.raw && state.sbContractBuilder.validation && !state.sbContractBuilder.validation.errors.length){
@@ -7353,7 +7600,7 @@ async function generateSbContractBuilderPrompt(){
       hideLoader();
       if(qs('sbContractPromptEditor')) qs('sbContractPromptEditor').value = prompt;
       refreshCargaFlowState();
-      showMsg('sbContractMsg','warn','Modo manual: pega la respuesta JSON. Detalle técnico: ' + error.message);
+      showMsg('sbContractMsg','warn','Modo manual activado. No fue posible ejecutar la IA automáticamente. Detalle: ' + error.message);
       return;
     }
   }
@@ -7677,12 +7924,12 @@ function mergeContextSources(){
 }
 
 
-/* ====
+/* =========================
    SGMP FIX · EXTRACCIÓN ROBUSTA DE ACTIVIDADES FUENTE
    Objetivo: no perder actividades cuando los insumos vienen como JSON maestro
    con estructuras tipo proceso.actividades, entrevista.actividades_referenciadas,
    documentos_por_actividad o cuestionarios con respuestas narrativas.
-==== */
+========================= */
 function sgmpTextFromAny(value){
   if(value === undefined || value === null) return '';
   if(Array.isArray(value)) return value.map(sgmpTextFromAny).filter(Boolean).join('; ');
@@ -7947,17 +8194,86 @@ function mergeMaster(){
 }
 
 function buildWarRoomPrompt(master){
-  const c = master.context || state.context || {};
-  const docs = safeArray(master.notes?.additionalDocuments).map(d => `DOCUMENTO: ${d.name}\n${d.content || d.preview || ''}`).join('\n\n----------------\n\n') || '[Sin documentos adicionales]';
-  const dynamicSection = `CONSOLIDADO MAESTRO:\n${JSON.stringify(master, null, 2)}\n\nDOCUMENTOS ADICIONALES:\n${docs}`;
-  const staticBase = sgmpPromptRequired('prompt_analysis', 'prompt_analysis');
-  return staticBase
-    .replace('{{industry}}', c.industry || '[INDUSTRIA]')
-    .replace('{{activity}}', c.activity || '[ACTIVIDAD]')
-    .replace('{{processType}}', c.processType || '[TIPO_PROCESO]')
-    + '\n\n' + dynamicSection;
-}
+  const c = master.context || {};
+  const docs = (master.notes?.additionalDocuments || []).map(d => `DOCUMENTO: ${d.name}\n${d.content}`).join('\n\n----------------\n\n') || '[Sin documentos adicionales]';
 
+  // Parte dinámica: siempre se ensambla en tiempo de ejecución
+  const dynamicSection = `CONTEXTO:
+Empresa: ${c.company || ''}
+Proceso: ${c.processName || ''}
+Código: ${c.processCode || ''}
+Industria: ${c.industry || ''}
+Actividad: ${c.activity || ''}
+Tipo de proceso: ${c.processType || ''}
+Finalidad: ${c.purpose || ''}
+
+CONSOLIDADO_MAESTRO:
+${JSON.stringify(master, null, 2)}
+
+VALIDACIÓN DURA DE ACTIVIDADES:
+- Si CONSOLIDADO_MAESTRO.activities contiene más de 10 actividades, tu salida as_is.activities debe contener al menos 10 actividades y preferiblemente conservarlas todas.
+- No agrupes, no resumas y no elimines actividades del flujo fuente.
+- Si devuelves menos actividades que las detectadas en CONSOLIDADO_MAESTRO.activities, corrige internamente antes de responder.
+
+DOCUMENTOS ADICIONALES:
+${docs}`;
+
+  // Parte estática: obtener del Sheet, con fallback al prompt base
+  const staticBase = sgmpPrompt('prompt_analysis', null);
+
+  if (staticBase) {
+    // Usar instrucciones del Sheet + variables dinámicas
+    return staticBase
+      .replace('{{industry}}', c.industry || '[INDUSTRIA]')
+      .replace('{{activity}}', c.activity || '[ACTIVIDAD]')
+      .replace('{{processType}}', c.processType || '[TIPO_PROCESO]')
+      + '\n\n' + dynamicSection;
+  }
+
+  // Fallback: prompt completo (solo si Sheet no responde)
+  return `ACTÚA COMO:
+
+1. Consultor senior en procesos, Lean, Six Sigma y TOC
+2. Experto en la industria: ${c.industry || '[INDUSTRIA]'}
+3. Especialista en la actividad de negocio: ${c.activity || '[ACTIVIDAD]'}
+4. Experto en el tipo de proceso: ${c.processType || '[TIPO_PROCESO]'}
+
+` + dynamicSection + `
+
+OBJETIVO GENERAL:
+Analizar toda la información para:
+1. Construir el proceso AS IS completo
+2. Realizar análisis AVA
+3. Identificar desperdicios, problemas, quick wins y restricciones
+4. Detectar oportunidades de mejora
+5. Proponer mejoras con sustento lógico o fuente
+6. Construir un ONE PAGE de decisión
+7. Diseñar el TO BE
+8. Definir indicadores clave
+9. Entregar JSON estructurado
+
+ENTREGAR COMO MÍNIMO:
+- entendimiento del proceso
+- SIPOC
+- AS IS detallado
+- análisis AVA
+- findings
+- improvements
+- one page
+- to_be
+- indicators
+- JSON con esta estructura:
+{
+  "context": {},
+  "sipoc": {},
+  "as_is": {"summary":"","activities":[]},
+  "ava": {"summary":"","distribution":{},"sourcesOfNVA":[]},
+  "findings": {"wastes":[],"problems":[],"restrictions":[],"quickWins":[]},
+  "improvements": [],
+  "to_be": {},
+  "indicators": []
+}`;
+}
 
 function generatePromptFromMaster(){
   const master = state.master || mergeMaster();
@@ -8367,7 +8683,7 @@ function sgmpStrengthenImprovementsFromFindings(data){
 }
 
 
-/* ==
+/* ==========================================================
    SGMP LMP · NORMALIZACIÓN DE CONSISTENCIA
    Objetivo: reducir variabilidad entre corridas IA sin tocar UI.
    Reglas aplicadas:
@@ -8376,7 +8692,7 @@ function sgmpStrengthenImprovementsFromFindings(data){
    - Restricciones: rango objetivo 3 a 6.
    - Mejoras: rango objetivo 6 a 12.
    - No se truncan actividades del proceso.
-   == */
+   ========================================================== */
 const SGMP_LMP_STABILITY_RULES = {
   wastes: { min: 5, max: 10 },
   restrictions: { min: 3, max: 6 },
@@ -8594,17 +8910,248 @@ function sgmpEnrichAnalysisModel(data){
 }
 
 function sgmpGetAnalysisStageDefinitions(){
-  const req = (keys, label) => sgmpPromptRequired(keys, label);
-  return {
-    B1:{ label:'B1 · Validación AS IS', stageCode:'lmp_analysis_b1', instruction:req('prompt_analysis_b1', 'prompt_analysis_b1') },
-    B2:{ label:'B2 · Análisis AVA', stageCode:'lmp_analysis_b2', instruction:req('prompt_analysis_b2', 'prompt_analysis_b2') },
-    B3:{ label:'B3 · Desperdicios y problemas', stageCode:'lmp_analysis_b3', instruction:req('prompt_analysis_b3', 'prompt_analysis_b3') },
-    B4:{ label:'B4 · Restricciones y causa probable', stageCode:'lmp_analysis_b4', instruction:req('prompt_analysis_b4', 'prompt_analysis_b4') },
-    B5:{ label:'B5 · Mejoras aplicadas', stageCode:'lmp_analysis_b5', instruction:req(['prompt_analysis_b5','prompt_improvements'], 'prompt_analysis_b5 / prompt_improvements') },
-    B6:{ label:'B6 · Contrato para SIPOC Builder', stageCode:'lmp_analysis_b6', instruction:req('prompt_analysis_b6', 'prompt_analysis_b6') }
-  };
+  const p = (key, fallback) => (typeof sgmpPrompt === 'function' ? sgmpPrompt(key, fallback) : fallback);
+  const fallbackB1 = `ACTÚA COMO consultor senior en procesos y modelador AS IS.
+
+OBJETIVO B1:
+Validar, limpiar y estructurar el AS IS usando como fuente principal source_activities.
+
+REGLAS:
+- No hagas análisis de mejoras todavía.
+- No hagas AVA todavía.
+- No reduzcas ni agrupes actividades.
+- Conserva todas las actividades estructurales.
+- Corrige continuidad previous/next si hay vacíos.
+- Marca una sola actividad inicial y una sola final.
+
+SALIDA JSON ESTRICTA:
+{
+  "as_is": {"activities": []},
+  "validation": {"valid": true, "activity_count": 0, "warnings": [], "blockingIssues": []}
+}`;
+
+  const fallbackB2 = `ACTÚA COMO especialista Lean Six Sigma.
+
+OBJETIVO B2:
+Clasificar cada actividad AS IS en VA, NNVA o NVA, con evidencia breve.
+
+REGLAS:
+- Usa solo las actividades recibidas.
+- No elimines ni renombres actividades.
+- No propongas mejoras todavía.
+- Devuelve distribución porcentual y detalle por actividad.
+- Usa clasificación estable por actividad: cada actividad debe tener una sola clasificación VA, NNVA o NVA.
+- No devuelvas porcentajes estimados libres; los porcentajes deben derivarse del conteo de actividades clasificadas.
+- Valores extremos de VA (<3% o >25%) solo son aceptables si la evidencia por actividad lo sostiene claramente.
+
+SALIDA JSON ESTRICTA:
+{
+  "as_is": {"activities": []},
+  "ava": {"distribution": {"VA": 0, "NNVA": 0, "NVA": 0}, "activityAnalysis": [], "evidence": []}
+}`;
+
+  const fallbackB3 = `ACTÚA COMO experto Lean, análisis de desperdicios y diagnóstico operativo.
+
+OBJETIVO B3:
+Detectar desperdicios, problemas, riesgos, dependencias manuales, controles ocultos y evidencias desde el AS IS y el brief.
+
+REGLAS:
+- No diseñes TO BE.
+- No hagas contrato SB.
+- Cada hallazgo debe tener evidencia o actividad relacionada cuando sea posible.
+- Debes identificar entre 5 y 10 desperdicios relevantes.
+- No trunques listas críticas; prioriza evidencia operativa sobre generalidades.
+- No agrupes problemas distintos en un mismo hallazgo.
+
+SALIDA JSON ESTRICTA:
+{
+  "findings": {
+    "wastes": [],
+    "problems": [],
+    "risks": [],
+    "evidence_highlights": [],
+    "manual_dependencies": [],
+    "hidden_controls": [],
+    "contradictions_detected": []
+  }
+}`;
+
+  const fallbackB4 = `ACTÚA COMO especialista TOC, causa raíz y flujo operativo.
+
+OBJETIVO B4:
+Identificar restricciones, cuellos de botella, causas probables y puntos de bloqueo del proceso.
+
+REGLAS:
+- Diferencia restricción real de problema general.
+- No propongas aún el plan TO BE completo.
+- Relaciona restricciones con actividades cuando aplique.
+
+SALIDA JSON ESTRICTA:
+{
+  "findings": {
+    "restrictions": [],
+    "suspected_constraints": [],
+    "bottlenecks": [],
+    "rootCauseHypotheses": [],
+    "controlIssues": [],
+    "dataGaps": []
+  }
+}`;
+
+  const fallbackB5 = `ACTÚA COMO:
+
+- Consultor senior en mejora continua, Lean, Six Sigma, TOC y BPM.
+- Especialista en rediseño operativo aplicado a la industria del proceso.
+- Analista crítico de buenas prácticas operativas y tecnológicas.
+- Consultor capaz de adaptar prácticas de otras industrias cuando sean lógicas y aplicables.
+
+OBJETIVO B5:
+Convertir los hallazgos de B1, B2, B3 y B4 en propuestas de mejora específicas, accionables y defendibles.
+
+B5 NO debe analizar desde cero.
+B5 debe usar los resultados anteriores como fuente de verdad.
+
+FUENTES OBLIGATORIAS:
+- previous_stage_results.B1.as_is.activities
+- previous_stage_results.B2.ava
+- previous_stage_results.B3.findings
+- previous_stage_results.B4.findings
+- brief
+- context.industry
+- context.activity
+- context.processType
+
+REGLAS CRÍTICAS:
+1. PROHIBIDO generar mejoras genéricas.
+No uses recomendaciones vagas como:
+- mejorar comunicación
+- optimizar el proceso
+- automatizar el proceso
+- capacitar al personal
+- hacer seguimiento
+
+Si una idea usa una de esas frases, debe explicar exactamente:
+- qué se implementa
+- en qué actividad aplica
+- cómo funciona
+- qué dato, documento, sistema, rol o control cambia
+- qué buena práctica la respalda
+
+2. TRAZABILIDAD OBLIGATORIA.
+Cada mejora debe vincularse con al menos:
+- una actividad real del AS IS
+- un problema, desperdicio, riesgo, restricción o causa probable de B2-B4
+
+2.1 COBERTURA MÍNIMA OBLIGATORIA.
+No agrupes hallazgos distintos en una sola mejora salvo que compartan la misma causa raíz y exactamente el mismo mecanismo de solución.
+Si B3+B4 contienen más de 8 hallazgos relevantes, genera al menos 6 mejoras.
+Si existen hallazgos sobre cotizaciones, ERP/visibilidad, SLA/especificaciones, sobrecarga, catálogo, aprobación, material no conforme o urgencias, cada tema debe tener su propia mejora.
+Una salida de solo 1 o 2 mejoras es inválida cuando hay múltiples hallazgos.
+
+3. ADAPTACIÓN A INDUSTRIA.
+Cada mejora debe indicar una referencia práctica:
+- buena práctica de la misma industria, o
+- práctica de otra industria adaptada al caso.
+Ejemplos válidos: portales RFQ de retail adaptados a compras industriales; kanban de manufactura aplicado a abastecimiento; workflow aprobatorio de banca adaptado a compras; tracking logístico de e-commerce adaptado a OC.
+
+4. MECANISMO DE SOLUCIÓN.
+No basta con decir qué hacer. Explica cómo se ejecuta.
+
+5. CLASIFICACIÓN CONSULTIVA.
+Clasifica cada mejora como:
+- quick_win
+- gradual
+- strategic
+- automation
+- control
+- redesign
+
+6. PRIORIZACIÓN.
+Incluye impacto, esfuerzo y prioridad argumentada.
+
+ESTRUCTURA OBLIGATORIA DE CADA MEJORA:
+{
+  "id": "",
+  "title": "",
+  "type": "quick_win|gradual|strategic|automation|control|redesign",
+  "applies_to_activity": "",
+  "linked_finding": "",
+  "problem": "",
+  "root_cause": "",
+  "solution": "",
+  "how_it_works": "",
+  "industry_reference": "",
+  "adaptation_logic": "",
+  "expected_impact": "",
+  "impact_level": "low|medium|high",
+  "effort_level": "low|medium|high",
+  "priority_score": "",
+  "implementation_steps": [],
+  "required_roles": [],
+  "required_systems_or_documents": [],
+  "risks": [],
+  "success_indicators": [],
+  "status": "pending"
 }
 
+SALIDA JSON ESTRICTA:
+{
+  "quickWins": [],
+  "improvements": []
+}
+
+VALIDACIÓN FINAL:
+Antes de responder, verifica:
+- ¿Cada mejora está ligada a una actividad real?
+- ¿Cada mejora tiene hallazgo asociado?
+- ¿Cada mejora explica cómo se implementa?
+- ¿Cada mejora está adaptada al contexto/industria?
+- ¿El output alimenta directamente TO BE?
+- Debes proponer entre 6 y 12 mejoras.
+- 1 hallazgo relevante debe generar mínimo 1 mejora trazable, salvo que esté duplicado.
+- No agrupes problemas distintos en una sola mejora.
+
+Si alguna respuesta es NO, corrige antes de responder.`;
+
+  const fallbackB6 = `ACTÚA COMO builder contractual final LMP → SIPOC Builder.
+
+OBJETIVO B6:
+Construir el bloque sipoc_input usando el AS IS validado y los datos SIPOC disponibles.
+
+REGLAS:
+- Devuelve SOLO sipoc_input.
+- No incluyas análisis, métricas ni mejoras.
+- previous y next deben ser arrays.
+- activities debe conservar todas las actividades AS IS.
+
+SALIDA JSON ESTRICTA:
+{
+  "sipoc_input": {
+    "process_code": "",
+    "process_name": "",
+    "purpose": "",
+    "start_event": "",
+    "end_event": "",
+    "notes": "",
+    "suppliers": [],
+    "inputs": [],
+    "outputs": [],
+    "customers": [],
+    "actors": [],
+    "documents": [],
+    "activities": []
+  }
+}`;
+
+  return {
+    B1:{ label:'B1 · Validación AS IS', stageCode:'lmp_analysis_b1', instruction:p('prompt_analysis_b1', fallbackB1) },
+    B2:{ label:'B2 · Análisis AVA', stageCode:'lmp_analysis_b2', instruction:p('prompt_analysis_b2', fallbackB2) },
+    B3:{ label:'B3 · Desperdicios y problemas', stageCode:'lmp_analysis_b3', instruction:p('prompt_analysis_b3', fallbackB3) },
+    B4:{ label:'B4 · Restricciones y causa probable', stageCode:'lmp_analysis_b4', instruction:p('prompt_analysis_b4', fallbackB4) },
+    B5:{ label:'B5 · Mejoras aplicadas', stageCode:'lmp_analysis_b5', instruction:p('prompt_analysis_b5', p('prompt_improvements', fallbackB5)) },
+    B6:{ label:'B6 · Contrato para SIPOC Builder', stageCode:'lmp_analysis_b6', instruction:p('prompt_analysis_b6', fallbackB6) }
+  };
+}
 
 function sgmpBuildAnalysisStagePrompt(stageKey){
   const defs = sgmpGetAnalysisStageDefinitions();
@@ -9912,6 +10459,33 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
 })();
 </script>
 
+<script>
+(function(){
+  var C="LMP",API="https://script.google.com/macros/s/AKfycbyQZi1flaILc4e3I7MFp8gLctkzC6VccjfFz5aHluMrGZLwOUeS3uQaHPsMZ3l5yfDw-Q/exec";
+  var IDS={agent_name:"sgmp-agent-name",agent_code:"sgmp-agent-code",agent_slogan:"sgmp-agent-slogan",
+    agent_module:"sgmp-agent-module",hero_title:"sgmp-hero-title",hero_subtitle:"sgmp-hero-subtitle",app_version:"sgmp-version-pill"};
+  function apply(d){
+    Object.keys(IDS).forEach(function(f){var el=document.getElementById(IDS[f]);
+      if(el&&d[f]&&String(d[f]).trim())el.textContent=String(d[f]).trim();});
+    if(d.accent_color&&/^#[0-9a-fA-F]{3,6}$/.test(d.accent_color.trim()))
+      document.documentElement.style.setProperty("--sgmp-accent",d.accent_color.trim());
+    var hero=document.querySelector('.sgmp-hero')||document.querySelector('.hero');
+    if(hero){hero.style.opacity='1';hero.style.transition='opacity 0.3s ease';}
+  }
+  var k="sgmp_id_"+C;
+  function load(){
+    try{var r=sessionStorage.getItem(k);if(r){var o=JSON.parse(r);if(Date.now()-o._ts<300000){apply(o.d);return;}}}catch(e){}
+    fetch(API+"?action=get_module_identity&code="+C)
+      .then(function(r){return r.json();})
+      .then(function(res){if(res.ok&&res.data){
+        try{sessionStorage.setItem(k,JSON.stringify({_ts:Date.now(),d:res.data}));}catch(e){}
+        apply(res.data);}}).catch(function(){});
+  }
+  document.readyState==="loading"?document.addEventListener("DOMContentLoaded",load):load();
+})();
+</script>
+
+
 <!-- ═══════════════════ TIMER SGMP v3 · LMP ═══════════════════ -->
 <div id="sgmp_v3_timer" class="sgmp-timer-collapsed" aria-live="polite" aria-expanded="false" role="button" tabindex="0" title="Tocar para ver detalle de tiempos">
   <span class="sgmp-time-icon" aria-hidden="true">⏱</span>
@@ -9938,8 +10512,8 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
 <div id="sgmpLoaderOverlay" aria-live="polite" aria-busy="false" style="display:none;position:fixed;inset:0;background:rgba(7,28,54,.58);z-index:99999;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);">
   <div style="width:min(420px, calc(100vw - 32px));background:linear-gradient(135deg,#071C36,#0B2E59);color:#FFFFFF;border:1px solid rgba(0,194,255,.28);border-radius:22px;padding:24px 26px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.32),0 0 32px rgba(0,194,255,.16);">
     <div style="width:54px;height:54px;margin:0 auto 14px;border-radius:50%;border:4px solid rgba(255,255,255,.20);border-top-color:#00C2FF;animation:sgmpSpin .9s linear infinite;"></div>
-    <div id="sgmpLoaderMessage" style="font-size:1.05rem;font-weight:900;letter-spacing:.01em;margin-bottom:8px;">Procesando etapa manual...</div>
-    <div id="sgmpLoaderDetail" style="font-size:.9rem;line-height:1.45;color:rgba(255,255,255,.78);">Validando información local del módulo.</div>
+    <div id="sgmpLoaderMessage" style="font-size:1.05rem;font-weight:900;letter-spacing:.01em;margin-bottom:8px;">Procesando con IA...</div>
+    <div id="sgmpLoaderDetail" style="font-size:.9rem;line-height:1.45;color:rgba(255,255,255,.78);">Esto puede tomar unos segundos. No cierres esta ventana.</div>
   </div>
 </div>
 <style>
@@ -10001,13 +10575,13 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
       state.analysisStages = state.analysisStages || { current:'B1', results:{} }; state.analysisStages.current = stageKey;
       const prompt = window.generateAnalysisScreenPrompt(stageKey); if(!prompt) return;
       if(typeof showLoader === 'function') showLoader('Ejecutando ' + stageKey + ' con IA...', 'Procesando etapa individual del análisis.');
-      if(typeof showMsg === 'function') showMsg(msgId,'ok','Prompt generado para ' + stageKey + '...');
-      const result = await sgmpOfflineManualOnly(def.stageCode || ('lmp_analysis_' + String(stageKey).toLowerCase()), prompt);
+      if(typeof showMsg === 'function') showMsg(msgId,'ok','Ejecutando IA para ' + stageKey + '...');
+      const result = await sgmpCallAI(def.stageCode || ('lmp_analysis_' + String(stageKey).toLowerCase()), prompt);
       const text = (typeof sgmpAIResultText === 'function') ? sgmpAIResultText(result) : (result?.text || String(result || ''));
       const responseBox = el('analysisResponse_' + stageKey); if(responseBox) responseBox.value = text;
       window.processAnalysisScreenStage(stageKey);
-      if(typeof showMsg === 'function') showMsg(msgId,'ok','Etapa ' + stageKey + ' procesada.');
-    }catch(error){ console.error('[LMP ' + stageKey + '] Error:', error); if(typeof showMsg === 'function') showMsg(msgId,'err','Modo offline: genera/copia el prompt para ' + stageKey + '. Pega una respuesta JSON manual. Detalle: ' + error.message); }
+      if(typeof showMsg === 'function') showMsg(msgId,'ok','Etapa ' + stageKey + ' ejecutada y procesada.');
+    }catch(error){ console.error('[LMP ' + stageKey + '] Error:', error); if(typeof showMsg === 'function') showMsg(msgId,'err','No se pudo ejecutar la API para ' + stageKey + '. Puedes pegar una respuesta manual. Detalle: ' + error.message); }
     finally{ if(typeof hideLoader === 'function') hideLoader(); }
   };
   window.processAnalysisScreenStage = function(stageKey){
@@ -10101,308 +10675,5 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
   window.saveAnalysisAndContinue = function(){ showSection('decision'); };
 })();
 </script>
-
-<script id="sgmp-offline-hybrid-contracts">
-(function(){
-  'use strict';
-  const PEND = 'pendiente_validacion';
-  function byId(id){ return document.getElementById(id); }
-  function arr(v){ return Array.isArray(v) ? v : (v === undefined || v === null || v === '' ? [] : [v]); }
-  function txt(v){
-    if(v === undefined || v === null) return '';
-    if(Array.isArray(v)) return v.map(txt).filter(Boolean).join('; ');
-    if(typeof v === 'object') return String(v.title || v.name || v.activity_name || v.problem || v.description || v.summary || v.value || JSON.stringify(v)).trim();
-    return String(v).trim();
-  }
-  function safe(v){ const t = txt(v); return t || PEND; }
-  function uniq(list){ const out=[], seen=new Set(); arr(list).forEach(x=>{ const t=txt(x); const k=t.toLowerCase(); if(t && !seen.has(k)){seen.add(k); out.push(t);} }); return out; }
-  function htmlEsc(v){ return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-  function listHtml(list, empty){ const a=arr(list).map(txt).filter(Boolean); return a.length ? '<ul>'+a.map(x=>'<li>'+htmlEsc(x)+'</li>').join('')+'</ul>' : '<p>'+htmlEsc(empty || PEND)+'</p>'; }
-  function first(...vals){ return vals.map(txt).find(Boolean) || ''; }
-  function getState(){ window.state = window.state || {}; return window.state; }
-  function show(id,type,msg){ if(typeof window.showMsg === 'function') window.showMsg(id,type,msg); else { const el=byId(id); if(el){el.className='msg show '+type; el.textContent=msg;} } }
-  function copyTextLocal(value, msgId, ok){
-    value = String(value || '');
-    if(!value.trim()){ show(msgId || 'outputsMsg','warn','No hay información para copiar.'); return; }
-    if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(value).then(()=>show(msgId || 'outputsMsg','ok',ok || 'Copiado correctamente.')).catch(()=>fallback(value)); }
-    else fallback(value);
-    function fallback(text){ const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy'); show(msgId || 'outputsMsg','ok',ok || 'Copiado correctamente.');}catch(e){show(msgId || 'outputsMsg','err','No fue posible copiar.');} ta.remove(); }
-  }
-  function downloadTextLocal(name, value, type){
-    const blob = new Blob([String(value || '')], {type:type || 'application/json;charset=utf-8'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
-  }
-
-  window.extractJsonFromText = function(raw){
-    const text = String(raw || '').trim();
-    if(!text) throw new Error('No hay contenido para procesar.');
-    try{return JSON.parse(text);}catch(e){}
-    const fences = [/```json\s*([\s\S]*?)```/i, /```\s*([\s\S]*?)```/i];
-    for(const rx of fences){ const m=text.match(rx); if(m && m[1]){ try{return JSON.parse(m[1].trim());}catch(e){} } }
-    const candidates = [];
-    const firstObj=text.indexOf('{'), lastObj=text.lastIndexOf('}'); if(firstObj>=0 && lastObj>firstObj) candidates.push(text.slice(firstObj,lastObj+1));
-    const firstArr=text.indexOf('['), lastArr=text.lastIndexOf(']'); if(firstArr>=0 && lastArr>firstArr) candidates.push(text.slice(firstArr,lastArr+1));
-    for(const c of candidates){ try{return JSON.parse(c);}catch(e){} }
-    throw new Error('JSON inválido: no se pudo extraer un objeto o arreglo JSON parseable.');
-  };
-
-  const oldNormalizeImprovement = window.normalizeImprovement;
-  window.normalizeImprovement = function(item){
-    const base = oldNormalizeImprovement ? oldNormalizeImprovement(item || {}) : (item || {});
-    const statusRaw = first(item?.status, base.status, item?.decision, item?.estado).toLowerCase();
-    const status = ['execute','custom','pending','rejected'].includes(statusRaw) ? statusRaw : (statusRaw === 'reject' || statusRaw === 'discard' || statusRaw === 'rejected' ? 'rejected' : (statusRaw === 'adjust' ? 'custom' : 'pending'));
-    return Object.assign({}, base, {
-      title: first(item?.title, item?.name, item?.titulo, base.title) || PEND,
-      improvement_type: first(item?.improvement_type, item?.improvementType, item?.type, item?.tipo, base.improvement_type, base.type) || PEND,
-      expected_benefit: first(item?.expected_benefit, item?.expectedBenefit, item?.benefitType, item?.benefit, item?.impact, item?.summary, base.expected_benefit, base.expected_impact, base.impact) || PEND,
-      problem_to_solve: first(item?.problem_to_solve, item?.problemToSolve, item?.problem, item?.problemSolved, item?.relatedProblem, item?.summary, base.problem_to_solve, base.problem, base.linked_finding) || PEND,
-      status
-    });
-  };
-
-  function normalizeActivity(a, i, list){
-    a = a || {};
-    const name = first(a.name, a.activity_name, a.activity, a.actividad, a.title) || ('Actividad ' + (i+1));
-    const typeRaw = first(a.type, a.tipo, a.activity_type).toLowerCase();
-    const type = typeRaw === 'decision' || typeRaw === 'decisión' ? 'decision' : 'operation';
-    return {
-      id: first(a.id, a.code, a.codigo, a.activity_id) || ('ACT-' + String(i+1).padStart(2,'0')),
-      name,
-      actor: first(a.actor, a.role, a.responsable, a.owner, a.area) || PEND,
-      type,
-      document: first(a.document, a.documento, a.documents, a.record) || '',
-      previous: uniq(a.previous || a.prev || a.predecessors || (i>0 ? [first(list[i-1]?.name, list[i-1]?.activity_name, list[i-1]?.activity)] : [])),
-      next: uniq(a.next || a.successors || (i<list.length-1 ? [first(list[i+1]?.name, list[i+1]?.activity_name, list[i+1]?.activity)] : [])),
-      is_start: i === 0,
-      is_end: i === list.length - 1,
-      ava: first(a.ava, a.ava_classification, a.avaClassification, a.classification) || 'NNVA',
-      notes: first(a.notes, a.note, a.description, a.descripcion) || ''
-    };
-  }
-  function sourceActivities(mode){
-    const s=getState();
-    const tobeActs = arr(s.to_be?.activities || s.tobe?.activities || s.tobe?.future_flow || s.tobe?.construction?.futureFlow);
-    const asisActs = arr(s.asis?.activities || s.analysis?.as_is?.activities || s.analysis?.activities || s.brief?.as_is?.activities || s.master?.activities);
-    const selected = mode === 'to_be' && tobeActs.length ? tobeActs : asisActs;
-    return selected.map((a,i)=>normalizeActivity(a,i,selected));
-  }
-  function context(){
-    const s=getState();
-    const prep = (typeof window.getPreparationContext === 'function') ? window.getPreparationContext() : {};
-    return Object.assign({}, s.context || {}, s.master?.context || {}, prep || {});
-  }
-  function sipocBase(){
-    const s=getState(), ctx=context();
-    const brief = s.briefReview?.raw || s.brief || {};
-    const sipoc = s.master?.sipoc || brief.sipoc || brief.sipocStructured || {};
-    return {
-      process_code: first(ctx.processCode, ctx.process_code, brief.process_code, brief.codigo) || '',
-      process_name: first(ctx.processName, ctx.process_name, brief.process_name, brief.nombre_proceso) || PEND,
-      purpose: first(ctx.purpose, brief.purpose, brief.objective, brief.objetivo, s.master?.purpose) || PEND,
-      start_event: first(brief.start_event, brief.startEvent, sipoc.start_event, ctx.start_event) || PEND,
-      end_event: first(brief.end_event, brief.endEvent, sipoc.end_event, ctx.end_event) || PEND,
-      notes: first(brief.notes, brief.observations, ctx.notes) || '',
-      suppliers: uniq(sipoc.suppliers || s.master?.suppliers || brief.suppliers || []),
-      inputs: uniq(sipoc.inputs || s.master?.inputs || brief.inputs || []),
-      outputs: uniq(sipoc.outputs || s.master?.outputs || brief.outputs || []),
-      customers: uniq(sipoc.customers || s.master?.customers || brief.customers || []),
-      actors: uniq(sipoc.actors || s.master?.actors || brief.actors || []),
-      documents: uniq(sipoc.documents || s.master?.documents || brief.documents || [])
-    };
-  }
-  function routeMode(force){ const s=getState(); return force || (s.decision?.route === 'tobe' ? 'to_be' : 'as_is'); }
-
-  window.buildSBJson = function(forceMode){
-    const mode = routeMode(forceMode);
-    const base = sipocBase();
-    const acts = sourceActivities(mode);
-    return { sipoc_input: Object.assign({}, base, { activities: acts }) };
-  };
-  window.buildDocumentEvaluatorOutput = function(proposal){
-    const s=getState(), ctx=context(), mode=routeMode();
-    const analysis = s.analysis || {};
-    return {
-      process_context: ctx,
-      analysis_context: { route: mode, findings: analysis.findings || {}, controls: analysis.controls || [], risks: analysis.risks || analysis.findings?.risks || [], improvements_selected: arr(s.tobe?.improvements).filter(x => ['execute','custom'].includes(x.status)) },
-      approval_context: { required_validation: true, validations_to_do: arr(analysis.validations_to_do || analysis.validationsToDo || analysis.dataGaps) },
-      document_proposal: arr(proposal || s.results?.documentProposal || analysis.document_proposal || analysis.documentProposal).map(x => typeof x === 'object' ? x : { document_name: txt(x), validation_required: true })
-    };
-  };
-  window.buildIntegrationOutput = function(){
-    const base=sipocBase();
-    return { process_code: base.process_code, process_name: base.process_name, suppliers: base.suppliers, inputs: base.inputs, outputs: base.outputs, customers: base.customers };
-  };
-  window.buildCapacitySimulatorOutput = function(){
-    return { activities: sourceActivities(routeMode()).map((a,i)=>({ order:i+1, name:a.name, actor:a.actor, type:a.type, ava:['VA','NNVA','NVA'].includes(a.ava) ? a.ava : 'NNVA' })) };
-  };
-
-  function masterState(){
-    const s=getState();
-    return {
-      context: context(),
-      brief: s.briefReview?.raw || s.brief || {},
-      as_is_analysis: s.analysis || {},
-      ava: s.analysis?.ava || {},
-      findings: s.analysis?.findings || {},
-      improvements: arr(s.tobe?.improvements || s.analysis?.improvements).map(window.normalizeImprovement),
-      to_be: s.tobe || s.to_be || {},
-      reports: { as_is: s.results?.reports?.as_is || {}, to_be: s.results?.reports?.to_be || {} },
-      final_outputs: { sipoc_builder: window.buildSBJson(), document_evaluator: window.buildDocumentEvaluatorOutput(), integrator: window.buildIntegrationOutput(), capacity_simulator: window.buildCapacitySimulatorOutput(), json_master: {} }
-    };
-  }
-  window.buildMasterState = masterState;
-
-  function buildPrompt(mode){
-    const s=getState();
-    const payload = { mode, context: context(), brief: s.briefReview?.raw || s.brief || {}, as_is_analysis: s.analysis || {}, ava: s.analysis?.ava || {}, findings: s.analysis?.findings || {}, improvements: arr(s.tobe?.improvements || s.analysis?.improvements).map(window.normalizeImprovement), to_be: s.tobe || {}, contracts: { sipoc_builder: window.buildSBJson(mode), document_evaluator: window.buildDocumentEvaluatorOutput(), integrator: window.buildIntegrationOutput(), capacity_simulator: window.buildCapacitySimulatorOutput() } };
-    const key = mode === 'to_be' ? 'prompt_final_results_to_be' : 'prompt_final_results_as_is';
-    const alt = mode === 'to_be' ? ['prompt_results_to_be','prompt_final_to_be'] : ['prompt_results_as_is','prompt_final_as_is'];
-    const staticBase = sgmpPromptRequired([key].concat(alt), key);
-    return staticBase + '\n\nINSUMOS SGMP:\n' + JSON.stringify(payload,null,2);
-  }
-  window.buildFinalResultsPrompt = function(){ return buildPrompt(routeMode()); };
-  window.generateFinalResultsPrompt = function(){ const mode=routeMode(); window.generateFinalResultsPromptFor(mode); };
-  window.generateFinalResultsPromptFor = function(mode){
-    const prompt=buildPrompt(mode);
-    const id=mode==='to_be'?'finalPromptToBeEditor':'finalPromptAsIsEditor';
-    const box=byId(id) || byId('finalPromptEditor'); if(box) box.value=prompt;
-    const hidden=byId('finalPromptEditor'); if(hidden) hidden.value=prompt;
-    show('finalPromptMsg','ok','Prompt final '+(mode==='to_be'?'TO BE':'AS IS')+' generado.');
-  };
-  window.processFinalResultsResponse = function(){ window.processFinalResultsResponseFor(routeMode()); };
-  window.processFinalResultsResponseFor = function(mode){
-    const id=mode==='to_be'?'finalResponseToBeEditor':'finalResponseAsIsEditor';
-    const raw=(byId(id)?.value || byId('finalResponseEditor')?.value || '').trim();
-    if(!raw){ show('resultsMsg','warn','Pega primero el JSON final '+(mode==='to_be'?'TO BE':'AS IS')+'.'); return; }
-    try{
-      const parsed=window.extractJsonFromText(raw); const s=getState();
-      s.results=s.results || {}; s.results.finalRaw=s.results.finalRaw || {}; s.results.finalRaw[mode]=parsed;
-      s.results.reports=s.results.reports || {}; s.results.reports[mode]=parsed.reports || parsed.informes || parsed.results?.reports || {};
-      s.results.finalOutputs=s.results.finalOutputs || {}; s.results.finalOutputs[mode]=parsed.final_outputs || parsed.finalOutputs || {};
-      show('resultsMsg','ok','JSON final '+(mode==='to_be'?'TO BE':'AS IS')+' validado y cargado.');
-      window.generateResults();
-    }catch(e){ show('resultsMsg','err','JSON inválido: '+e.message); }
-  };
-
-  function renderReportHtml(report, title){
-    if(Array.isArray(report)) return '<h1>'+htmlEsc(title)+'</h1>'+listHtml(report);
-    if(typeof report === 'object' && report){ return '<h1>'+htmlEsc(title)+'</h1><pre>'+htmlEsc(JSON.stringify(report,null,2))+'</pre>'; }
-    return '<h1>'+htmlEsc(title)+'</h1><p>'+htmlEsc(report || PEND)+'</p>';
-  }
-  function activeFinal(mode){ const s=getState(); return s.results?.finalRaw?.[mode] || {}; }
-  window.generateResults = function(){
-    const s=getState(); s.results=s.results || {};
-    const mode=routeMode();
-    const finalRaw = activeFinal(mode);
-    const finalOutputs = finalRaw.final_outputs || finalRaw.finalOutputs || {};
-    const reports = finalRaw.reports || finalRaw.informes || s.results.reports?.[mode] || {};
-    s.results.sbJson = finalOutputs.sipoc_builder || window.buildSBJson(mode);
-    s.results.documentProposal = finalOutputs.document_evaluator || window.buildDocumentEvaluatorOutput(finalOutputs.document_evaluator?.document_proposal);
-    s.results.integrationPayload = finalOutputs.integrator || window.buildIntegrationOutput();
-    s.results.capacityPayload = finalOutputs.capacity_simulator || window.buildCapacitySimulatorOutput();
-    s.results.masterState = masterState();
-    s.results.masterState.final_outputs = { sipoc_builder:s.results.sbJson, document_evaluator:s.results.documentProposal, integrator:s.results.integrationPayload, capacity_simulator:s.results.capacityPayload, json_master:{} };
-    const exec = reports.executive || reports.executive_report || reports.informe_ejecutivo || finalRaw.results?.summary || '';
-    const tech = reports.technical || reports.technical_report || reports.informe_tecnico || finalRaw.results?.technical_summary || '';
-    s.results.executiveHtml = renderReportHtml(exec, 'Informe Ejecutivo '+(mode==='to_be'?'TO BE':'AS IS'));
-    s.results.technicalHtml = renderReportHtml(tech, 'Informe Técnico '+(mode==='to_be'?'TO BE':'AS IS'));
-    s.results.implementationHtml = '<h1>Modo A / Modo B y próximos pasos</h1>' + listHtml(finalRaw.to_be?.mode_a || s.tobe?.modeA || s.tobe?.mode_a, 'Sin Modo A registrado.') + listHtml(finalRaw.to_be?.mode_b || s.tobe?.modeB || s.tobe?.mode_b, 'Sin Modo B registrado.');
-    const map = { sbJsonView:s.results.sbJson, outputsSbView:s.results.sbJson, documentProposalView:s.results.documentProposal, outputsDocumentView:s.results.documentProposal, integrationInputView:s.results.integrationPayload, outputsIntegrationView:s.results.integrationPayload, outputsCapacityView:s.results.capacityPayload, outputsMasterView:s.results.masterState, outputsAsIsReportsView:s.results.reports?.as_is || activeFinal('as_is')?.reports || {}, outputsToBeReportsView:s.results.reports?.to_be || activeFinal('to_be')?.reports || {} };
-    Object.keys(map).forEach(id=>{ const el=byId(id); if(el) el.textContent=JSON.stringify(map[id],null,2); });
-    if(byId('executiveDoc')) byId('executiveDoc').innerHTML=s.results.executiveHtml;
-    if(byId('technicalDoc')) byId('technicalDoc').innerHTML=s.results.technicalHtml;
-    if(byId('implementationView')) byId('implementationView').innerHTML=s.results.implementationHtml;
-    if(byId('executiveText')) byId('executiveText').value=(byId('executiveDoc')?.innerText || '');
-    if(byId('technicalText')) byId('technicalText').value=(byId('technicalDoc')?.innerText || '');
-    show('resultsMsg','ok','Resultados y outputs generados en modo '+(mode==='to_be'?'TO BE':'AS IS')+'.');
-    show('outputsMsg','ok','Outputs actualizados correctamente.');
-  };
-
-  window.renderToBeSummary = function(){
-    const s=getState(); const imps=arr(s.tobe?.improvements || s.analysis?.improvements).map(window.normalizeImprovement); const selected=imps.filter(x=>['execute','custom'].includes(x.status)); const acts=sourceActivities('as_is');
-    const future = selected.length ? selected.map((x,i)=>`${i+1}. ${x.title}: ${x.expected_benefit}`).join('\n') : 'pendiente_validacion';
-    const set = (id, html)=>{ const el=byId(id); if(el) el.innerHTML=html; };
-    set('tobeFutureFlowView','<pre>'+htmlEsc(future)+'</pre>');
-    set('tobeKeptActivitiesView', listHtml(acts.map(a=>a.name), 'pendiente_validacion'));
-    set('tobeAdjustedActivitiesView', listHtml(selected.filter(x=>/ajust|mejor|optim|automat|control/i.test(x.improvement_type+' '+x.title)).map(x=>x.title), 'pendiente_validacion'));
-    set('tobeRemovedActivitiesView', listHtml(selected.filter(x=>/elimin|NVA|nva/i.test(x.improvement_type+' '+x.problem_to_solve)).map(x=>x.title), 'pendiente_validacion'));
-    set('tobeCreatedActivitiesView', listHtml(selected.filter(x=>/crear|nuevo|implement/i.test(x.improvement_type+' '+x.title)).map(x=>x.title), 'pendiente_validacion'));
-    set('tobeChangeReasonView', listHtml(selected.map(x=>`${x.title}: ${x.problem_to_solve}`), 'pendiente_validacion'));
-    set('tobeModeAView', listHtml(selected.filter(x=>x.status==='execute').map(x=>`${x.title}: ${x.expected_benefit}`), 'pendiente_validacion'));
-    set('tobeModeBView', listHtml(selected.filter(x=>x.status==='custom').map(x=>`${x.title}: ${x.expected_benefit}`), 'pendiente_validacion'));
-    set('tobeValidationsView', listHtml(s.analysis?.validations_to_do || s.analysis?.dataGaps || [], 'Sin validaciones adicionales registradas.'));
-  };
-
-  const oldSeed = window.seedImprovementsFromAnalysis;
-  window.seedImprovementsFromAnalysis = function(){ if(oldSeed) oldSeed.apply(this, arguments); const s=getState(); if(s.tobe && Array.isArray(s.tobe.improvements)) s.tobe.improvements=s.tobe.improvements.map(window.normalizeImprovement); if(typeof window.renderImprovements==='function') window.renderImprovements(); window.renderToBeSummary(); };
-  const oldSaveToBe = window.saveToBeAndContinue;
-  window.saveToBeAndContinue = function(){ if(oldSaveToBe) oldSaveToBe.apply(this, arguments); window.renderToBeSummary(); };
-  window.runAnalysisScreenStage = function(stageKey){ window.generateAnalysisScreenPrompt(stageKey); show('analysisMsg_'+stageKey,'ok','Prompt '+stageKey+' generado desde Sheet. Copia el prompt, ejecútalo en una IA externa y pega el JSON de respuesta.'); };
-
-  window.downloadBriefChecklist = function(){
-    const s=getState(); const issues = (typeof window.evaluateBriefCompleteness === 'function') ? window.evaluateBriefCompleteness(s.briefReview?.raw || s.brief || {}) : [];
-    const content = ['Checklist de vacíos del Brief', 'Estado: '+(issues.length ? 'Con vacíos' : 'Sin vacíos detectados'), 'Cantidad: '+issues.length, '', ...(issues.length ? issues.map((x,i)=>(i+1)+'. '+txt(x)) : ['Sin vacíos detectados.'])].join('\n');
-    downloadTextLocal('LMP_checklist_vacios_brief.txt', content, 'text/plain;charset=utf-8');
-  };
-
-  window.copySBJson = function(){ const data=getState().results?.sbJson || window.buildSBJson(); copyTextLocal(JSON.stringify(data,null,2),'outputsMsg','JSON SIPOC Builder copiado.'); };
-  window.downloadSBJson = function(){ const data=getState().results?.sbJson || window.buildSBJson(); downloadTextLocal('lmp_sipoc_builder_input.json', JSON.stringify(data,null,2)); };
-  window.copyDocumentProposalJson = function(){ const data=getState().results?.documentProposal || window.buildDocumentEvaluatorOutput(); copyTextLocal(JSON.stringify(data,null,2),'outputsMsg','JSON Evaluador Documental copiado.'); };
-  window.downloadDocumentProposalJson = function(){ const data=getState().results?.documentProposal || window.buildDocumentEvaluatorOutput(); downloadTextLocal('lmp_document_evaluator_input.json', JSON.stringify(data,null,2)); };
-  window.copyIntegrationJson = function(){ const data=getState().results?.integrationPayload || window.buildIntegrationOutput(); copyTextLocal(JSON.stringify(data,null,2),'outputsMsg','JSON Integrador copiado.'); };
-  window.downloadIntegrationJson = function(){ const data=getState().results?.integrationPayload || window.buildIntegrationOutput(); downloadTextLocal('lmp_integrator_input.json', JSON.stringify(data,null,2)); };
-  window.copyCapacityJson = function(){ const data=getState().results?.capacityPayload || window.buildCapacitySimulatorOutput(); copyTextLocal(JSON.stringify(data,null,2),'outputsMsg','JSON Simulador copiado.'); };
-  window.downloadCapacityJson = function(){ const data=getState().results?.capacityPayload || window.buildCapacitySimulatorOutput(); downloadTextLocal('lmp_capacity_simulator_input.json', JSON.stringify(data,null,2)); };
-  window.copyMasterStateJson = function(){ copyTextLocal(JSON.stringify(masterState(),null,2),'outputsMsg','JSON maestro copiado.'); };
-  window.downloadMasterStateJson = function(){ downloadTextLocal('lmp_json_maestro.json', JSON.stringify(masterState(),null,2)); };
-  window.copyReportsJson = function(mode){ const data=getState().results?.reports?.[mode] || activeFinal(mode)?.reports || {}; copyTextLocal(JSON.stringify(data,null,2),'outputsMsg','Informes '+mode+' copiados.'); };
-  window.downloadReportsJson = function(mode){ const data=getState().results?.reports?.[mode] || activeFinal(mode)?.reports || {}; downloadTextLocal('lmp_informes_'+mode+'.json', JSON.stringify(data,null,2)); };
-
-  const oldShowSection = window.showSection;
-  window.showSection = function(id){
-    if(id === 'analisis') id='analisis_b1';
-    const result = oldShowSection ? oldShowSection.call(this,id) : undefined;
-    document.querySelectorAll('.section').forEach(s=>s.classList.toggle('active', s.id===id));
-    document.querySelectorAll('.step-btn').forEach(btn=>btn.classList.toggle('active', btn.dataset.target===id));
-    const status=byId('statusStage'); if(status) status.textContent = (window.labelStage ? window.labelStage(id) : id);
-    if(id==='tobe') window.renderToBeSummary();
-    if(id==='outputs') window.generateResults();
-    return result;
-  };
-  window.labelStage = function(id){ return { inicio:'Inicio', preparacion:'Preparación y contexto', documentacion_existente:'Documentación existente', carga:'Carga y consolidación', asis:'AS IS', analisis:'Análisis', analisis_b1:'B1 · Validación AS IS', analisis_b2:'B2 · AVA', analisis_b3:'B3 · Desperdicios', analisis_b4:'B4 · Restricciones', analisis_b5:'B5 · Mejoras', analisis_b6:'B6 · Builder SB', decision:'Decisión', tobe:'Construcción TO BE', resultados:'Resultados', outputs:'Outputs' }[id] || id; };
-  window.goToNext = function(current){
-    if(current==='preparacion'){ const r=getState().metadata?.route; window.showSection(r==='doc'?'documentacion_existente':'carga'); return; }
-    if(current==='documentacion_existente'){ window.showSection('carga'); return; }
-    if(current==='carga'){ window.showSection('asis'); return; }
-    const order=['asis','analisis_b1','analisis_b2','analisis_b3','analisis_b4','analisis_b5','analisis_b6','decision','tobe','resultados','outputs'];
-    const idx=order.indexOf(current); if(idx>=0 && order[idx+1]) window.showSection(order[idx+1]);
-  };
-  window.goToPrev = function(current){
-    if(current==='outputs'){ window.showSection('resultados'); return; }
-    if(current==='resultados'){ window.showSection(getState().decision?.route==='tobe'?'tobe':'decision'); return; }
-    if(current==='carga'){ window.showSection(getState().metadata?.route==='doc'?'documentacion_existente':'preparacion'); return; }
-    const order=['asis','analisis_b1','analisis_b2','analisis_b3','analisis_b4','analisis_b5','analisis_b6','decision','tobe','resultados'];
-    const idx=order.indexOf(current); if(idx>0) window.showSection(order[idx-1]);
-  };
-
-
-  window.generateBriefPromptFromMaster = function(){
-    try{
-      const s=getState();
-      const master=s.master || (typeof window.mergeMaster==='function' ? window.mergeMaster() : {});
-      const prompt=window.buildBriefPrompt(master);
-      const box=byId('briefPromptEditor'); if(box) box.value=prompt;
-      show('cargaMsg','ok','Prompt A generado. Cópialo, ejecútalo en una IA externa y pega el JSON de Brief.');
-      return prompt;
-    }catch(e){ show('cargaMsg','err','No fue posible generar Prompt A: '+e.message); }
-  };
-
-  document.addEventListener('DOMContentLoaded', function(){
-    document.querySelectorAll('button').forEach(btn=>{ if((btn.textContent||'').trim()==='Generar prompt') btn.setAttribute('title','Genera prompt para uso manual externo.'); });
-    const statusRoute=byId('statusRoute'); if(statusRoute && !statusRoute.textContent.trim()) statusRoute.textContent='Sin definir';
-  });
-})();
-</script>
-
 </body>
 </html>
