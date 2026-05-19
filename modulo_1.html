@@ -2704,8 +2704,8 @@ color:#A93226;
 <p>Cada botón genera un HTML externo independiente, con contexto precargado, listo para descargarse y usarse fuera del LMP.</p>
 <div class="pill-row"><span class="pill">HTML externos</span><span class="pill">Retorno vía JSON</span></div>
 <div class="actions" style="margin-top:16px;"><div class="actions-left">
-<button class="btn-ok" id="prep_generate_pre_btn" type="button" disabled>Generar cuestionario actores internos</button>
-<button class="btn-ok" id="prep_generate_interview_btn" type="button" disabled>Generar entrevista</button>
+<button class="btn-ok" id="prep_generate_pre_btn" type="button">Generar cuestionario actores internos</button>
+<button class="btn-ok" id="prep_generate_interview_btn" type="button">Generar entrevista</button>
 </div></div>
 <div class="note">Después de usar los instrumentos, vuelve al LMP y carga los JSON en la etapa <strong>Carga y consolidación</strong>.</div>
 </article>
@@ -2989,6 +2989,52 @@ function gatherContext(prefix){
 
 ${script}
 <\/script>
+
+<!-- =========================================================
+     SGMP LMP · FIX V4 INSTRUMENTOS PREPARACIÓN
+     Objetivo: evitar que los botones de generación de HTML externo
+     queden bloqueados visualmente por el atributo disabled.
+     No cambia IDs, no cambia funciones base, no altera JSON.
+========================================================= -->
+<script id="sgmp-lmp-v4-instrument-buttons-fix">
+(function(){
+  function enableInstrumentButtons(){
+    var preBtn = document.getElementById('prep_generate_pre_btn');
+    var intBtn = document.getElementById('prep_generate_interview_btn');
+
+    if(preBtn){
+      preBtn.disabled = false;
+      preBtn.removeAttribute('disabled');
+      if(!preBtn.dataset.sgmpInstrumentBound){
+        preBtn.addEventListener('click', function(){
+          if(typeof window.generatePreInterviewFromPreparation === 'function'){
+            window.generatePreInterviewFromPreparation();
+          }
+        });
+        preBtn.dataset.sgmpInstrumentBound = '1';
+      }
+    }
+
+    if(intBtn){
+      intBtn.disabled = false;
+      intBtn.removeAttribute('disabled');
+      if(!intBtn.dataset.sgmpInstrumentBound){
+        intBtn.addEventListener('click', function(){
+          if(typeof window.generateInterviewFromPreparation === 'function'){
+            window.generateInterviewFromPreparation();
+          }
+        });
+        intBtn.dataset.sgmpInstrumentBound = '1';
+      }
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', enableInstrumentButtons);
+  window.addEventListener('load', enableInstrumentButtons);
+  setTimeout(enableInstrumentButtons, 300);
+})();
+</script>
+
 </body>
 </html>`;
       }
@@ -4760,7 +4806,53 @@ function printDoc(id, title){
           th{background:#eef4ff}
         </style>
       </head>
-      <body>${html}</body>
+      <body>${html}
+<!-- =========================================================
+     SGMP LMP · FIX V4 INSTRUMENTOS PREPARACIÓN
+     Objetivo: evitar que los botones de generación de HTML externo
+     queden bloqueados visualmente por el atributo disabled.
+     No cambia IDs, no cambia funciones base, no altera JSON.
+========================================================= -->
+<script id="sgmp-lmp-v4-instrument-buttons-fix">
+(function(){
+  function enableInstrumentButtons(){
+    var preBtn = document.getElementById('prep_generate_pre_btn');
+    var intBtn = document.getElementById('prep_generate_interview_btn');
+
+    if(preBtn){
+      preBtn.disabled = false;
+      preBtn.removeAttribute('disabled');
+      if(!preBtn.dataset.sgmpInstrumentBound){
+        preBtn.addEventListener('click', function(){
+          if(typeof window.generatePreInterviewFromPreparation === 'function'){
+            window.generatePreInterviewFromPreparation();
+          }
+        });
+        preBtn.dataset.sgmpInstrumentBound = '1';
+      }
+    }
+
+    if(intBtn){
+      intBtn.disabled = false;
+      intBtn.removeAttribute('disabled');
+      if(!intBtn.dataset.sgmpInstrumentBound){
+        intBtn.addEventListener('click', function(){
+          if(typeof window.generateInterviewFromPreparation === 'function'){
+            window.generateInterviewFromPreparation();
+          }
+        });
+        intBtn.dataset.sgmpInstrumentBound = '1';
+      }
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', enableInstrumentButtons);
+  window.addEventListener('load', enableInstrumentButtons);
+  setTimeout(enableInstrumentButtons, 300);
+})();
+</script>
+
+</body>
     </html>
   `);
   win.document.close();
@@ -11686,5 +11778,51 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
 })();
 </script>
+
+<!-- =========================================================
+     SGMP LMP · FIX V4 INSTRUMENTOS PREPARACIÓN
+     Objetivo: evitar que los botones de generación de HTML externo
+     queden bloqueados visualmente por el atributo disabled.
+     No cambia IDs, no cambia funciones base, no altera JSON.
+========================================================= -->
+<script id="sgmp-lmp-v4-instrument-buttons-fix">
+(function(){
+  function enableInstrumentButtons(){
+    var preBtn = document.getElementById('prep_generate_pre_btn');
+    var intBtn = document.getElementById('prep_generate_interview_btn');
+
+    if(preBtn){
+      preBtn.disabled = false;
+      preBtn.removeAttribute('disabled');
+      if(!preBtn.dataset.sgmpInstrumentBound){
+        preBtn.addEventListener('click', function(){
+          if(typeof window.generatePreInterviewFromPreparation === 'function'){
+            window.generatePreInterviewFromPreparation();
+          }
+        });
+        preBtn.dataset.sgmpInstrumentBound = '1';
+      }
+    }
+
+    if(intBtn){
+      intBtn.disabled = false;
+      intBtn.removeAttribute('disabled');
+      if(!intBtn.dataset.sgmpInstrumentBound){
+        intBtn.addEventListener('click', function(){
+          if(typeof window.generateInterviewFromPreparation === 'function'){
+            window.generateInterviewFromPreparation();
+          }
+        });
+        intBtn.dataset.sgmpInstrumentBound = '1';
+      }
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', enableInstrumentButtons);
+  window.addEventListener('load', enableInstrumentButtons);
+  setTimeout(enableInstrumentButtons, 300);
+})();
+</script>
+
 </body>
 </html>
