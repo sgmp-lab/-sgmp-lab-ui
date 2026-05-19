@@ -2378,6 +2378,91 @@ color:#A93226;
     letter-spacing:-.02em !important;
   }
 </style>
+
+<style id="sgmp-lmp-safe-collapsible-visual-layer">
+/* =========================================================
+   SGMP LMP · Agrupaciones colapsables seguras
+   Capa visual aislada:
+   - No cambia IDs.
+   - No mueve nodos.
+   - No reemplaza listeners.
+   - No convierte secciones críticas ni formularios activos.
+   ========================================================= */
+
+.sgmp-visual-collapsible{
+  position:relative;
+  transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+
+.sgmp-visual-collapsible > h3,
+.sgmp-visual-collapsible > .route-section-head{
+  cursor:pointer;
+  user-select:none;
+  position:relative;
+  padding-right:38px !important;
+}
+
+.sgmp-visual-collapsible > h3::after,
+.sgmp-visual-collapsible > .route-section-head::after{
+  content:"⌄";
+  position:absolute;
+  right:10px;
+  top:50%;
+  transform:translateY(-50%) rotate(0deg);
+  width:26px;
+  height:26px;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(0,194,255,.10);
+  border:1px solid rgba(0,194,255,.24);
+  color:#0B2E59;
+  font-weight:900;
+  font-size:16px;
+  line-height:1;
+  transition:transform .18s ease, background .18s ease, color .18s ease;
+}
+
+.sgmp-visual-collapsible:hover > h3::after,
+.sgmp-visual-collapsible:hover > .route-section-head::after{
+  background:rgba(0,194,255,.16);
+  color:#1A56DB;
+}
+
+.sgmp-visual-collapsible.sgmp-is-collapsed{
+  border-color:rgba(0,194,255,.22) !important;
+  box-shadow:0 8px 18px rgba(11,46,89,.045) !important;
+}
+
+.sgmp-visual-collapsible.sgmp-is-collapsed > h3::after,
+.sgmp-visual-collapsible.sgmp-is-collapsed > .route-section-head::after{
+  transform:translateY(-50%) rotate(-90deg);
+}
+
+.sgmp-visual-collapsible.sgmp-is-collapsed > *:not(h3):not(.route-section-head){
+  display:none !important;
+}
+
+/* Indicador visual para bloques no colapsables por seguridad */
+.sgmp-visual-group-fixed{
+  position:relative;
+}
+
+.sgmp-visual-group-fixed > h3,
+.sgmp-visual-group-fixed > .route-section-head{
+  position:relative;
+}
+
+/* En pantallas pequeñas, el área clicable se mantiene cómoda */
+@media(max-width:720px){
+  .sgmp-visual-collapsible > h3,
+  .sgmp-visual-collapsible > .route-section-head{
+    padding-right:42px !important;
+  }
+}
+</style>
+
 </head>
 <body>
 <div class="app">
@@ -2989,6 +3074,103 @@ function gatherContext(prefix){
 
 ${script}
 <\/script>
+
+<script id="sgmp-lmp-safe-collapsible-visual-script">
+/* =========================================================
+   SGMP LMP · Agrupaciones colapsables seguras
+   No modifica IDs, no mueve HTML, no reemplaza funciones.
+   Solo agrega clases visuales y comportamiento de colapso
+   a grupos que no contienen controles funcionales críticos.
+   ========================================================= */
+(function(){
+  function hasFunctionalRisk(el){
+    if(!el) return true;
+
+    /* Si contiene controles, editores, acciones, pestañas o salidas usadas por JS,
+       se deja como grupo visual fijo, NO colapsable. */
+    var riskySelector = [
+      'input',
+      'textarea',
+      'select',
+      'button',
+      '[onclick]',
+      '.actions',
+      '.tabs',
+      '.tab-pane',
+      '.pre',
+      '.box',
+      '.doc-box',
+      '.msg',
+      '.list',
+      '.repeat-item',
+      '.activity-item',
+      '.improvement-card',
+      '[id*="Editor"]',
+      '[id*="Prompt"]',
+      '[id*="Response"]',
+      '[id*="Json"]',
+      '[id*="JSON"]'
+    ].join(',');
+
+    return !!el.querySelector(riskySelector);
+  }
+
+  function makeCollapsible(el, header){
+    if(!el || !header) return;
+
+    el.classList.add('sgmp-visual-collapsible');
+    header.setAttribute('role','button');
+    header.setAttribute('tabindex','0');
+    header.setAttribute('aria-expanded','true');
+
+    function toggle(){
+      var collapsed = el.classList.toggle('sgmp-is-collapsed');
+      header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    }
+
+    header.addEventListener('click', function(evt){
+      /* Evita interferir con botones o enlaces internos si existieran. */
+      if(evt.target && evt.target.closest && evt.target.closest('button,a,input,textarea,select')) return;
+      toggle();
+    });
+
+    header.addEventListener('keydown', function(evt){
+      if(evt.key === 'Enter' || evt.key === ' '){
+        evt.preventDefault();
+        toggle();
+      }
+    });
+  }
+
+  function initSafeCollapsibles(){
+    var candidates = Array.prototype.slice.call(document.querySelectorAll('.card, .route-section'));
+
+    candidates.forEach(function(el){
+      if(el.classList.contains('sgmp-visual-collapsible') || el.classList.contains('sgmp-visual-group-fixed')) return;
+
+      var header = el.classList.contains('route-section')
+        ? el.querySelector(':scope > .route-section-head')
+        : el.querySelector(':scope > h3');
+
+      if(!header) return;
+
+      if(hasFunctionalRisk(el)){
+        el.classList.add('sgmp-visual-group-fixed');
+        return;
+      }
+
+      makeCollapsible(el, header);
+    });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initSafeCollapsibles);
+  }else{
+    initSafeCollapsibles();
+  }
+})();
+</script>
+
 </body>
 </html>`;
       }
