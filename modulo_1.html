@@ -6818,7 +6818,10 @@ function updateAsIsPreview(){
   });
   if(qs('asisCountKpi')) qs('asisCountKpi').textContent = acts.length;
   if(qs('asisValidationBox')) qs('asisValidationBox').textContent = issues.length ? issues.join('\n') : (acts.length ? 'AS IS listo para análisis.' : 'Sin actividades cargadas.');
-  if(qs('asisJsonPreview')) qs('asisJsonPreview').textContent = JSON.stringify({ activities: acts }, null, 2);
+  if(qs('asisJsonPreview')) qs('asisJsonPreview').textContent = JSON.stringify({
+    activities: acts,
+    b1_audit_log: safeArray(state.asis?.b1_audit_log)
+  }, null, 2);
   if(typeof renderLmpB1StructuralStatus === 'function') renderLmpB1StructuralStatus();
 }
 
@@ -8632,7 +8635,9 @@ function lmpBuildB1StructuralInput(extraPayload){
       additional_information: safeArray(extra.as_is_process?.additional_information || asis.additional_information)
     },
     sipoc: Object.assign({}, master.sipoc || {}, brief.sipoc || {}, extra.sipoc || {}),
-    validation: Object.assign({}, brief.validation || {}, extra.validation || {})
+    validation: Object.assign({}, brief.validation || {}, extra.validation || {}, {
+      b1_audit_log: safeArray(extra.validation?.b1_audit_log || asis.b1_audit_log)
+    })
   };
 }
 
@@ -8972,7 +8977,8 @@ function lmpBuildB1StructuralContract(deterministicResult, aiPayload, activities
       parser: 'lmpStructuralParser',
       source_activity_count: 0,
       normalized_activity_count: activities.length,
-      ai_contextual_enrichment_used: !!aiPayload
+      ai_contextual_enrichment_used: !!aiPayload,
+      audit_trail: safeArray(det.traceability?.audit_trail)
     }, det.traceability || {})
   };
 }
@@ -9167,7 +9173,8 @@ function lmpStructuralValidator(input, options = {}){
       deterministic: true,
       side_effect_free: true,
       source_activity_count: safeArray(input?.source_activities).length,
-      normalized_activity_count: model.activities.length
+      normalized_activity_count: model.activities.length,
+      audit_trail: safeArray(input?.validation?.b1_audit_log || input?.traceability?.audit_trail)
     }
   };
   const contract = lmpBuildB1StructuralContract(result, null, model.activities);
@@ -9346,6 +9353,35 @@ function lmpApplyActivityArrayMove(activity, fromField, toField, value){
   return { ok:true };
 }
 
+function lmpB1AuditEntry(eventType, issue, fix, activity){
+  return {
+    id: 'B1-AUDIT-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+    timestamp: new Date().toISOString(),
+    stage: 'B1',
+    event_type: eventType,
+    source: 'manual_safe_autofix',
+    issue_type: issue?.type || '',
+    issue_level: issue?.level || '',
+    issue_field: issue?.field || '',
+    activity_index: Number(fix?.activity_index),
+    activity_id: activity?.id || '',
+    activity_name: activity?.name || '',
+    from_field: fix?.from_field || '',
+    to_field: fix?.to_field || '',
+    value: fix?.value || issue?.affectedValue || '',
+    reversible: true,
+    note: 'Ajuste aplicado manualmente por el usuario desde el panel B1.'
+  };
+}
+
+function lmpRecordB1AuditEvent(eventType, issue, fix, activity){
+  state.asis = state.asis || {};
+  const entry = lmpB1AuditEntry(eventType, issue, fix, activity);
+  state.asis.b1_audit_log = safeArray(state.asis.b1_audit_log);
+  state.asis.b1_audit_log.push(entry);
+  return entry;
+}
+
 function applyLmpB1AutoFix(index){
   const issue = safeArray(window.__LMP_B1_STRUCTURAL_ISSUES__)[Number(index)];
   const fix = issue?.autoFix;
@@ -9378,6 +9414,7 @@ function applyLmpB1AutoFix(index){
     return;
   }
 
+  lmpRecordB1AuditEvent('autofix_applied', issue, fix, activity);
   renderAsIsActivities();
   updateTopStatus();
   window.__LMP_B1_STRUCTURAL_STATUS_SIGNATURE__ = '';
