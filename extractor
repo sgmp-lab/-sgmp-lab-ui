@@ -1,0 +1,2795 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SGMP · Extractor SIPOC</title>
+
+  <style>
+    :root {
+      --bg: #EEF3F9;
+      --bg-2: #E7EEF7;
+      --panel: #FFFFFF;
+      --text: #0A1F44;
+      --muted: #5B6F8A;
+      --primary: #0B2E59;
+      --primary-2: #1A56DB;
+      --accent: #00C2FF;
+      --accent-soft: rgba(0, 194, 255, 0.10);
+      --ok: #27AE60;
+      --warn: #F2994A;
+      --danger: #C0392B;
+      --line: rgba(11, 46, 89, 0.12);
+      --shadow: 0 18px 42px rgba(11, 46, 89, 0.10);
+      --radius: 24px;
+      --content-width: min(1520px, calc(100vw - 32px));
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      font-family: "Segoe UI", Inter, Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 0%, rgba(0, 194, 255, 0.12), transparent 24%),
+        radial-gradient(circle at 92% 10%, rgba(26, 86, 219, 0.10), transparent 24%),
+        linear-gradient(180deg, var(--bg), var(--bg-2));
+    }
+
+    button,
+    input,
+    textarea,
+    select {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      border-radius: 13px;
+      padding: 11px 15px;
+      cursor: pointer;
+      font-weight: 800;
+      transition: 0.18s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 26px rgba(11, 46, 89, 0.13);
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      color: var(--text);
+      background: #FFFFFF;
+      border: 1px solid rgba(11, 46, 89, 0.14);
+      border-radius: 14px;
+      padding: 11px 12px;
+      outline: none;
+    }
+
+    textarea {
+      min-height: 150px;
+      resize: vertical;
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 12.5px;
+      line-height: 1.55;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      border-color: rgba(0, 194, 255, 0.55);
+      box-shadow: 0 0 0 4px rgba(0, 194, 255, 0.12);
+    }
+
+    pre {
+      max-height: 360px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #DDF5FF;
+      background: linear-gradient(180deg, #071C36, #0B2E59);
+      border: 1px solid rgba(0, 194, 255, 0.18);
+      border-radius: 14px;
+      padding: 14px;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .app {
+      width: var(--content-width);
+      margin: 14px auto 26px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 230px 1fr;
+      gap: 20px;
+      align-items: stretch;
+      padding: 20px;
+      border-radius: 28px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 11% 20%, rgba(0, 194, 255, 0.20), transparent 28%),
+        linear-gradient(135deg, #071C36 0%, #0B2E59 54%, #173F73 100%);
+      box-shadow: 0 20px 50px rgba(7, 28, 54, 0.22);
+    }
+
+    .express-agent {
+      position: relative;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 14px;
+      border-radius: 24px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background:
+        radial-gradient(circle at 20% 15%, rgba(0, 194, 255, 0.18), transparent 30%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.13),
+        0 18px 42px rgba(0, 0, 0, 0.18);
+    }
+
+    .express-bot {
+  position: relative;
+  width: 132px;
+  height: 142px;
+  display: grid;
+  place-items: center;
+}
+
+.express-glow {
+  position: absolute;
+  width: 118px;
+  height: 118px;
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      circle,
+      rgba(0, 194, 255, 0.30),
+      rgba(26, 86, 219, 0.10) 56%,
+      transparent 72%
+    );
+  filter: blur(1px);
+}
+
+.express-head {
+  position: absolute;
+  top: 8px;
+  width: 96px;
+  height: 78px;
+  border-radius: 34px;
+  background:
+    radial-gradient(
+      circle at 50% 10%,
+      rgba(255, 255, 255, 0.95),
+      rgba(255, 255, 255, 0.30) 18%,
+      transparent 32%
+    ),
+    linear-gradient(
+      160deg,
+      #F7FCFF 0%,
+      #DDF5FF 48%,
+      #9BE7FF 100%
+    );
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow:
+    0 16px 30px rgba(0, 0, 0, 0.24),
+    inset 0 -10px 18px rgba(0, 194, 255, 0.16);
+  z-index: 3;
+}
+
+.express-head::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 23px;
+  height: 30px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #061C36, #0B2E59);
+  box-shadow:
+    inset 0 0 14px rgba(0, 194, 255, 0.30),
+    0 0 16px rgba(0, 194, 255, 0.20);
+}
+
+.express-eye {
+  position: absolute;
+  top: 33px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #00C2FF;
+  box-shadow: 0 0 12px rgba(0, 194, 255, 0.95);
+  z-index: 4;
+}
+
+.express-eye.left {
+  left: 36px;
+}
+
+.express-eye.right {
+  right: 36px;
+}
+
+.express-smile {
+  position: absolute;
+  left: 43px;
+  top: 48px;
+  width: 12px;
+  height: 5px;
+  border-radius: 0 0 12px 12px;
+  border-bottom: 2px solid rgba(0, 194, 255, 0.9);
+  z-index: 4;
+}
+
+.express-body {
+  position: absolute;
+  top: 88px;
+  width: 72px;
+  height: 48px;
+  border-radius: 24px 24px 28px 28px;
+  background: linear-gradient(160deg, #0B2E59, #1A56DB);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow:
+    0 14px 26px rgba(0, 0, 0, 0.22),
+    inset 0 0 18px rgba(0, 194, 255, 0.20);
+  z-index: 2;
+}
+
+.express-core {
+  position: absolute;
+  left: 50%;
+  top: 13px;
+  width: 26px;
+  height: 26px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  border: 1px solid rgba(0, 194, 255, 0.65);
+  background:
+    radial-gradient(circle, #00C2FF 0 28%, transparent 31%),
+    rgba(0, 194, 255, 0.10);
+  box-shadow: 0 0 18px rgba(0, 194, 255, 0.42);
+}
+
+.express-arm {
+  position: absolute;
+  top: 96px;
+  width: 16px;
+  height: 34px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #1A56DB, #00C2FF);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  z-index: 1;
+}
+
+.express-arm.left {
+  left: 20px;
+  transform: rotate(16deg);
+}
+
+.express-arm.right {
+  right: 20px;
+  transform: rotate(-16deg);
+}
+
+
+    .synapse-express-img {
+      width: 138px;
+      height: 138px;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto 10px auto;
+      filter:
+        drop-shadow(0 14px 24px rgba(0, 0, 0, 0.24))
+        drop-shadow(0 0 18px rgba(0, 194, 255, 0.18));
+    }
+
+    .agent-name {
+      margin-top: 12px;
+      color: #FFFFFF;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .agent-sub {
+      margin-top: 6px;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .hero-content {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      padding: 20px;
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .hero h1 {
+      margin: 0 0 8px;
+      color: #FFFFFF;
+      font-size: clamp(1.35rem, 2.2vw, 2rem);
+    }
+
+    .hero p {
+      margin: 0;
+      color: rgba(255, 255, 255, 0.82);
+      line-height: 1.5;
+      max-width: 880px;
+    }
+
+    .hero-actions,
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      color: #FFFFFF;
+      background: linear-gradient(135deg, var(--primary), var(--primary-2));
+    }
+
+    .btn-ok {
+      color: #FFFFFF;
+      background: linear-gradient(135deg, #0F766E, #27AE60);
+    }
+
+    .btn-warn {
+      color: #FFFFFF;
+      background: linear-gradient(135deg, #D97706, #F2994A);
+    }
+
+    .btn-danger {
+      color: #FFFFFF;
+      background: linear-gradient(135deg, #A93226, #C0392B);
+    }
+
+    .btn-ghost {
+      color: var(--primary);
+      background: #FFFFFF;
+      border: 1px solid rgba(11, 46, 89, 0.14);
+    }
+
+    .status-bar {
+      margin-top: 14px;
+      padding: 12px 14px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid rgba(11, 46, 89, 0.08);
+      border-radius: 16px;
+      font-size: 0.92rem;
+    }
+
+    .status-bar strong {
+      color: var(--primary);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 16px;
+      height: calc(100vh - 32px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      color: #FFFFFF;
+      border-radius: var(--radius);
+      padding: 16px;
+      background: linear-gradient(
+        180deg,
+        rgba(8, 34, 68, 0.98),
+        rgba(11, 46, 89, 0.96) 42%,
+        rgba(15, 58, 110, 0.94)
+      );
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+    }
+
+    .sidebar h2 {
+      margin: 0 0 6px;
+      color: #FFFFFF;
+      font-size: 1rem;
+    }
+
+    .sidebar p {
+      margin: 0 0 12px;
+      color: rgba(225, 244, 255, 0.78);
+      font-size: 0.84rem;
+      line-height: 1.4;
+    }
+
+    .step-list,
+    .block-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .nav-item,
+    .block-item {
+      color: rgba(225, 244, 255, 0.88);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.115), rgba(255, 255, 255, 0.045));
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-left: 3px solid rgba(255, 255, 255, 0.12);
+      border-radius: 16px;
+      padding: 12px;
+      cursor: pointer;
+    }
+
+    .nav-item.active,
+    .block-item.active {
+      color: #FFFFFF;
+      background: linear-gradient(90deg, rgba(0, 194, 255, 0.36), rgba(26, 86, 219, 0.22) 50%, rgba(255, 255, 255, 0.08));
+      border-color: rgba(0, 194, 255, 0.62);
+      border-left-color: #00C2FF;
+    }
+
+    .nav-item strong,
+    .block-item strong {
+      display: block;
+      color: #FFFFFF;
+      font-size: 0.9rem;
+      margin-bottom: 4px;
+    }
+
+    .nav-item small,
+    .block-item small {
+      display: block;
+      color: rgba(225, 244, 255, 0.78);
+      line-height: 1.35;
+    }
+
+    .workspace {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .section-title h2 {
+      margin: 0;
+      font-size: 1.12rem;
+    }
+
+    .section-title p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 0.92rem;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 7px 10px;
+      border-radius: 999px;
+      color: var(--primary);
+      background: var(--accent-soft);
+      border: 1px solid rgba(0, 194, 255, 0.20);
+      font-weight: 800;
+      font-size: 0.78rem;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1.5fr;
+      gap: 10px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field label {
+      color: #42617F;
+      font-size: 0.82rem;
+      font-weight: 800;
+    }
+
+    .image-stage {
+      position: relative;
+      width: 100%;
+      min-height: 420px;
+      max-height: 72vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      overflow: auto;
+      border: 1px dashed rgba(11, 46, 89, 0.22);
+      border-radius: 18px;
+      background: #F8FBFF;
+    }
+
+    .image-wrap {
+      position: relative;
+      display: inline-block;
+      line-height: 0;
+    }
+
+    .image-wrap img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .seg-box {
+      position: absolute;
+      line-height: 1.2;
+      border: 2px dashed #00C2FF;
+      background: rgba(0, 194, 255, 0.08);
+      cursor: pointer;
+    }
+
+    .seg-box.active {
+      border-color: #F2994A;
+      background: rgba(242, 153, 74, 0.14);
+    }
+
+    .seg-label {
+      position: absolute;
+      left: 0;
+      top: 0;
+      padding: 4px 6px;
+      color: #FFFFFF;
+      background: #0B2E59;
+      border-radius: 0 0 8px 0;
+      font-size: 11px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+
+    .crop-toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(0, 194, 255, 0.08);
+      border: 1px dashed rgba(0, 194, 255, 0.24);
+    }
+
+    .crop-status {
+      color: var(--muted);
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+
+    .segment-image-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .segment-image-actions button {
+      padding: 9px 12px;
+      font-size: 0.86rem;
+    }
+
+    .summary {
+      max-height: 380px;
+      overflow: auto;
+      background: #F8FBFF;
+      border: 1px solid rgba(11, 46, 89, 0.08);
+      border-radius: 18px;
+      padding: 14px;
+    }
+
+    .summary h3 {
+      margin: 0 0 8px;
+      color: var(--primary);
+      font-size: 1rem;
+    }
+
+    .summary h4 {
+      margin: 12px 0 6px;
+    }
+
+    .summary ul {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    .msg {
+      display: none;
+      margin-top: 10px;
+      padding: 11px 13px;
+      border-radius: 13px;
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+
+    .msg.show {
+      display: block;
+    }
+
+    .msg.ok {
+      color: #176B3A;
+      background: rgba(39, 174, 96, 0.10);
+      border: 1px solid rgba(39, 174, 96, 0.22);
+    }
+
+    .msg.warn {
+      color: #8A570D;
+      background: rgba(242, 153, 74, 0.12);
+      border: 1px solid rgba(242, 153, 74, 0.24);
+    }
+
+    .msg.err {
+      color: #A93226;
+      background: rgba(192, 57, 43, 0.10);
+      border: 1px solid rgba(192, 57, 43, 0.22);
+    }
+
+    .mini-note {
+      padding: 11px 12px;
+      border-radius: 14px;
+      color: #42617F;
+      background: var(--accent-soft);
+      border: 1px dashed rgba(0, 194, 255, 0.24);
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+
+
+    .source-tools {
+      display: grid;
+      grid-template-columns: 1fr 190px 190px;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 1100px) {
+      .hero,
+      .layout,
+      .grid-2,
+      .grid-3,
+      .source-tools {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: relative;
+        height: auto;
+      }
+    }
+  </style>
+
+<style id="sgmp-extractor-module-rules">
+  /* SGMP: extractor como módulo independiente, sin avatar visible */
+  .express-agent{display:none !important;}
+  .hero{grid-template-columns:1fr !important;}
+  .sgmp-ai-status{
+    margin-top:14px;padding:12px 14px;border-radius:16px;
+    background:rgba(255,255,255,.86);border:1px solid rgba(11,46,89,.10);
+    color:#5B6F8A;font-size:.92rem;display:none;
+  }
+  .sgmp-ai-status.show{display:block;}
+  .sgmp-ai-status strong{color:#0B2E59;}
+  .sgmp-ai-loader{
+    margin-top:10px;height:12px;border-radius:999px;overflow:hidden;
+    background:rgba(11,46,89,.10);border:1px solid rgba(11,46,89,.08);
+  }
+  .sgmp-ai-loader span{
+    display:block;width:42%;height:100%;border-radius:999px;
+    background:linear-gradient(90deg,#FFFFFF,#00C2FF,#1A56DB,#FFFFFF);
+    background-size:220% 100%;animation:sgmpAiLoading 1.15s linear infinite;
+  }
+  @keyframes sgmpAiLoading{
+    0%{transform:translateX(-120%);background-position:0% 50%;}
+    100%{transform:translateX(260%);background-position:100% 50%;}
+  }
+  .sgmp-manual-hint{
+    margin-top:10px;padding:10px 12px;border-radius:14px;
+    background:rgba(242,153,74,.12);border:1px dashed rgba(242,153,74,.30);
+    color:#8A570D;font-size:.86rem;line-height:1.45;display:none;
+  }
+  .sgmp-manual-hint.show{display:block;}
+</style>
+
+</head>
+
+<body>
+  <div class="app">
+    <section class="hero">
+      <div class="express-agent">
+        <!-- Robot visual liviano. Para versión final puede reemplazarse por:
+        <img class="synapse-express-img" src="data:image/png;base64,AQUI_BASE64_FINAL" alt="Synapse Express" />
+        -->
+        <div class="express-bot" aria-label="Synapse Express">
+          <div class="express-glow"></div>
+          <div class="express-head">
+            <span class="express-eye left"></span>
+            <span class="express-eye right"></span>
+            <span class="express-smile"></span>
+          </div>
+          <div class="express-body">
+            <span class="express-core"></span>
+          </div>
+          <span class="express-arm left"></span>
+          <span class="express-arm right"></span>
+        </div>
+        <div class="agent-name">EXTRACTOR SIPOC</div>
+        <div class="agent-sub">Módulo SGMP</div>
+      </div>
+
+      <div class="hero-content">
+        <div>
+          <h1>Extractor SIPOC</h1>
+          <p>
+            Herramienta independiente para leer el cuerpo visual de un SIPOC preparado, extraer lógica funcional por segmentos,
+            incorporar notas aclaratorias pegadas como texto plano y generar un JSON compacto compatible con el LMP.
+          </p>
+        </div>
+
+        <div class="hero-actions">
+          <button class="btn" onclick="openLmpModule()" type="button">Abrir LMP</button>
+          <button class="btn-ghost" onclick="saveSession()" type="button">Guardar sesión local</button>
+          <button class="btn-ghost" onclick="loadSession()" type="button">Cargar sesión local</button>
+          <input id="backupImportInput" class="hidden" type="file" accept="application/json,.json" onchange="importBackupJson(event)" />
+          <button class="btn-ghost" onclick="triggerBackupImport()" type="button">Cargar respaldo JSON</button>
+          <button class="btn-ok" onclick="exportBackupJson()" type="button">Descargar respaldo JSON</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="status-bar">
+      <strong>Regla operativa:</strong> el Extractor no analiza, no propone y no inventa. Solo extrae la lógica visible del SIPOC y consolida notas aclaratorias pegadas manualmente.
+    </div>
+
+    <div id="sgmpAiStatus" class="sgmp-ai-status"></div>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <h2>Flujo de trabajo</h2>
+        <p>Trabaja en orden: imagen SIPOC, segmentación, extracción por segmento, notas aclaratorias y consolidación LMP.</p>
+
+        <div class="step-list">
+          <div class="nav-item active" data-step="source" onclick="showStep('source')">
+            <strong>1. Imagen SIPOC</strong>
+            <small>Cuerpo visual preparado</small>
+          </div>
+
+          <div class="nav-item" data-step="segmentation" onclick="showStep('segmentation')">
+            <strong>2. Segmentación</strong>
+            <small>Prompt estándar + JSON</small>
+          </div>
+
+          <div class="nav-item" data-step="extraction" onclick="showStep('extraction')">
+            <strong>3. Extracción</strong>
+            <small>Lógica por segmento</small>
+          </div>
+
+          <div class="nav-item" data-step="notes" onclick="showStep('notes')">
+            <strong>4. Notas aclaratorias</strong>
+            <small>Texto plano manual</small>
+          </div>
+
+          <div class="nav-item" data-step="final" onclick="showStep('final')">
+            <strong>5. Consolidación</strong>
+            <small>Prompt + JSON LMP</small>
+          </div>
+        </div>
+
+        <hr style="border:0;border-top:1px solid rgba(255,255,255,.16);margin:16px 0" />
+
+        <h2>Segmentos</h2>
+        <div id="segmentList" class="block-list"></div>
+      </aside>
+
+      <main class="workspace">
+        <section id="step_source" class="card">
+          <div class="section-title">
+            <div>
+              <h2>Imagen preparada del SIPOC</h2>
+              <p>
+                Sube únicamente el cuerpo visual del SIPOC: proveedores, entradas, carriles, actividades, decisiones, salidas y clientes.
+                No incluyas encabezado superior ni notas aclaratorias.
+              </p>
+            </div>
+            <span class="pill">Imagen</span>
+          </div>
+
+          <div class="mini-note">
+            El encabezado del proceso se conserva en el LMP. Las notas aclaratorias se pegarán luego como texto plano. Esta herramienta solo procesa la lógica funcional visible.
+          </div>
+
+          <div class="field" style="margin-top:12px">
+            <label>Imagen del cuerpo SIPOC</label>
+            <input id="sourceFileInput" type="file" accept="image/*" onchange="handleSourceFile(event)" />
+          </div>
+
+          <div class="actions" style="margin-top:12px">
+            <button class="btn-ok" onclick="useSourceForSegmentation()" type="button">Continuar a segmentación</button>
+          </div>
+
+          <div id="sourceMsg" class="msg"></div>
+          <div class="image-stage" id="sourceImageStage" style="margin-top:12px">Sin imagen cargada</div>
+        </section>
+
+        <section id="step_segmentation" class="card hidden">
+          <div class="section-title">
+            <div>
+              <h2>Plan de segmentación</h2>
+              <p>
+                Con API activa, el sistema ejecuta la segmentación automáticamente y carga la respuesta. Si la API falla, se habilita el modo manual para copiar prompt, procesarlo en el chat IA y pegar el JSON.
+              </p>
+            </div>
+            <span class="pill">Segmentación asistida</span>
+          </div>
+
+          <div class="grid-2">
+            <div>
+              <div class="field">
+                <label>Prompt estándar de segmentación</label>
+                <textarea id="segmentationPrompt" readonly></textarea>
+              </div>
+
+              <div class="actions">
+                <button class="btn" onclick="runSegmentationAI()" type="button">Procesar con IA</button>
+                <button class="btn-ghost" onclick="copyText('segmentationPrompt','Prompt de segmentación copiado.')" type="button">Copiar prompt</button>
+              </div>
+            </div>
+
+            <div>
+              <div class="field">
+                <label>JSON de segmentación devuelto por IA</label>
+                <textarea id="segmentationJson" placeholder="Pega aquí el JSON de segmentación..."></textarea>
+              </div>
+
+              <div class="actions">
+                <button class="btn-ok" onclick="applySegmentationJson()" type="button">Aplicar segmentación</button>
+                <button class="btn-ghost" onclick="downloadSegmentedSipocImage()" type="button">Descargar SIPOC segmentado</button>
+              </div>
+
+              <div id="segmentationMsg" class="msg"></div>
+            </div>
+          </div>
+
+          <div class="mini-note" style="margin-top:12px">
+            Al aplicar segmentación, el Extractor dibuja los segmentos, genera internamente los recortes y deja listos los bloques para extracción.
+          </div>
+
+          <div class="image-stage" id="preparedOverlayStage" style="margin-top:12px">Sin imagen preparada</div>
+        </section>
+
+        <section id="step_extraction" class="card hidden">
+          <div class="section-title">
+            <div>
+              <h2>Extracción por segmento</h2>
+              <p>
+                Selecciona un segmento. Con API activa, el sistema procesa el recorte automáticamente y carga el JSON. Si la API falla, se habilita el modo manual.
+              </p>
+            </div>
+            <span class="pill" id="activeSegmentPill">Sin segmento</span>
+          </div>
+
+          <div id="noSegmentWork" class="mini-note">
+            Aplica primero un JSON de segmentación.
+          </div>
+
+          <div id="segmentWork" class="hidden">
+            <div class="grid-2">
+              <div>
+                <div class="field">
+                  <label>Metadatos del segmento</label>
+                  <pre id="segmentMetaBox">{}</pre>
+                </div>
+
+                <div class="field">
+                  <label>Recorte del segmento</label>
+                  <div class="image-stage" id="segmentImageStage">Sin recorte generado</div>
+                </div>
+
+                <div class="segment-image-actions">
+                  <button class="btn-ghost" onclick="generateActiveSegmentCrop()" type="button">Regenerar recorte</button>
+                  <button class="btn-ghost" onclick="downloadActiveSegmentImage()" type="button">Descargar recorte</button>
+                </div>
+              </div>
+
+              <div>
+                <div class="field">
+                  <label>Prompt estándar del segmento</label>
+                  <textarea id="extractionPrompt" readonly></textarea>
+                </div>
+
+                <div class="actions">
+                  <button class="btn" onclick="generateExtractionPrompt()" type="button">Actualizar prompt del segmento</button>
+                  <button class="btn" onclick="runSegmentExtractionAI()" type="button">Procesar segmento con IA</button>
+                  <button class="btn-ghost" onclick="copyText('extractionPrompt','Prompt de segmento copiado.')" type="button">Copiar prompt</button>
+                </div>
+
+                <div class="field" style="margin-top:12px">
+                  <label>JSON de extracción devuelto por IA</label>
+                  <textarea id="extractionJson" placeholder="Pega aquí el JSON de extracción del segmento..."></textarea>
+                </div>
+
+                <div class="actions">
+                  <button class="btn-ok" onclick="processExtractionJson()" type="button">Procesar JSON del segmento</button>
+                  <button class="btn-danger" onclick="clearActiveSegment()" type="button">Limpiar segmento</button>
+                </div>
+
+                <div id="extractionMsg" class="msg"></div>
+              </div>
+            </div>
+
+            <div class="field" style="margin-top:12px">
+              <label>Resumen operativo del segmento</label>
+              <div id="segmentSummary" class="summary"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="step_notes" class="card hidden">
+          <div class="section-title">
+            <div>
+              <h2>Notas aclaratorias del SIPOC</h2>
+              <p>
+                Pega las notas aclaratorias como texto plano, respetando su numeración original. No se extraen desde imagen.
+              </p>
+            </div>
+            <span class="pill">Texto plano</span>
+          </div>
+
+          <div class="mini-note">
+            Estas notas no deben usarse para inventar flujo. En la consolidación final se asociarán a actividades solo cuando exista referencia explícita o evidencia suficiente.
+          </div>
+
+          <div class="field" style="margin-top:12px">
+            <label>Notas aclaratorias pegadas manualmente</label>
+            <textarea id="plainTextNotes" placeholder="Ejemplo:
+5.1 ...
+5.2 ...
+5.3 ..." oninput="syncPlainTextNotes()"></textarea>
+          </div>
+        </section>
+
+        <section id="step_final" class="card hidden">
+          <div class="section-title">
+            <div>
+              <h2>Consolidación lógica final</h2>
+              <p>
+                Con API activa, el sistema consolida automáticamente las extracciones y notas. Si la API falla, se habilita modo manual para copiar prompt y pegar el JSON compacto compatible con LMP.
+              </p>
+            </div>
+            <span class="pill">JSON LMP</span>
+          </div>
+
+          <div class="grid-2">
+            <div class="field">
+              <label>Prompt de consolidación para IA</label>
+              <textarea id="consolidationPrompt" placeholder="Genera el prompt cuando los segmentos estén procesados..."></textarea>
+            </div>
+
+            <div class="field">
+              <label>JSON compacto LMP devuelto por IA</label>
+              <textarea id="consolidationJson" placeholder="Pega aquí el JSON final devuelto por IA..."></textarea>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button class="btn" onclick="generateConsolidationPrompt()" type="button">Generar prompt de consolidación</button>
+            <button class="btn" onclick="runConsolidationAI()" type="button">Consolidar con IA</button>
+            <button class="btn-ghost" onclick="copyText('consolidationPrompt','Prompt de consolidación copiado.')" type="button">Copiar prompt</button>
+            <button class="btn-ok" onclick="processConsolidatedLmpJson()" type="button">Procesar JSON LMP</button>
+            <button class="btn-ok" onclick="exportFinalJson()" type="button">Descargar JSON para LMP</button>
+            <button class="btn-ghost" onclick="exportTraceabilityJson()" type="button">Descargar trazabilidad</button>
+          </div>
+
+          <div id="consolidationMsg" class="msg"></div>
+
+          <div class="field" style="margin-top:12px">
+            <label>Vista previa del JSON para LMP</label>
+            <pre id="finalPreview">{}</pre>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    // ════════════════════════════════════════════════════════════════
+    // SGMP · Configuración central del módulo Extractor SIPOC
+    // Ajusta estas URL temporalmente aquí. Luego pueden venir del Admin SGMP.
+    // ════════════════════════════════════════════════════════════════
+    const SGMP_API_URL = window.SGMP_API_URL || 'PEGA_AQUI_TU_URL_APPSCRIPT_EXEC';
+    const LMP_MODULE_URL = window.LMP_MODULE_URL || 'PEGA_AQUI_TU_URL_LMP';
+    const SGMP_MODULE_CODE = 'SX';
+
+    const SGMP_STAGE_CODES = {
+      segmentation: 'SX_SIPOC_SEGMENTATION',
+      extraction: 'SX_SIPOC_SEGMENT_EXTRACTION',
+      consolidation: 'SX_SIPOC_CONSOLIDATION'
+    };
+
+    const SGMP_PROMPT_KEYS = {
+      segmentation: 'prompt_sipoc_segmentation',
+      extraction: 'prompt_sipoc_segment_extraction',
+      consolidation: 'prompt_sipoc_consolidation'
+    };
+
+    let SGMP_PROMPTS = {};
+    let SGMP_EXECUTION = {};
+
+    const LMP_CONTEXT = window.LMP_CONTEXT || {
+      processName: "",
+      processCode: "",
+      purpose: ""
+    };
+
+    const GPP_SYMBOL_TYPES = {
+  external_client_activity: {
+    visual_shape: "rectangulo_blanco_simple",
+    visual_color: "blanco",
+    meaning: "cliente externo o ente externo diferente de la empresa, empleado dentro del SIPOC como actividad cuando aparece dentro del flujo interno"
+  },
+  decision: {
+    visual_shape: "rombo",
+    visual_color: "blanco",
+    meaning: "momento de decision o rutas alternativas del proceso"
+  },
+  value_chain_process: {
+    visual_shape: "rectangulo_blanco_con_bandas_laterales",
+    visual_color: "blanco",
+    meaning: "proceso que forma parte de la cadena de valor del negocio; si aparece en PROVEEDOR o CLIENTE debe conservarse como nombre exacto del proceso proveedor o receptor"
+  },
+  document_issued: {
+    visual_shape: "rectangulo_blanco_con_borde_inferior_ondulado",
+    visual_color: "blanco",
+    meaning: "documento emitido dentro del proceso, como solicitud, registro o informe; no debe convertirse en catalogo documental, solo registrarse como tipo visual en observations"
+  },
+  system_response_document: {
+    visual_shape: "paralelogramo",
+    visual_color: "naranja_claro",
+    meaning: "documento o respuesta emitida a traves de sistemas; no debe convertirse en catalogo documental, solo registrarse como tipo visual en observations"
+  },
+  output_connector: {
+    visual_shape: "circulo",
+    visual_color: "amarillo",
+    label_pattern: "numero_romano",
+    meaning: "conector de salida del proceso; usar solo como connector_label"
+  },
+  input_connector: {
+    visual_shape: "circulo",
+    visual_color: "verde",
+    label_pattern: "letra",
+    meaning: "conector de entrada del proceso; usar solo como connector_label"
+  },
+  internal_connector: {
+    visual_shape: "circulo",
+    visual_color: "blanco",
+    label_pattern: "numero_normal",
+    meaning: "conector interno dentro del proceso; usar solo como connector_label"
+  },
+  activity: {
+    visual_shape: "rectangulo",
+    visual_color: "naranja_claro",
+    meaning: "actividad dentro del sistema"
+  },
+  physical_input_output: {
+    visual_shape: "rectangulo",
+    visual_color: "gris",
+    meaning: "entrada o salida de producto o elemento fisico"
+  },
+};
+
+    let state = {
+      sourceImageData: "",
+      preparedImageData: "",
+      segmentCropPaddingPct: 1.5,
+      lane_registry: [],
+      column_registry: [],
+      segmentation_quality: null,
+      coverage_audit: null,
+      segmentation_plan: [],
+      segments: [],
+      activeSegmentId: null,
+      plainTextNotes: "",
+      consolidationPrompt: "",
+      consolidationJsonText: "",
+      consolidatedLmpJson: null
+    };
+
+
+    function qs(id) {
+      return document.getElementById(id);
+    }
+
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, function(match) {
+        return {
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;"
+        }[match];
+      });
+    }
+
+    function stripFence(text) {
+      let cleaned = (text || "").trim();
+
+      if (cleaned.startsWith("```")) {
+        cleaned = cleaned
+          .replace(/^```(?:json)?/i, "")
+          .replace(/```$/i, "")
+          .trim();
+      }
+
+      return cleaned;
+    }
+
+    function showMsg(id, type, message) {
+      const element = qs(id);
+
+      if (!element) {
+        return;
+      }
+
+      element.className = "msg";
+      element.textContent = "";
+
+      if (!message) {
+        return;
+      }
+
+      element.classList.add("show", type);
+      element.textContent = message;
+    }
+
+    function showStep(step) {
+      ["source", "segmentation", "extraction", "notes", "final"].forEach(function(item) {
+        const section = qs("step_" + item);
+        if (section) section.classList.toggle("hidden", item !== step);
+      });
+
+      document.querySelectorAll(".nav-item").forEach(function(item) {
+        item.classList.toggle("active", item.dataset.step === step);
+      });
+
+      if (step === "segmentation") {
+        renderPreparedOverlay();
+      }
+
+      if (step === "notes") {
+        const notesBox = qs("plainTextNotes");
+        if (notesBox) notesBox.value = state.plainTextNotes || "";
+      }
+
+      if (step === "final") {
+        syncPlainTextNotes();
+        refreshFinalPreview();
+      }
+    }
+
+    function fillContext() {
+      // v09: el Extractor es independiente del LMP.
+      // No recibe encabezado, código, finalidad ni contexto heredado.
+    }
+
+    function syncHeader() {
+      // v09: sin encabezado de proceso dentro del Extractor.
+      return;
+    }
+
+    function syncPlainTextNotes() {
+      const box = qs("plainTextNotes");
+      if (box) {
+        state.plainTextNotes = box.value || "";
+      }
+    }
+
+    async function handleSourceFile(event) {
+  const file = event.target.files && event.target.files[0];
+
+  if (!file) {
+    return;
+  }
+
+  state.sourceImageData = "";
+  state.preparedImageData = "";
+
+  if (!file.type.startsWith("image/")) {
+    showMsg("sourceMsg", "err", "Formato no compatible. Usa una imagen PNG, JPG o JPEG.");
+    return;
+  }
+
+  await loadImageFile(file);
+}
+
+
+    function loadImageFile(file) {
+      return new Promise(function(resolve) {
+        const reader = new FileReader();
+
+        reader.onload = function(loadEvent) {
+          state.sourceImageData = loadEvent.target.result;
+          state.preparedImageData = state.sourceImageData;
+          renderSourceImage();
+          renderPreparedOverlay();
+          generateSegmentationPrompt();
+          showMsg("sourceMsg", "ok", "Imagen SIPOC cargada y lista para segmentación.");
+          resolve();
+        };
+
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function renderSourceImage() {
+      const stage = qs("sourceImageStage");
+
+      if (!stage) {
+        return;
+      }
+
+      if (!state.preparedImageData && !state.sourceImageData) {
+        stage.textContent = "Sin imagen cargada";
+        return;
+      }
+
+      stage.innerHTML = `
+        <div class="image-wrap">
+          <img src="${state.preparedImageData || state.sourceImageData}" alt="SIPOC fuente" />
+        </div>
+      `;
+    }
+
+    function imageDataToCanvas(dataUrl) {
+      return new Promise(function(resolve, reject) {
+        const image = new Image();
+
+        image.onload = function() {
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+
+          canvas.width = image.naturalWidth;
+          canvas.height = image.naturalHeight;
+          context.drawImage(image, 0, 0);
+
+          resolve(canvas);
+        };
+
+        image.onerror = reject;
+        image.src = dataUrl;
+      });
+    }
+
+
+    function normalizeBounds(bounds) {
+      const data = bounds || {};
+      let x = Number(data.x ?? data.x_start_pct ?? data.x_pct ?? 0);
+      let y = Number(data.y ?? data.y_start_pct ?? data.y_pct ?? 0);
+      let width = Number(data.width ?? data.width_pct ?? 0);
+      let height = Number(data.height ?? data.height_pct ?? 0);
+
+      if (!width && typeof data.x_end_pct !== "undefined") {
+        width = Number(data.x_end_pct) - x;
+      }
+
+      if (!height && typeof data.y_end_pct !== "undefined") {
+        height = Number(data.y_end_pct) - y;
+      }
+
+      x = Math.max(0, Math.min(100, x));
+      y = Math.max(0, Math.min(100, y));
+      width = Math.max(0, Math.min(100 - x, width || 10));
+      height = Math.max(0, Math.min(100 - y, height || 10));
+
+      return { x, y, width, height };
+    }
+
+    function fileSafeName(value) {
+      return String(value || "segmento")
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .replace(/[^a-z0-9_-]+/gi, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 90) || "segmento";
+    }
+
+    function downloadDataUrl(dataUrl, filename) {
+      if (!dataUrl) {
+        return;
+      }
+
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = filename;
+      link.click();
+    }
+
+    async function trimSourceMargins() {
+      const dataUrl = state.preparedImageData || state.sourceImageData;
+
+      if (!dataUrl) {
+        showMsg("sourceMsg", "warn", "Primero carga una imagen.");
+        return;
+      }
+
+      const canvas = await imageDataToCanvas(dataUrl);
+      const context = canvas.getContext("2d");
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      const threshold = 245;
+      let minX = canvas.width;
+      let minY = canvas.height;
+      let maxX = 0;
+      let maxY = 0;
+
+      for (let y = 0; y < canvas.height; y += 1) {
+        for (let x = 0; x < canvas.width; x += 1) {
+          const index = (y * canvas.width + x) * 4;
+          const r = data[index];
+          const g = data[index + 1];
+          const b = data[index + 2];
+          const alpha = data[index + 3];
+          const isWhite = r > threshold && g > threshold && b > threshold;
+
+          if (alpha > 0 && !isWhite) {
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+          }
+        }
+      }
+
+      if (minX >= maxX || minY >= maxY) {
+        showMsg("sourceMsg", "warn", "No se detectaron márgenes blancos de forma confiable.");
+        return;
+      }
+
+      const padding = 16;
+      minX = Math.max(0, minX - padding);
+      minY = Math.max(0, minY - padding);
+      maxX = Math.min(canvas.width, maxX + padding);
+      maxY = Math.min(canvas.height, maxY + padding);
+
+      const outputCanvas = document.createElement("canvas");
+      const outputContext = outputCanvas.getContext("2d");
+      const width = maxX - minX;
+      const height = maxY - minY;
+
+      outputCanvas.width = width;
+      outputCanvas.height = height;
+      outputContext.drawImage(canvas, minX, minY, width, height, 0, 0, width, height);
+
+      state.preparedImageData = outputCanvas.toDataURL("image/png");
+      renderSourceImage();
+      renderPreparedOverlay();
+      showMsg("sourceMsg", "ok", "Márgenes recortados. Usa esta imagen preparada para segmentar.");
+    }
+
+    function useSourceForSegmentation() {
+      if (!state.preparedImageData && !state.sourceImageData) {
+        showMsg("sourceMsg", "warn", "Primero carga la imagen del cuerpo SIPOC.");
+        return;
+      }
+
+      state.preparedImageData = state.preparedImageData || state.sourceImageData;
+      renderPreparedOverlay();
+      generateSegmentationPrompt();
+      showMsg("sourceMsg", "ok", "Imagen lista para segmentación.");
+      showStep("segmentation");
+    }
+
+    function downloadPreparedImage() {
+      if (!state.preparedImageData) {
+        showMsg("sourceMsg", "warn", "No hay imagen preparada para descargar.");
+        return;
+      }
+
+      const link = document.createElement("a");
+      link.href = state.preparedImageData;
+      link.download = "sipoc_preparado_para_segmentacion.png";
+      link.click();
+    }
+
+    function renderPreparedOverlay() {
+      const stage = qs("preparedOverlayStage");
+
+      if (!stage) {
+        return;
+      }
+
+      if (!state.preparedImageData) {
+        stage.textContent = "Sin imagen preparada";
+        return;
+      }
+
+      stage.innerHTML = `
+        <div class="image-wrap" id="preparedImageWrap">
+          <img id="preparedSipocImg" src="${state.preparedImageData}" alt="SIPOC preparado" />
+        </div>
+      `;
+
+      const image = qs("preparedSipocImg");
+      image.onload = drawSegmentationOverlay;
+      drawSegmentationOverlay();
+    }
+
+    function drawSegmentationOverlay() {
+      const wrap = qs("preparedImageWrap");
+
+      if (!wrap) {
+        return;
+      }
+
+      wrap.querySelectorAll(".seg-box").forEach(function(box) {
+        box.remove();
+      });
+
+      state.segments.forEach(function(segment) {
+        const normalized = normalizeBounds(segment.bounds_pct || {});
+        const x = normalized.x;
+        const y = normalized.y;
+        const width = normalized.width;
+        const height = normalized.height;
+
+        const div = document.createElement("div");
+        div.className = "seg-box" + (segment.segment_id === state.activeSegmentId ? " active" : "");
+        div.style.left = x + "%";
+        div.style.top = y + "%";
+        div.style.width = width + "%";
+        div.style.height = height + "%";
+        div.onclick = function() {
+          selectSegment(segment.segment_id);
+        };
+        div.innerHTML = `<span class="seg-label">${esc(segment.segment_id || "")}</span>`;
+
+        wrap.appendChild(div);
+      });
+    }
+
+
+    async function cropSegmentFromPreparedImage(segment) {
+      if (!segment || !state.preparedImageData) {
+        return "";
+      }
+
+      const sourceCanvas = await imageDataToCanvas(state.preparedImageData);
+      const bounds = normalizeBounds(segment.bounds_pct || {});
+      const padding = Number(state.segmentCropPaddingPct || 1.5);
+
+      const xPct = Math.max(0, bounds.x - padding);
+      const yPct = Math.max(0, bounds.y - padding);
+      const endXPct = Math.min(100, bounds.x + bounds.width + padding);
+      const endYPct = Math.min(100, bounds.y + bounds.height + padding);
+
+      const sx = Math.round((xPct / 100) * sourceCanvas.width);
+      const sy = Math.round((yPct / 100) * sourceCanvas.height);
+      const sw = Math.max(1, Math.round(((endXPct - xPct) / 100) * sourceCanvas.width));
+      const sh = Math.max(1, Math.round(((endYPct - yPct) / 100) * sourceCanvas.height));
+
+      const outputCanvas = document.createElement("canvas");
+      const outputContext = outputCanvas.getContext("2d");
+
+      outputCanvas.width = sw;
+      outputCanvas.height = sh;
+      outputContext.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+
+      return outputCanvas.toDataURL("image/png");
+    }
+
+    async function generateSegmentCrops(showConfirmation) {
+      if (!state.preparedImageData) {
+        showMsg("segmentationMsg", "warn", "Primero carga y usa una imagen preparada del SIPOC.");
+        return;
+      }
+
+      if (!state.segments.length) {
+        showMsg("segmentationMsg", "warn", "Primero aplica un JSON de segmentación.");
+        return;
+      }
+
+      for (const segment of state.segments) {
+        segment.imageData = await cropSegmentFromPreparedImage(segment);
+        segment.cropGeneratedAt = new Date().toISOString();
+        segment.cropPaddingPct = state.segmentCropPaddingPct;
+      }
+
+      renderSegmentList();
+      renderSegmentWork();
+      renderPreparedOverlay();
+
+      if (showConfirmation) {
+        showMsg("segmentationMsg", "ok", "Recortes automáticos generados y asignados a cada segmento.");
+      }
+    }
+
+    async function generateActiveSegmentCrop() {
+      const segment = activeSegment();
+
+      if (!segment) {
+        return;
+      }
+
+      segment.imageData = await cropSegmentFromPreparedImage(segment);
+      segment.cropGeneratedAt = new Date().toISOString();
+      segment.cropPaddingPct = state.segmentCropPaddingPct;
+
+      renderSegmentImage(segment);
+      renderSegmentList();
+      showMsg("extractionMsg", "ok", "Recorte automático regenerado.");
+    }
+
+    function downloadActiveSegmentImage() {
+      const segment = activeSegment();
+
+      if (!segment || !segment.imageData) {
+        showMsg("extractionMsg", "warn", "Este segmento aún no tiene recorte generado.");
+        return;
+      }
+
+      const code = fileSafeName("sipoc");
+      const name = fileSafeName(segment.segment_id + "_" + segment.title);
+      downloadDataUrl(segment.imageData, `${code}_${name}.png`);
+    }
+
+    async function buildSegmentedSipocImageData() {
+      if (!state.preparedImageData) {
+        return "";
+      }
+
+      const canvas = await imageDataToCanvas(state.preparedImageData);
+      const context = canvas.getContext("2d");
+
+      context.lineWidth = Math.max(2, Math.round(canvas.width * 0.002));
+      context.setLineDash([Math.max(6, Math.round(canvas.width * 0.006)), Math.max(5, Math.round(canvas.width * 0.004))]);
+      context.strokeStyle = "#00AEEF";
+      context.fillStyle = "rgba(0, 194, 255, 0.10)";
+      context.font = `${Math.max(14, Math.round(canvas.width * 0.014))}px Arial`;
+      context.textBaseline = "top";
+
+      state.segments.forEach(function(segment) {
+        const bounds = normalizeBounds(segment.bounds_pct || {});
+        const x = (bounds.x / 100) * canvas.width;
+        const y = (bounds.y / 100) * canvas.height;
+        const width = (bounds.width / 100) * canvas.width;
+        const height = (bounds.height / 100) * canvas.height;
+
+        context.fillRect(x, y, width, height);
+        context.strokeRect(x, y, width, height);
+
+        const label = segment.segment_id || "SEG";
+        const labelPadding = Math.max(5, Math.round(canvas.width * 0.004));
+        const metrics = context.measureText(label);
+        const labelWidth = metrics.width + labelPadding * 2;
+        const labelHeight = Math.max(20, Math.round(canvas.width * 0.024));
+
+        context.setLineDash([]);
+        context.fillStyle = "#0B2E59";
+        context.fillRect(x, y, labelWidth, labelHeight);
+        context.fillStyle = "#FFFFFF";
+        context.fillText(label, x + labelPadding, y + labelPadding);
+        context.fillStyle = "rgba(0, 194, 255, 0.10)";
+        context.setLineDash([Math.max(6, Math.round(canvas.width * 0.006)), Math.max(5, Math.round(canvas.width * 0.004))]);
+      });
+
+      return canvas.toDataURL("image/png");
+    }
+
+    async function downloadSegmentedSipocImage() {
+      if (!state.preparedImageData) {
+        showMsg("segmentationMsg", "warn", "Primero carga una imagen preparada.");
+        return;
+      }
+
+      const dataUrl = await buildSegmentedSipocImageData();
+      const code = fileSafeName("sipoc");
+      downloadDataUrl(dataUrl, `sipoc_segmentado_${code}.png`);
+    }
+
+    function generateSegmentationPrompt() {
+      const promptTemplate = sgmpPrompt("segmentation");
+      const prompt = renderPromptTemplate(promptTemplate, {
+        stage: "segmentación",
+        gpp_symbol_types: JSON.stringify(GPP_SYMBOL_TYPES, null, 2)
+      });
+
+      qs("segmentationPrompt").value = prompt;
+      return prompt;
+    }
+
+    async function applySegmentationJson() {
+      try {
+        if (!state.preparedImageData) {
+          showMsg("segmentationMsg", "warn", "Primero carga la imagen del cuerpo SIPOC.");
+          return;
+        }
+
+        const parsed = JSON.parse(stripFence(qs("segmentationJson").value));
+
+        state.segmentation_quality = parsed.segmentation_quality || null;
+        state.coverage_audit = parsed.coverage_audit || null;
+        state.lane_registry = parsed.lane_registry || [];
+        state.column_registry = parsed.column_registry || [];
+        state.segmentation_plan = parsed.segmentation_plan || [];
+
+        if (
+          state.segmentation_quality &&
+          state.segmentation_quality.status === "requiere_mejor_imagen"
+        ) {
+          showMsg(
+            "segmentationMsg",
+            "warn",
+            "La IA indicó que la imagen requiere mejora: " +
+            (state.segmentation_quality.recommended_action || "revisa resolución, recorte o legibilidad.")
+          );
+        }
+
+        state.segments = state.segmentation_plan.map(function(item, index) {
+          return {
+            segment_id: item.segment_id || `SEG-${String(index + 1).padStart(2, "0")}`,
+            segment_type: item.segment_type || "internal_lanes",
+            title: item.title || item.segment_id || `Segmento ${index + 1}`,
+            order: item.order || index + 1,
+            bounds_pct: item.bounds_pct || {
+              x: 0,
+              y: 0,
+              width: 20,
+              height: 20
+            },
+            visible_lanes: item.visible_lanes || [],
+            lane_headers_visible: Boolean(item.lane_headers_visible),
+            requires_lane_registry: Boolean(item.requires_lane_registry),
+            boundary_flow_expected: Boolean(item.boundary_flow_expected),
+            cross_lane_flow_expected: Boolean(item.cross_lane_flow_expected),
+            connector_resolution_expected: Boolean(item.connector_resolution_expected),
+            expected_gpp_elements: item.expected_gpp_elements || [],
+            capture_guidance: item.capture_guidance || "",
+            overlap_required: item.overlap_required || "",
+            complexity: item.complexity || "",
+            extraction_focus: item.extraction_focus || "",
+            manual_check_reason: item.manual_check_reason || "",
+            overlap_justification: item.overlap_justification || "",
+            related_segments: item.related_segments || [],
+            coverage_role: item.coverage_role || "",
+            imageData: "",
+            cropGeneratedAt: null,
+            cropPaddingPct: null,
+            prompt: "",
+            jsonText: "",
+            parsed: null,
+            processedAt: null
+          };
+        });
+
+        state.activeSegmentId = state.segments[0]?.segment_id || null;
+
+        renderSegmentList();
+        renderPreparedOverlay();
+        renderSegmentWork();
+
+        await generateSegmentCrops(false);
+
+        state.segments.forEach(function(segment) {
+          if (!segment.prompt) {
+            const previousActive = state.activeSegmentId;
+            state.activeSegmentId = segment.segment_id;
+            generateExtractionPrompt();
+            state.activeSegmentId = previousActive;
+          }
+        });
+
+        renderSegmentList();
+        renderSegmentWork();
+
+        showMsg("segmentationMsg", "ok", "Segmentación aplicada. Segmentos dibujados y recortes internos generados.");
+      } catch (error) {
+        showMsg("segmentationMsg", "err", "JSON de segmentación inválido: " + error.message);
+      }
+    }
+
+    async function createBlocksFromSegments() {
+      if (!state.segments.length) {
+        showMsg("segmentationMsg", "warn", "Primero aplica un JSON de segmentación.");
+        return;
+      }
+
+      if (state.segments.some(function(segment) { return !segment.imageData; })) {
+        await generateSegmentCrops(false);
+      }
+
+      renderSegmentList();
+      renderSegmentWork();
+      showStep("extraction");
+    }
+
+    function renderSegmentList() {
+      const list = qs("segmentList");
+      list.innerHTML = "";
+
+      state.segments
+        .sort(function(a, b) {
+          return (a.order || 0) - (b.order || 0);
+        })
+        .forEach(function(segment) {
+          const div = document.createElement("div");
+          div.className = "block-item" + (segment.segment_id === state.activeSegmentId ? " active" : "");
+          div.onclick = function() {
+            selectSegment(segment.segment_id);
+          };
+          div.innerHTML = `
+            <strong>${esc(segment.segment_id)} · ${esc(segment.title)}</strong>
+            <small>${esc(segment.segment_type)} · ${segment.parsed ? "procesado" : "pendiente"} · ${segment.imageData ? "recorte listo" : "sin recorte"}</small>
+            <small>${esc((segment.visible_lanes || []).join(" + "))}</small>
+          `;
+
+          list.appendChild(div);
+        });
+    }
+
+    function selectSegment(segmentId) {
+      state.activeSegmentId = segmentId;
+      renderSegmentList();
+      renderSegmentWork();
+      drawSegmentationOverlay();
+      showStep("extraction");
+    }
+
+    function activeSegment() {
+      return state.segments.find(function(segment) {
+        return segment.segment_id === state.activeSegmentId;
+      }) || null;
+    }
+
+    function renderSegmentWork() {
+      const segment = activeSegment();
+
+      qs("noSegmentWork").classList.toggle("hidden", Boolean(segment));
+      qs("segmentWork").classList.toggle("hidden", !segment);
+
+      if (!segment) {
+        return;
+      }
+
+      qs("activeSegmentPill").textContent = segment.segment_id + " · " + segment.segment_type;
+      qs("segmentMetaBox").textContent = JSON.stringify(segmentMetadata(segment), null, 2);
+      qs("extractionPrompt").value = segment.prompt || "";
+      qs("extractionJson").value = segment.jsonText || "";
+
+      renderSegmentImage(segment);
+      renderSegmentSummary(segment.parsed);
+    }
+
+    function segmentMetadata(segment) {
+      return {
+        segment_id: segment.segment_id,
+        segment_type: segment.segment_type,
+        title: segment.title,
+        order: segment.order,
+        visible_lanes: segment.visible_lanes || [],
+        lane_headers_visible: Boolean(segment.lane_headers_visible),
+        requires_lane_registry: Boolean(segment.requires_lane_registry),
+        boundary_flow_expected: Boolean(segment.boundary_flow_expected),
+        cross_lane_flow_expected: Boolean(segment.cross_lane_flow_expected),
+        connector_resolution_expected: Boolean(segment.connector_resolution_expected),
+        expected_gpp_elements: segment.expected_gpp_elements || [],
+        capture_guidance: segment.capture_guidance || "",
+        overlap_required: segment.overlap_required || "",
+        complexity: segment.complexity || "",
+        extraction_focus: segment.extraction_focus || "",
+        manual_check_reason: segment.manual_check_reason || "",
+        overlap_justification: segment.overlap_justification || "",
+        crop_generated: Boolean(segment.imageData),
+        crop_padding_pct: segment.cropPaddingPct || state.segmentCropPaddingPct,
+        bounds_pct: segment.bounds_pct || {},
+        gpp_direction_rules: {
+          inputs_allowed_from: ["top", "left"],
+          outputs_allowed_to: ["right", "bottom"]
+        },
+        gpp_symbol_types: GPP_SYMBOL_TYPES
+      };
+    }
+
+    function generateExtractionPrompt() {
+      const segment = activeSegment();
+
+      if (!segment) {
+        return "";
+      }
+
+      const promptTemplate = sgmpPrompt("extraction");
+      segment.prompt = renderPromptTemplate(promptTemplate, {
+        segment_id: segment.segment_id || "",
+        segment_type: segment.segment_type || "",
+        segment_title: segment.title || "",
+        segment_meta_json: JSON.stringify(segment, function(key, value) {
+          return key === "imageData" ? "[IMAGEN DEL RECORTE DISPONIBLE EN EL APLICATIVO]" : value;
+        }, 2),
+        gpp_symbol_types: JSON.stringify(GPP_SYMBOL_TYPES, null, 2)
+      });
+
+      qs("extractionPrompt").value = segment.prompt;
+      return segment.prompt;
+    }
+
+    function loadSegmentImage(event) {
+      const segment = activeSegment();
+      const file = event.target.files && event.target.files[0];
+
+      if (!segment || !file) {
+        return;
+      }
+
+      const reader = new FileReader();
+
+      reader.onload = function(loadEvent) {
+        segment.imageData = loadEvent.target.result;
+        renderSegmentImage(segment);
+        renderSegmentList();
+      };
+
+      reader.readAsDataURL(file);
+    }
+
+    function renderSegmentImage(segment) {
+      const stage = qs("segmentImageStage");
+
+      if (segment && segment.imageData) {
+        stage.innerHTML = `
+          <div class="image-wrap">
+            <img src="${segment.imageData}" alt="Recorte del segmento" />
+          </div>
+        `;
+      } else {
+        stage.textContent = "Sin recorte generado";
+      }
+    }
+
+    function processExtractionJson() {
+      const segment = activeSegment();
+
+      if (!segment) {
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(stripFence(qs("extractionJson").value));
+
+        segment.jsonText = qs("extractionJson").value;
+        segment.parsed = parsed;
+        segment.processedAt = new Date().toISOString();
+
+        renderSegmentSummary(parsed);
+        renderSegmentList();
+
+        showMsg("extractionMsg", "ok", "JSON del segmento procesado.");
+      } catch (error) {
+        showMsg("extractionMsg", "err", "JSON inválido: " + error.message);
+      }
+    }
+
+    function clearActiveSegment() {
+      const segment = activeSegment();
+
+      if (!segment) {
+        return;
+      }
+
+      if (!confirm("¿Limpiar este segmento?")) {
+        return;
+      }
+
+      segment.imageData = "";
+      segment.cropGeneratedAt = null;
+      segment.cropPaddingPct = null;
+      segment.jsonText = "";
+      segment.parsed = null;
+      segment.processedAt = null;
+
+      renderSegmentWork();
+      renderSegmentList();
+
+      showMsg("extractionMsg", "ok", "Segmento limpiado.");
+    }
+
+    function renderSegmentSummary(parsed) {
+      const box = qs("segmentSummary");
+
+      if (!parsed) {
+        box.textContent = "Sin extracción procesada.";
+        return;
+      }
+
+      const view = parsed.segment_operational_view || {};
+      const activities = Array.isArray(view.activities) ? view.activities : (Array.isArray(parsed.activities_partial) ? parsed.activities_partial : []);
+      const inputs = Array.isArray(view.inputs) ? view.inputs : [];
+      const outputs = Array.isArray(view.outputs) ? view.outputs : [];
+      const notes = Array.isArray(view.notes) ? view.notes : (Array.isArray(parsed.notes_catalog) ? parsed.notes_catalog : []);
+      const relations = Array.isArray(view.relations) ? view.relations : (Array.isArray(parsed.flow_logic_partial) ? parsed.flow_logic_partial : []);
+      const validation = parsed.validation || parsed.traceability || {};
+      const pending = [];
+
+      ["pending_validation", "open_questions", "unresolved_connectors", "visual_uncertainties", "manual_validation_required", "unclear_connections"].forEach(function(key) {
+        if (Array.isArray(validation[key])) {
+          validation[key].forEach(function(item) {
+            pending.push(item);
+          });
+        }
+      });
+
+      const parts = [];
+      parts.push(`<h3>Segmento ${esc(parsed.segment_id || "")}</h3>`);
+
+      parts.push(`<h4>Actividades visibles (${activities.length})</h4>`);
+      if (activities.length) {
+        parts.push(`<ul>${activities.map(function(activity) {
+          const name = activity.name || activity.activity_name || "pendiente_validacion";
+          const actor = activity.actor || activity.lane || "pendiente_validacion";
+          return `<li><strong>${esc(name)}</strong> · quién la hace: ${esc(actor)} · tipo: ${esc(activity.type || activity.gpp_type || "activity")}</li>`;
+        }).join("")}</ul>`);
+      } else {
+        parts.push(`<div class="mini-note">No se identificaron actividades visibles en este segmento.</div>`);
+      }
+
+      parts.push(`<h4>Entradas visibles (${inputs.length})</h4>`);
+      if (inputs.length) {
+        parts.push(`<ul>${inputs.map(function(item) {
+          return `<li><strong>${esc(item.input || "pendiente_validacion")}</strong> · tipo: ${esc(item.input_type || item.gpp_symbol_type || "pendiente_validacion")} · entrega: ${esc(item.provided_by || "pendiente_validacion")} · recibe: ${esc(item.received_by || item.related_activity || "pendiente_validacion")} · obs: ${esc(item.observations || "")}</li>`;
+        }).join("")}</ul>`);
+      } else {
+        parts.push(`<div class="mini-note">No se identificaron entradas visibles en este segmento.</div>`);
+      }
+
+      parts.push(`<h4>Salidas visibles (${outputs.length})</h4>`);
+      if (outputs.length) {
+        parts.push(`<ul>${outputs.map(function(item) {
+          return `<li><strong>${esc(item.output || "pendiente_validacion")}</strong> · tipo: ${esc(item.output_type || item.gpp_symbol_type || "pendiente_validacion")} · genera: ${esc(item.provided_by || item.related_activity || "pendiente_validacion")} · recibe: ${esc(item.received_by || "pendiente_validacion")} · obs: ${esc(item.observations || "")}</li>`;
+        }).join("")}</ul>`);
+      } else {
+        parts.push(`<div class="mini-note">No se identificaron salidas visibles en este segmento.</div>`);
+      }
+
+      if (notes.length) {
+        parts.push(`<h4>Notas aclaratorias atadas (${notes.length})</h4>`);
+        parts.push(`<ul>${notes.map(function(note) {
+          return `<li>${esc(note.text || note.reference || JSON.stringify(note))} · actividad: ${esc(note.related_activity || "pendiente_validacion")}</li>`;
+        }).join("")}</ul>`);
+      }
+
+      if (relations.length) {
+        parts.push(`<h4>Relaciones visibles (${relations.length})</h4>`);
+        parts.push(`<ul>${relations.map(function(rel) {
+          return `<li>${esc(rel.from || "pendiente_validacion")} → ${esc(rel.to || "pendiente_validacion")} · ${esc(rel.relation_type || rel.logic_type || "")}</li>`;
+        }).join("")}</ul>`);
+      }
+
+      if (pending.length) {
+        parts.push(`<h4>Validación pendiente (${pending.length})</h4>`);
+        parts.push(`<ul>${pending.map(function(item) {
+          return `<li>${esc(typeof item === "object" ? JSON.stringify(item) : item)}</li>`;
+        }).join("")}</ul>`);
+      }
+
+      box.innerHTML = parts.join("");
+    }
+
+    function mergeArray(target, source) {
+      if (!Array.isArray(source)) {
+        return;
+      }
+
+      source.forEach(function(item) {
+        const key = typeof item === "object" ? JSON.stringify(item) : String(item);
+        const exists = target.some(function(existing) {
+          return (typeof existing === "object" ? JSON.stringify(existing) : String(existing)) === key;
+        });
+
+        if (!exists) {
+          target.push(item);
+        }
+      });
+    }
+
+    function withSource(item, segment) {
+      if (typeof item !== "object" || item === null) {
+        return item;
+      }
+
+      return Object.assign({}, item, {
+        source_segment: {
+          id: segment.segment_id,
+          title: segment.title,
+          type: segment.segment_type
+        }
+      });
+    }
+
+    function cleanText(value) {
+      return String(value || "").trim().replace(/\s+/g, " ");
+    }
+
+    function cleanKey(value) {
+      return cleanText(value)
+        .toUpperCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    }
+
+    function pushUniqueText(target, value) {
+      const clean = cleanText(value);
+      if (!clean || clean === "pendiente_validacion") return;
+      const key = cleanKey(clean);
+      const exists = target.some(function(item) {
+        return cleanKey(item) === key;
+      });
+      if (!exists) target.push(clean);
+    }
+
+    function pushUniqueObject(target, item, keyFields) {
+      if (!item || typeof item !== "object") return;
+      const key = keyFields.map(function(field) {
+        return cleanKey(item[field]);
+      }).join("|");
+      if (!key.replace(/\|/g, "")) return;
+      const exists = target.some(function(existing) {
+        return keyFields.map(function(field) {
+          return cleanKey(existing[field]);
+        }).join("|") === key;
+      });
+      if (!exists) target.push(item);
+    }
+
+    function normalizeList(value) {
+      if (!Array.isArray(value)) return [];
+      return value.map(cleanText).filter(Boolean);
+    }
+
+    function collectOperationalDraft() {
+      const draft = {
+        catalogs: {
+          suppliers: [],
+          inputs: [],
+          outputs: [],
+          customers: [],
+          actors: [],
+          documents_systems: []
+        },
+        activities: [],
+        decisions: [],
+        relations: [],
+        notes: [],
+        pending_validation: [],
+        unresolved_connectors: []
+      };
+
+      state.segments.forEach(function(segment) {
+        const parsed = segment.parsed;
+        if (!parsed) return;
+
+        const view = parsed.segment_operational_view || {};
+        const catalogs = parsed.catalogs_partial || {};
+
+        (catalogs.suppliers || []).forEach(function(x) { pushUniqueText(draft.catalogs.suppliers, x); });
+        (catalogs.inputs || []).forEach(function(x) { pushUniqueText(draft.catalogs.inputs, x); });
+        (catalogs.outputs || []).forEach(function(x) { pushUniqueText(draft.catalogs.outputs, x); });
+        (catalogs.customers || []).forEach(function(x) { pushUniqueText(draft.catalogs.customers, x); });
+        (catalogs.actors || []).forEach(function(x) { pushUniqueText(draft.catalogs.actors, x); });
+
+        (view.inputs || []).forEach(function(item) {
+          pushUniqueText(draft.catalogs.inputs, item.input);
+          pushUniqueText(draft.catalogs.suppliers, item.provided_by);
+          if (item.received_by && item.received_by !== item.related_activity) pushUniqueText(draft.catalogs.actors, item.received_by);
+          if (item.related_activity) {
+            pushUniqueObject(draft.relations, {
+              from: cleanText(item.input),
+              to: cleanText(item.related_activity || item.received_by),
+              relation_type: "input_to_activity",
+              condition: "",
+              connector_label: cleanText(item.connector_label),
+              source_segment_id: segment.segment_id,
+              confidence: cleanText(item.confidence)
+            }, ["from", "to", "relation_type", "connector_label"]);
+          }
+        });
+
+        (view.outputs || []).forEach(function(item) {
+          pushUniqueText(draft.catalogs.outputs, item.output);
+          pushUniqueText(draft.catalogs.customers, item.received_by);
+          if (item.related_activity || item.provided_by) {
+            pushUniqueObject(draft.relations, {
+              from: cleanText(item.related_activity || item.provided_by),
+              to: cleanText(item.output),
+              relation_type: "activity_to_output",
+              condition: "",
+              connector_label: cleanText(item.connector_label),
+              source_segment_id: segment.segment_id,
+              confidence: cleanText(item.confidence)
+            }, ["from", "to", "relation_type", "connector_label"]);
+          }
+        });
+
+        (view.activities || parsed.activities_partial || []).forEach(function(activity) {
+          const item = {
+            id: cleanText(activity.activity_id || activity.id),
+            name: cleanText(activity.name || activity.activity_name),
+            actor: cleanText(activity.actor || activity.lane),
+            type: cleanText(activity.type || activity.gpp_type || "activity"),
+            previous: normalizeList(activity.previous),
+            next: normalizeList(activity.next),
+            inputs_received: Array.isArray(activity.inputs_received) ? activity.inputs_received.map(function(input) {
+              return {
+                input: cleanText(input.input || input),
+                provided_by: cleanText(input.provided_by),
+                connector_label: cleanText(input.connector_label),
+                confidence: cleanText(input.confidence)
+              };
+            }).filter(function(x) { return x.input; }) : [],
+            outputs_delivered: Array.isArray(activity.outputs_delivered) ? activity.outputs_delivered.map(function(output) {
+              return {
+                output: cleanText(output.output || output),
+                received_by: cleanText(output.received_by),
+                connector_label: cleanText(output.connector_label),
+                confidence: cleanText(output.confidence)
+              };
+            }).filter(function(x) { return x.output; }) : [],
+            clarification_note_refs: Array.isArray(activity.clarification_note_refs)
+              ? activity.clarification_note_refs.map(cleanText).filter(Boolean)
+                 : [],
+                 observations: cleanText(activity.observations),
+            source_segment_id: segment.segment_id
+          };
+
+          if (!item.name) return;
+          pushUniqueText(draft.catalogs.actors, item.actor);
+          item.inputs_received.forEach(function(x) { pushUniqueText(draft.catalogs.inputs, x.input); pushUniqueText(draft.catalogs.suppliers, x.provided_by); });
+          item.outputs_delivered.forEach(function(x) { pushUniqueText(draft.catalogs.outputs, x.output); pushUniqueText(draft.catalogs.customers, x.received_by); });
+
+          if (item.type === "decision") {
+            pushUniqueObject(draft.decisions, item, ["name", "actor"]);
+          } else {
+            pushUniqueObject(draft.activities, item, ["name", "actor"]);
+          }
+        });
+
+        (view.relations || parsed.flow_logic_partial || []).forEach(function(rel) {
+          const item = {
+            from: cleanText(rel.from),
+            to: cleanText(rel.to),
+            relation_type: cleanText(rel.relation_type || rel.logic_type),
+            condition: cleanText(rel.condition),
+            connector_label: cleanText(rel.connector_label),
+            source_segment_id: segment.segment_id,
+            confidence: cleanText(rel.confidence)
+          };
+          if (!item.from || !item.to) return;
+          if (item.from === "pendiente_validacion" || item.to === "pendiente_validacion" || item.relation_type === "pending_connector" || item.relation_type === "pending_boundary_resolution") {
+            pushUniqueObject(draft.unresolved_connectors, item, ["from", "to", "connector_label"]);
+          } else {
+            pushUniqueObject(draft.relations, item, ["from", "to", "relation_type", "condition", "connector_label"]);
+          }
+        });
+
+        (view.notes || parsed.notes_catalog || []).forEach(function(note) {
+          pushUniqueObject(draft.notes, {
+            note_id: cleanText(note.note_id),
+            text: cleanText(note.text || note.reference),
+            related_activity: cleanText(note.related_activity),
+            rule_or_condition: cleanText(note.rule_or_condition || note.note_type),
+            source_segment_id: segment.segment_id,
+            confidence: cleanText(note.confidence)
+          }, ["text", "related_activity"]);
+        });
+
+        const validation = parsed.validation || parsed.traceability || {};
+        ["pending_validation", "open_questions", "visual_uncertainties", "manual_validation_required", "unclear_connections"].forEach(function(key) {
+          if (Array.isArray(validation[key])) {
+            validation[key].forEach(function(item) {
+              pushUniqueText(draft.pending_validation, typeof item === "object" ? JSON.stringify(item) : item);
+            });
+          }
+        });
+
+        if (Array.isArray(validation.unresolved_connectors)) {
+          validation.unresolved_connectors.forEach(function(item) {
+            if (typeof item === "object") {
+              pushUniqueObject(draft.unresolved_connectors, Object.assign({ source_segment_id: segment.segment_id }, item), ["connector_label", "from", "to"]);
+            } else {
+              pushUniqueText(draft.pending_validation, item);
+            }
+          });
+        }
+      });
+
+      return draft;
+    }
+
+    function buildDraftLmpJson() {
+      syncPlainTextNotes();
+      const draft = collectOperationalDraft();
+
+      return {
+        source_type: "existing_process_extractor",
+        catalogs: draft.catalogs,
+        as_is_flow: {
+          activities: draft.activities,
+          decisions: draft.decisions,
+          relations: draft.relations,
+          notes: draft.notes
+        },
+        manual_plain_text_notes: {
+          source: "manual_paste",
+          raw_text: state.plainTextNotes || "",
+          status: state.plainTextNotes ? "pending_consolidation" : "empty"
+        },
+        validation: {
+          pending_validation: draft.pending_validation,
+          duplicates_resolved: [],
+          unresolved_connectors: draft.unresolved_connectors
+        }
+      };
+    }
+
+    function buildTraceabilityJson() {
+      syncPlainTextNotes();
+
+      return {
+        instrument: "sgmp_sipoc_functional_extractor",
+        version: "0.9",
+        generatedAt: new Date().toISOString(),
+        traceability_type: "full_extractor_traceability",
+        notes_mode: "manual_plain_text",
+        plain_text_notes_present: Boolean(state.plainTextNotes),
+        gpp_symbol_types: GPP_SYMBOL_TYPES,
+        lane_registry: state.lane_registry,
+        column_registry: state.column_registry,
+        segmentation_quality: state.segmentation_quality,
+        coverage_audit: state.coverage_audit,
+        segmentation_plan: state.segmentation_plan,
+        segments: state.segments.map(function(segment) {
+          return {
+            segment_id: segment.segment_id,
+            title: segment.title,
+            type: segment.segment_type,
+            metadata: segmentMetadata(segment),
+            has_image: Boolean(segment.imageData),
+            cropGeneratedAt: segment.cropGeneratedAt || null,
+            processedAt: segment.processedAt || null,
+            extraction: segment.parsed || null
+          };
+        })
+      };
+    }
+
+    function buildFinalJson() {
+      return state.consolidatedLmpJson || buildDraftLmpJson();
+    }
+
+    function generateConsolidationPrompt() {
+      syncPlainTextNotes();
+
+      const draft = buildDraftLmpJson();
+
+      const consolidationInput = {
+        visual_segment_extractions: {
+          catalogs: draft.catalogs,
+          as_is_flow: draft.as_is_flow,
+          validation: draft.validation
+        },
+        manual_plain_text_notes: state.plainTextNotes || ""
+      };
+
+      const promptTemplate = sgmpPrompt("consolidation");
+      state.consolidationPrompt = renderPromptTemplate(promptTemplate, {
+        consolidation_input_json: JSON.stringify(consolidationInput, null, 2)
+      });
+
+      refreshFinalPreview();
+      return state.consolidationPrompt;
+    }
+
+    function processConsolidatedLmpJson() {
+      try {
+        const parsed = JSON.parse(stripFence(qs("consolidationJson").value));
+        state.consolidationJsonText = qs("consolidationJson").value;
+        state.consolidatedLmpJson = parsed;
+        refreshFinalPreview();
+        showMsg("consolidationMsg", "ok", "JSON compacto LMP procesado.");
+      } catch (error) {
+        showMsg("consolidationMsg", "err", "JSON inválido: " + error.message);
+      }
+    }
+
+    function refreshFinalPreview() {
+      if (qs("consolidationPrompt")) qs("consolidationPrompt").value = state.consolidationPrompt || "";
+      if (qs("consolidationJson")) qs("consolidationJson").value = state.consolidationJsonText || "";
+      qs("finalPreview").textContent = JSON.stringify(buildFinalJson(), null, 2);
+    }
+
+    function downloadJsonFile(data, filename) {
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json;charset=utf-8"
+      });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }
+
+    function exportFinalJson() {
+      const code = "sipoc";
+      downloadJsonFile(buildFinalJson(), `json_lmp_${code}.json`);
+    }
+
+    function exportTraceabilityJson() {
+      const code = "sipoc";
+      downloadJsonFile(buildTraceabilityJson(), `trazabilidad_extractor_${code}.json`);
+    }
+
+    function buildLightState() {
+  return {
+    segmentCropPaddingPct: state.segmentCropPaddingPct || 1.5,
+
+    lane_registry: state.lane_registry || [],
+    column_registry: state.column_registry || [],
+    segmentation_quality: state.segmentation_quality || null,
+    coverage_audit: state.coverage_audit || null,
+    segmentation_plan: state.segmentation_plan || [],
+
+    segments: (state.segments || []).map(function(segment) {
+      return {
+        segment_id: segment.segment_id,
+        segment_type: segment.segment_type,
+        title: segment.title,
+        order: segment.order,
+        bounds_pct: segment.bounds_pct,
+        visible_lanes: segment.visible_lanes || [],
+        lane_headers_visible: Boolean(segment.lane_headers_visible),
+        requires_lane_registry: Boolean(segment.requires_lane_registry),
+        boundary_flow_expected: Boolean(segment.boundary_flow_expected),
+        cross_lane_flow_expected: Boolean(segment.cross_lane_flow_expected),
+        connector_resolution_expected: Boolean(segment.connector_resolution_expected),
+        expected_gpp_elements: segment.expected_gpp_elements || [],
+        capture_guidance: segment.capture_guidance || "",
+        overlap_required: segment.overlap_required || "",
+        complexity: segment.complexity || "",
+        extraction_focus: segment.extraction_focus || "",
+        manual_check_reason: segment.manual_check_reason || "",
+        overlap_justification: segment.overlap_justification || "",
+        related_segments: segment.related_segments || [],
+        coverage_role: segment.coverage_role || "",
+
+        prompt: segment.prompt || "",
+        jsonText: segment.jsonText || "",
+        parsed: segment.parsed || null,
+        processedAt: segment.processedAt || null
+      };
+    }),
+
+    activeSegmentId: state.activeSegmentId || null,
+    plainTextNotes: state.plainTextNotes || "",
+    consolidationPrompt: state.consolidationPrompt || "",
+    consolidationJsonText: state.consolidationJsonText || "",
+    consolidatedLmpJson: state.consolidatedLmpJson || null
+  };
+}
+
+function buildBackupJson() {
+  syncPlainTextNotes();
+
+  return {
+    instrument: "sgmp_sipoc_functional_extractor",
+    version: "0.9",
+    backup_type: "work_session_light",
+    generatedAt: new Date().toISOString(),
+    state: buildLightState()
+  };
+}
+
+    function exportBackupJson() {
+      const code = "sipoc";
+      downloadJsonFile(buildBackupJson(), `respaldo_extractor_${code}.json`);
+    }
+
+    function triggerBackupImport() {
+      qs("backupImportInput").click();
+    }
+
+    function restoreStateFromObject(data) {
+      state = data && data.state ? data.state : data;
+      state.sourceImageData = state.sourceImageData || "";
+      state.preparedImageData = state.preparedImageData || state.sourceImageData || "";
+      state.segmentCropPaddingPct = state.segmentCropPaddingPct || 1.5;
+      state.lane_registry = state.lane_registry || [];
+      state.column_registry = state.column_registry || [];
+      state.segmentation_plan = state.segmentation_plan || [];
+      state.segments = state.segments || [];
+      state.activeSegmentId = state.activeSegmentId || null;
+      state.plainTextNotes = state.plainTextNotes || "";
+      state.consolidationPrompt = state.consolidationPrompt || "";
+      state.consolidationJsonText = state.consolidationJsonText || "";
+      state.consolidatedLmpJson = state.consolidatedLmpJson || null;
+
+      const notesBox = qs("plainTextNotes");
+      if (notesBox) notesBox.value = state.plainTextNotes;
+
+      renderSourceImage();
+renderSegmentList();
+renderPreparedOverlay();
+renderSegmentWork();
+refreshFinalPreview();
+
+if (state.segments.length && !state.preparedImageData) {
+  alert(
+    "Respaldo cargado. Vuelve a cargar la imagen SIPOC para regenerar los recortes desde la segmentación guardada."
+  );
+}
+    }
+
+    function importBackupJson(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function() {
+        try {
+          const data = JSON.parse(reader.result);
+          restoreStateFromObject(data);
+          alert("Respaldo JSON cargado.");
+        } catch (error) {
+          alert("No se pudo cargar el respaldo: " + error.message);
+        } finally {
+          event.target.value = "";
+        }
+      };
+      reader.readAsText(file, "utf-8");
+    }
+
+    async function copyText(id, message) {
+      const element = qs(id);
+      const text = element.value || element.textContent || "";
+
+      if (!text.trim()) {
+        return;
+      }
+
+      await navigator.clipboard.writeText(text);
+      alert(message || "Copiado.");
+    }
+
+    function saveSession() {
+  syncPlainTextNotes();
+
+  try {
+    localStorage.setItem(
+      "sgmp_sipoc_extractor_session",
+      JSON.stringify(buildBackupJson())
+    );
+
+    alert("Sesión local guardada. Las imágenes y recortes no se guardan para evitar sobrecargar el navegador.");
+  } catch (error) {
+    console.warn("No se pudo guardar la sesión local:", error);
+
+    alert(
+      "No se pudo guardar la sesión local porque el navegador alcanzó el límite de almacenamiento. " +
+      "Descarga un respaldo JSON liviano para conservar el avance."
+    );
+  }
+}
+
+    function loadSession() {
+      const raw =
+        localStorage.getItem("sgmp_sipoc_extractor_session") ||
+        localStorage.getItem("sgmp_sipoc_extractor_legacy_08") ||
+        localStorage.getItem("sgmp_sipoc_extractor_legacy_07") ||
+        localStorage.getItem("sgmp_sipoc_extractor_legacy_05");
+
+      if (!raw) {
+        alert("No hay sesión local guardada.");
+        return;
+      }
+
+      try {
+        restoreStateFromObject(JSON.parse(raw));
+        alert("Sesión local cargada.");
+      } catch (error) {
+        alert("No se pudo cargar sesión local: " + error.message);
+      }
+    }
+
+
+    // ════════════════════════════════════════════════════════════════
+    // SGMP · API automática + fallback manual
+    // ════════════════════════════════════════════════════════════════
+
+    function openLmpModule() {
+      if (!LMP_MODULE_URL || LMP_MODULE_URL.indexOf("PEGA_AQUI") === 0) {
+        alert("Configura primero LMP_MODULE_URL en el HTML o desde el Admin SGMP.");
+        return;
+      }
+      window.open(LMP_MODULE_URL, "_blank");
+    }
+
+    function sgmpApiConfigured() {
+      return SGMP_API_URL && SGMP_API_URL.indexOf("PEGA_AQUI") !== 0;
+    }
+
+    function setAiStatus(mode, message, detail) {
+      const box = qs("sgmpAiStatus");
+      if (!box) return;
+
+      if (!message) {
+        box.className = "sgmp-ai-status";
+        box.innerHTML = "";
+        return;
+      }
+
+      const loader = mode === "processing"
+        ? '<div class="sgmp-ai-loader"><span></span></div>'
+        : "";
+
+      const manualHint = mode === "manual"
+        ? '<div class="sgmp-manual-hint show">Modo manual activo: copia el prompt generado, ejecútalo en el chat de IA, pega la respuesta JSON en el campo correspondiente y continúa.</div>'
+        : "";
+
+      box.className = "sgmp-ai-status show";
+      box.innerHTML = `<strong>${esc(message)}</strong>${detail ? `<div>${esc(detail)}</div>` : ""}${loader}${manualHint}`;
+    }
+
+    function setManualFallback(stageKey, reason) {
+      setAiStatus(
+        "manual",
+        "No se pudo completar la conexión automática con IA.",
+        reason || "Continúa con el flujo manual copiar/pegar."
+      );
+    }
+
+    async function sgmpFetch(action, params) {
+      if (!sgmpApiConfigured()) {
+        throw new Error("SGMP_API_URL no está configurada.");
+      }
+
+      const url = new URL(SGMP_API_URL);
+      url.searchParams.set("action", action);
+      Object.entries(params || {}).forEach(([key, value]) => {
+        url.searchParams.set(key, typeof value === "string" ? value : JSON.stringify(value));
+      });
+
+      const response = await fetch(url.toString(), { method: "GET" });
+      const data = await response.json();
+
+      if (!data || data.ok === false) {
+        throw new Error((data && (data.error || data.message)) || "Respuesta inválida del backend SGMP.");
+      }
+
+      return data.data !== undefined ? data.data : data;
+    }
+
+    async function loadSgmpConfiguration() {
+      if (!sgmpApiConfigured()) {
+        setManualFallback("", "Configura SGMP_API_URL para activar ejecución automática.");
+        return;
+      }
+
+      try {
+        setAiStatus("processing", "Conectando con SGMP...", "Cargando prompts y reglas de ejecución del módulo Extractor SIPOC.");
+
+        const prompts = await sgmpFetch("get_prompts", { module_code: SGMP_MODULE_CODE });
+        (prompts || []).forEach(function(item) {
+          if (item.prompt_key) SGMP_PROMPTS[item.prompt_key] = item.prompt_text || "";
+        });
+
+        for (const key of Object.keys(SGMP_STAGE_CODES)) {
+          try {
+            SGMP_EXECUTION[key] = await sgmpFetch("get_execution_mode", {
+              module_code: SGMP_MODULE_CODE,
+              stage_code: SGMP_STAGE_CODES[key]
+            });
+          } catch (err) {
+            SGMP_EXECUTION[key] = {};
+          }
+        }
+
+        generateSegmentationPrompt();
+        setAiStatus("ok", "Configuración SGMP cargada.", "El extractor usará API automática cuando la etapa esté habilitada.");
+        setTimeout(() => setAiStatus("", ""), 1800);
+      } catch (error) {
+        setManualFallback("", error.message);
+      }
+    }
+
+    function sgmpPrompt(stageKey) {
+      const promptKey = SGMP_PROMPT_KEYS[stageKey];
+      const prompt = SGMP_PROMPTS[promptKey];
+
+      if (!prompt) {
+        return [
+          "PROMPT NO CARGADO DESDE SGMP.",
+          "Revisa la hoja PROMPTS para el módulo " + SGMP_MODULE_CODE + " y el prompt_key " + promptKey + ".",
+          "El sistema entra en modo manual hasta que el prompt esté disponible."
+        ].join("\n");
+      }
+
+      return prompt;
+    }
+
+    function renderPromptTemplate(template, vars) {
+      let out = String(template || "");
+      Object.entries(vars || {}).forEach(([key, value]) => {
+        const re = new RegExp("\\{\\{" + key + "\\}\\}", "g");
+        out = out.replace(re, String(value ?? ""));
+      });
+      return out;
+    }
+
+    function sgmpStageUseApi(stageKey) {
+      const cfg = SGMP_EXECUTION[stageKey] || {};
+      const enabled = String(cfg.enabled || "SI").toUpperCase();
+      const useApi = String(cfg.use_api || cfg.useApi || cfg.api_enabled || cfg.apiEnabled || "SI").toUpperCase();
+      const mode = String(cfg.execution_mode || cfg.executionMode || "HYBRID").toUpperCase();
+
+      if (enabled === "NO") return false;
+      if (mode === "MANUAL" || mode === "MANUAL_SYSTEM") return false;
+      return useApi !== "NO";
+    }
+
+    async function sgmpCallAI(stageKey, prompt, imageData) {
+      if (!sgmpStageUseApi(stageKey)) {
+        throw new Error("La etapa está configurada en modo manual.");
+      }
+
+      const payload = {
+        action: "call_ai",
+        module_code: SGMP_MODULE_CODE,
+        stage_code: SGMP_STAGE_CODES[stageKey],
+        prompt: prompt || "",
+        // La imagen se envía internamente al backend. No se muestra ni se exporta como base64.
+        image_data: imageData || ""
+      };
+
+      const response = await fetch(SGMP_API_URL, {
+        method: "POST",
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "text/plain;charset=utf-8" }
+      });
+
+      const data = await response.json();
+      if (!data || data.ok === false) {
+        throw new Error((data && (data.error || data.message)) || "Error en ejecución IA.");
+      }
+
+      return data.text || data.result || data.content || (data.data && (data.data.text || data.data.result || data.data.content)) || JSON.stringify(data.data || data);
+    }
+
+    async function runSegmentationAI() {
+      try {
+        if (!state.preparedImageData) {
+          showMsg("segmentationMsg", "warn", "Primero carga la imagen SIPOC.");
+          return;
+        }
+
+        const prompt = generateSegmentationPrompt();
+        setAiStatus("processing", "Procesando segmentación con IA...", "La respuesta se cargará automáticamente si la conexión finaliza correctamente.");
+
+        const resultText = await sgmpCallAI("segmentation", prompt, state.preparedImageData);
+        qs("segmentationJson").value = resultText;
+        await applySegmentationJson();
+
+        setAiStatus("ok", "Segmentación completada.", "La respuesta IA fue aplicada automáticamente.");
+        setTimeout(() => setAiStatus("", ""), 1800);
+      } catch (error) {
+        generateSegmentationPrompt();
+        setManualFallback("segmentation", error.message);
+        showMsg("segmentationMsg", "warn", "Se activó modo manual: copia el prompt, procesa la imagen en el chat IA y pega el JSON.");
+      }
+    }
+
+    async function runSegmentExtractionAI() {
+      try {
+        const segment = activeSegment();
+        if (!segment) {
+          showMsg("extractionMsg", "warn", "Selecciona primero un segmento.");
+          return;
+        }
+
+        if (!segment.imageData) {
+          await generateActiveSegmentCrop();
+        }
+
+        const prompt = generateExtractionPrompt();
+        setAiStatus("processing", "Procesando segmento con IA...", "La respuesta se cargará automáticamente en el JSON del segmento.");
+
+        const resultText = await sgmpCallAI("extraction", prompt, segment.imageData || "");
+        qs("extractionJson").value = resultText;
+        processExtractionJson();
+
+        setAiStatus("ok", "Extracción del segmento completada.", "El JSON fue procesado automáticamente.");
+        setTimeout(() => setAiStatus("", ""), 1800);
+      } catch (error) {
+        generateExtractionPrompt();
+        setManualFallback("extraction", error.message);
+        showMsg("extractionMsg", "warn", "Se activó modo manual: copia el prompt, usa el recorte del segmento y pega el JSON.");
+      }
+    }
+
+    async function runConsolidationAI() {
+      try {
+        const prompt = generateConsolidationPrompt();
+        setAiStatus("processing", "Consolidando JSON LMP con IA...", "La respuesta se cargará automáticamente en el campo JSON compacto LMP.");
+
+        const resultText = await sgmpCallAI("consolidation", prompt, "");
+        qs("consolidationJson").value = resultText;
+        processConsolidatedLmpJson();
+
+        setAiStatus("ok", "Consolidación completada.", "El JSON para LMP quedó procesado automáticamente.");
+        setTimeout(() => setAiStatus("", ""), 1800);
+      } catch (error) {
+        generateConsolidationPrompt();
+        setManualFallback("consolidation", error.message);
+        showMsg("consolidationMsg", "warn", "Se activó modo manual: copia el prompt de consolidación y pega el JSON.");
+      }
+    }
+
+
+
+    fillContext();
+    loadSgmpConfiguration();
+    generateSegmentationPrompt();
+    renderSourceImage();
+    renderSegmentList();
+    renderPreparedOverlay();
+    renderSegmentWork();
+    refreshFinalPreview();
+
+    </script>
+</body>
+</html>
