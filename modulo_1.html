@@ -8753,19 +8753,83 @@ function lmpB1TaxonomySummary(issues){
   };
 }
 
+function lmpB1ParseIssueLocation(field){
+  const raw = String(field || 'as_is_process').trim();
+  const indexMatch = raw.match(/as_is_process\.(activities|suppliers_inputs|outputs_customers|additional_information)\[(\d+)\](?:\.([A-Za-z0-9_]+)|\s*\/\s*[^.]+\.([A-Za-z0-9_]+))?/);
+  const section = raw.includes('suppliers_inputs')
+    ? 'suppliers_inputs'
+    : raw.includes('outputs_customers')
+      ? 'outputs_customers'
+      : raw.includes('additional_information')
+        ? 'additional_information'
+        : raw.includes('activities')
+          ? 'activities'
+          : 'as_is_process';
+  const entity = indexMatch ? indexMatch[1] : section;
+  const index = indexMatch ? Number(indexMatch[2]) : null;
+  const property = (indexMatch && (indexMatch[3] || indexMatch[4])) || raw.split('.').pop() || '';
+  const uiContainerBySection = {
+    activities: 'asisActivities',
+    suppliers_inputs: 'asisSuppliersInputs',
+    outputs_customers: 'asisOutputsCustomers',
+    additional_information: 'asisAdditionalInfo',
+    as_is_process: 'asis'
+  };
+  const rowSelectorBySection = {
+    activities: '.activity-item',
+    suppliers_inputs: '.supplier-input-row',
+    outputs_customers: '.output-customer-row',
+    additional_information: '.additional-info-readonly-item',
+    as_is_process: ''
+  };
+  return {
+    path: raw,
+    section,
+    entity,
+    index,
+    property,
+    ui_target: {
+      container_id: uiContainerBySection[section] || 'asis',
+      row_selector: rowSelectorBySection[section] || '',
+      row_index: index,
+      field_hint: property
+    }
+  };
+}
+
+function lmpB1CorrectionHint(issue, location){
+  const type = issue?.type || '';
+  const section = location?.section || 'as_is_process';
+  if(type === 'possible_input_in_previous') return 'Mover el valor desde previous[] hacia inputs_used[] en la actividad afectada.';
+  if(type === 'possible_output_in_next') return 'Mover el valor desde next[] hacia outputs_generated[] en la actividad afectada.';
+  if(type === 'activity_without_actor') return 'Completar el actor responsable en la actividad afectada.';
+  if(type === 'activity_without_name') return 'Completar el nombre de la actividad o eliminar la fila si es ruido.';
+  if(type === 'decision_without_two_outputs') return 'Registrar al menos dos rutas de salida para la decisión.';
+  if(section === 'suppliers_inputs') return 'Revisar el bloque Entradas y proveedores.';
+  if(section === 'outputs_customers') return 'Revisar el bloque Salidas y clientes.';
+  if(section === 'activities') return 'Revisar el bloque Actividades del proceso.';
+  return issue?.suggestion || 'Revisar la estructura AS IS.';
+}
+
 function lmpStructuralIssue(type, level, field, message, suggestion, extra){
   const taxonomyCategory = lmpB1TaxonomyCategory(type);
-  return Object.assign({
+  const location = lmpB1ParseIssueLocation(field);
+  const baseIssue = {
     type,
     level,
     field,
     where: field,
+    location,
+    ui_target: location.ui_target,
     message,
     suggestion: suggestion || 'Revisar y completar el dato en AS IS.',
     stage: 'B1',
     category: taxonomyCategory,
     taxonomy_category: taxonomyCategory
-  }, extra || {});
+  };
+  return Object.assign({
+    correction_hint: lmpB1CorrectionHint(baseIssue, location)
+  }, baseIssue, extra || {});
 }
 
 function lmpStructuralLifecycle(blockingCount, warningCount, score){
@@ -8787,19 +8851,32 @@ const LMP_B1_STRUCTURAL_CONTRACT = Object.freeze({
 function lmpB1NormalizeIssue(issue, index){
   const item = issue || {};
   const level = item.level === 'critical' ? 'critical' : 'warning';
+  const field = item.field || item.where || 'as_is_process';
+  const location = item.location || lmpB1ParseIssueLocation(field);
+  const normalizedBase = {
+    type: item.type || 'structural_gap',
+    level,
+    field,
+    where: item.where || field,
+    message: item.message || 'Vacío estructural detectado.',
+    suggestion: item.suggestion || 'Revisar y completar el dato en AS IS.'
+  };
   return {
     id: item.id || ('B1-GAP-' + String(index + 1).padStart(3, '0')),
-    type: item.type || 'structural_gap',
+    type: normalizedBase.type,
     category: item.category || lmpB1TaxonomyCategory(item.type),
     taxonomy_category: item.taxonomy_category || item.category || lmpB1TaxonomyCategory(item.type),
     level,
     severity: level === 'critical' ? 'blocking' : 'warning',
-    field: item.field || item.where || 'as_is_process',
-    where: item.where || item.field || 'as_is_process',
-    message: item.message || 'Vacío estructural detectado.',
+    field,
+    where: normalizedBase.where,
+    location,
+    ui_target: item.ui_target || location.ui_target,
+    message: normalizedBase.message,
     affectedValue: item.affectedValue || '',
     searchHint: item.searchHint || '',
-    suggestion: item.suggestion || 'Revisar y completar el dato en AS IS.',
+    suggestion: normalizedBase.suggestion,
+    correction_hint: item.correction_hint || lmpB1CorrectionHint(normalizedBase, location),
     autoFix: item.autoFix || null,
     stage: 'B1'
   };
@@ -11583,6 +11660,35 @@ SALIDA JSON ESTRICTA:
     },
     "deterministic_engine": "lmp_b1_structural_validator",
     "prohibited_outputs_removed": true
+  },
+  "gap_schema": {
+    "id": "B1-GAP-001",
+    "type": "",
+    "category": "",
+    "taxonomy_category": "",
+    "level": "critical|warning",
+    "severity": "blocking|warning",
+    "field": "as_is_process.activities[0].actor",
+    "where": "as_is_process.activities[0].actor",
+    "location": {
+      "path": "",
+      "section": "activities|suppliers_inputs|outputs_customers|additional_information|as_is_process",
+      "entity": "",
+      "index": 0,
+      "property": "",
+      "ui_target": {
+        "container_id": "",
+        "row_selector": "",
+        "row_index": 0,
+        "field_hint": ""
+      }
+    },
+    "affectedValue": "",
+    "searchHint": "",
+    "suggestion": "",
+    "correction_hint": "",
+    "autoFix": null,
+    "stage": "B1"
   },
   "contextual_enrichment": {
     "structural_observations": [],
