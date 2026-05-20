@@ -6704,6 +6704,10 @@ function asisActivityTemplate(data = {}, index = 0){
 function readAsisRow(item){
   if(!item) return null;
   const get = (sel) => item.querySelector(sel)?.value?.trim() || '';
+  const index = Number(item.dataset?.index);
+  const prior = Number.isFinite(index) ? (state.asis?.activities?.[index] || {}) : {};
+  const extInputs = dedupeCatalog(prior.ext_inputs || prior.inputs_used || []);
+  const extOutputs = dedupeCatalog(prior.ext_outputs || prior.outputs_generated || []);
   const activity = {
     id: get('.a_id'),
     name: get('.a_name'),
@@ -6712,6 +6716,10 @@ function readAsisRow(item){
     document: get('.a_document'),
     previous: splitItems(get('.a_previous')),
     next: splitItems(get('.a_next')),
+    ext_inputs: extInputs,
+    ext_outputs: extOutputs,
+    inputs_used: extInputs,
+    outputs_generated: extOutputs,
     time: get('.a_time'),
     ava: get('.a_ava') || 'NNVA',
     problems: get('.a_problems'),
@@ -9033,7 +9041,18 @@ function lmpStructuralValidator(input, options = {}){
           `${base}.previous[${prevIndex}]`,
           matchesInput ? `Entrada ubicada como actividad previa${nameLabel}: ${prev}` : `previous[] no coincide con actividad existente${nameLabel}: ${prev}`,
           matchesInput ? 'Mover a inputs_used[].' : 'previous[] debe referenciar actividades existentes.',
-          { affectedValue: prev, searchHint: activity.name || prev }
+          {
+            affectedValue: prev,
+            searchHint: activity.name || prev,
+            autoFix: matchesInput ? {
+              action: 'move_previous_to_ext_inputs',
+              activity_index: index,
+              from_field: 'previous',
+              from_index: prevIndex,
+              to_field: 'ext_inputs',
+              value: prev
+            } : null
+          }
         ));
       }
     });
@@ -9048,7 +9067,18 @@ function lmpStructuralValidator(input, options = {}){
           `${base}.next[${nextIndex}]`,
           matchesOutput ? `Salida ubicada como actividad siguiente${nameLabel}: ${next}` : `next[] no coincide con actividad existente${nameLabel}: ${next}`,
           matchesOutput ? 'Mover a outputs_generated[].' : 'next[] debe referenciar actividades existentes.',
-          { affectedValue: next, searchHint: activity.name || next }
+          {
+            affectedValue: next,
+            searchHint: activity.name || next,
+            autoFix: matchesOutput ? {
+              action: 'move_next_to_ext_outputs',
+              activity_index: index,
+              from_field: 'next',
+              from_index: nextIndex,
+              to_field: 'ext_outputs',
+              value: next
+            } : null
+          }
         ));
       }
     });
@@ -9284,6 +9314,78 @@ function focusLmpB1Issue(index){
 }
 window.focusLmpB1Issue = focusLmpB1Issue;
 
+function lmpRemoveArrayValue(items, value){
+  const key = lmpStructuralKey(value);
+  let removed = false;
+  return lmpStructuralList(items).filter(item => {
+    if(!removed && lmpStructuralKey(item) === key){
+      removed = true;
+      return false;
+    }
+    return true;
+  });
+}
+
+function lmpApplyActivityArrayMove(activity, fromField, toField, value){
+  if(!activity || !fromField || !toField || !lmpStructuralText(value)){
+    return { ok:false, reason:'Ajuste estructural incompleto.' };
+  }
+
+  const fromValues = lmpStructuralList(activity[fromField]);
+  const targetKey = lmpStructuralKey(value);
+  if(!fromValues.some(item => lmpStructuralKey(item) === targetKey)){
+    return { ok:false, reason:'El valor ya no está en el campo origen. Actualiza la validación estructural.' };
+  }
+
+  const toValues = lmpStructuralList(activity[toField]);
+  activity[fromField] = lmpRemoveArrayValue(fromValues, value);
+  activity[toField] = dedupeCatalog([toValues, value]);
+
+  if(toField === 'ext_inputs') activity.inputs_used = dedupeCatalog([activity.inputs_used || [], activity[toField]]);
+  if(toField === 'ext_outputs') activity.outputs_generated = dedupeCatalog([activity.outputs_generated || [], activity[toField]]);
+  return { ok:true };
+}
+
+function applyLmpB1AutoFix(index){
+  const issue = safeArray(window.__LMP_B1_STRUCTURAL_ISSUES__)[Number(index)];
+  const fix = issue?.autoFix;
+  if(!fix){
+    showMsg('asisBuilderMsg','warn','Este vacío requiere corrección manual.');
+    focusLmpB1Issue(index);
+    return;
+  }
+
+  const activityIndex = Number(fix.activity_index);
+  if(!Number.isFinite(activityIndex) || activityIndex < 0){
+    showMsg('asisBuilderMsg','warn','No se pudo ubicar la actividad afectada.');
+    return;
+  }
+
+  state.asis = state.asis || {};
+  state.asis.activities = safeArray(state.asis.activities);
+
+  const row = qs('asisActivities')?.querySelector(`.activity-item[data-index="${activityIndex}"]`);
+  if(row){
+    const current = readAsisRow(row);
+    if(current) state.asis.activities[activityIndex] = Object.assign({}, state.asis.activities[activityIndex] || {}, current);
+  }
+
+  const activity = state.asis.activities[activityIndex];
+  const result = lmpApplyActivityArrayMove(activity, fix.from_field, fix.to_field, fix.value);
+  if(!result.ok){
+    showMsg('asisBuilderMsg','warn', result.reason || 'No se pudo aplicar el ajuste seguro.');
+    focusLmpB1Issue(index);
+    return;
+  }
+
+  renderAsIsActivities();
+  updateTopStatus();
+  window.__LMP_B1_STRUCTURAL_STATUS_SIGNATURE__ = '';
+  renderLmpB1StructuralStatus();
+  showMsg('asisBuilderMsg','ok','Ajuste seguro aplicado. El valor fue movido a la estructura AS IS correspondiente.');
+}
+window.applyLmpB1AutoFix = applyLmpB1AutoFix;
+
 function renderLmpB1StructuralStatus(){
   if(typeof qs !== 'function') return null;
   const list = qs('asisStructuralIssuesList');
@@ -9309,6 +9411,11 @@ function renderLmpB1StructuralStatus(){
     }else{
       list.innerHTML = '<div class="asis-issue-list">' + issues.map((issue, index) => {
         const target = issue.affectedValue || issue.searchHint || '';
+        const autoFixButton = issue.autoFix ? `
+          <button type="button" class="brief-mini-btn" onclick="applyLmpB1AutoFix(${index})">
+            Aplicar ajuste
+          </button>
+        ` : '';
         return `
           <div class="asis-issue-row">
             <div class="asis-issue-index">${index + 1}</div>
@@ -9319,6 +9426,7 @@ function renderLmpB1StructuralStatus(){
               <span><b>Sugerencia:</b> ${escapeHtml(issue.suggestion || 'Revisar estructura AS IS.')}</span>
             </div>
             <div class="asis-issue-action">
+              ${autoFixButton}
               <button type="button" class="brief-mini-btn primary" onclick="focusLmpB1Issue(${index})">
                 Corregir vacío
               </button>
