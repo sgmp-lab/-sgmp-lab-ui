@@ -1046,8 +1046,8 @@
     // SGMP · Configuración central del módulo Extractor SIPOC
     // Ajusta estas URL temporalmente aquí. Luego pueden venir del Admin SGMP.
     // ════════════════════════════════════════════════════════════════
-    const SGMP_API_URL = window.SGMP_API_URL || 'PEGA_AQUI_TU_URL_APPSCRIPT_EXEC';
-    const LMP_MODULE_URL = window.LMP_MODULE_URL || 'PEGA_AQUI_TU_URL_LMP';
+    const SGMP_API_URL = window.SGMP_API_URL || 'https://script.google.com/macros/s/AKfycbyQZi1flaILc4e3I7MFp8gLctkzC6VccjfFz5aHluMrGZLwOUeS3uQaHPsMZ3l5yfDw-Q/exec';
+    const LMP_MODULE_URL = window.LMP_MODULE_URL || 'https://enginesgmp.github.io/sgmp/modulo-1.html';
     const SGMP_MODULE_CODE = 'SX';
 
     const SGMP_STAGE_CODES = {
