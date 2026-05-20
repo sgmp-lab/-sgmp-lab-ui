@@ -6806,6 +6806,7 @@ function updateAsIsPreview(){
   if(qs('asisCountKpi')) qs('asisCountKpi').textContent = acts.length;
   if(qs('asisValidationBox')) qs('asisValidationBox').textContent = issues.length ? issues.join('\n') : (acts.length ? 'AS IS listo para análisis.' : 'Sin actividades cargadas.');
   if(qs('asisJsonPreview')) qs('asisJsonPreview').textContent = JSON.stringify({ activities: acts }, null, 2);
+  if(typeof renderLmpB1StructuralStatus === 'function') renderLmpB1StructuralStatus();
 }
 
 function extractAsIsFromBriefPayload(briefPayload){
@@ -8528,6 +8529,626 @@ function sgmpGetStructuralSourceActivities(){
     if(acts.length >= 5) return acts;
   }
   return [];
+}
+
+/* =========================
+   LMP B1 · Motor estructural AS IS puro
+   No renderiza, no llama IA, no muta state ni toca DOM.
+========================= */
+function lmpStructuralKey(value){
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function lmpStructuralIsPending(value){
+  const text = lmpStructuralKey(value);
+  return !text
+    || text === 'pendiente_validacion'
+    || text === 'validacion_pendiente'
+    || text === 'pendiente validacion'
+    || text === 'pendiente de validacion'
+    || text === 'n/a'
+    || text === 'na';
+}
+
+function lmpStructuralText(value){
+  return normalizeContractString(value);
+}
+
+function lmpStructuralList(value){
+  return dedupeCatalog(safeArray(value)).filter(item => !lmpStructuralIsPending(item));
+}
+
+function lmpStructuralActivityRefs(activity, keys){
+  return dedupeCatalog(keys.flatMap(key => safeArray(activity?.[key]).map(item => {
+    if(item && typeof item === 'object'){
+      return item.input || item.output || item.name || item.label || item.value || '';
+    }
+    return item;
+  }))).filter(item => !lmpStructuralIsPending(item));
+}
+
+function lmpNormalizeStructuralActivities(rawList){
+  const out = [];
+  const seen = new Set();
+  safeArray(rawList).forEach((item, index) => {
+    const normalized = normalizeActivity(item || {});
+    if(!normalized.name && !normalized.id && !normalized.actor) return;
+    const key = lmpStructuralKey(normalized.id || normalized.name || ('idx_' + index));
+    if(seen.has(key)) return;
+    seen.add(key);
+    out.push(Object.assign({}, normalized, {
+      id: normalized.id || ('A' + String(out.length + 1).padStart(2, '0')),
+      previous: normalizeRelationList((item && typeof item === 'object') ? (item.previous || item.prev || item.predecessors || item.before) : []),
+      next: normalizeRelationList((item && typeof item === 'object') ? (item.next || item.successors || item.after) : []),
+      is_start: !!(normalized.is_start || index === 0),
+      is_end: !!normalized.is_end
+    }));
+  });
+  out.forEach((activity, index) => {
+    activity.is_start = index === 0;
+    activity.is_end = index === out.length - 1;
+  });
+  return out;
+}
+
+function lmpBuildB1StructuralInput(extraPayload){
+  const extra = extraPayload || {};
+  const master = state.master || {};
+  const brief = state.briefReview?.raw || state.brief || {};
+  const asis = state.asis || {};
+  return {
+    context: Object.assign({}, state.context || {}, master.context || {}, extra.context || {}),
+    source_activities: safeArray(
+      extra.source_activities ||
+      extra.as_is?.activities ||
+      extra.activities ||
+      asis.activities ||
+      brief.as_is?.activities ||
+      brief.activities_preliminary ||
+      sgmpGetStructuralSourceActivities()
+    ),
+    as_is_process: {
+      activities: safeArray(extra.as_is_process?.activities || extra.as_is?.activities || extra.activities || asis.activities),
+      suppliers_inputs: safeArray(extra.as_is_process?.suppliers_inputs || asis.suppliers_inputs || master.suppliers_inputs),
+      outputs_customers: safeArray(extra.as_is_process?.outputs_customers || asis.outputs_customers || master.outputs_customers),
+      additional_information: safeArray(extra.as_is_process?.additional_information || asis.additional_information)
+    },
+    sipoc: Object.assign({}, master.sipoc || {}, brief.sipoc || {}, extra.sipoc || {}),
+    validation: Object.assign({}, brief.validation || {}, extra.validation || {})
+  };
+}
+
+function lmpStructuralParser(input){
+  const source = input || {};
+  const process = source.as_is_process || {};
+  const sourceActivities = lmpNormalizeStructuralActivities(
+    safeArray(source.source_activities).length ? source.source_activities : process.activities || source.activities || source.as_is?.activities
+  );
+  const processActivities = lmpNormalizeStructuralActivities(process.activities || source.as_is?.activities || source.activities);
+  const activities = processActivities.length >= sourceActivities.length ? processActivities : sourceActivities;
+
+  const suppliersInputs = safeArray(process.suppliers_inputs || source.suppliers_inputs).map(row => ({
+    supplier: lmpStructuralText(row?.supplier || row?.provider || row?.provided_by),
+    inputs: lmpStructuralList(row?.inputs || row?.input),
+    editable: row?.editable !== false
+  })).filter(row => row.supplier || row.inputs.length);
+
+  const outputsCustomers = safeArray(process.outputs_customers || source.outputs_customers).map(row => ({
+    output: lmpStructuralText(row?.output || row?.salida),
+    customers: lmpStructuralList(row?.customers || row?.customer || row?.received_by),
+    editable: row?.editable !== false
+  })).filter(row => row.output || row.customers.length);
+
+  const sipoc = source.sipoc || {};
+  return {
+    context: Object.assign({}, source.context || {}),
+    activities: activities.map((activity, index) => {
+      const a = normalizeActivity(activity || {});
+      const inputs = dedupeCatalog([
+        a.ext_inputs,
+        a.inputs,
+        a.inputs_used,
+        lmpStructuralActivityRefs(activity, ['inputs_received','inputsReceived','input_refs','inputRefs'])
+      ]);
+      const outputs = dedupeCatalog([
+        a.ext_outputs,
+        a.outputs,
+        a.outputs_generated,
+        lmpStructuralActivityRefs(activity, ['outputs_delivered','outputsDelivered','output_refs','outputRefs'])
+      ]);
+      return Object.assign({}, a, {
+        id: a.id || ('A' + String(index + 1).padStart(2, '0')),
+        name: a.name,
+        actor: a.actor,
+        type: canonicalActivityType(a.type),
+        previous: normalizeRelationList(a.previous),
+        next: normalizeRelationList(a.next),
+        inputs_used: inputs,
+        outputs_generated: outputs,
+        is_start: index === 0,
+        is_end: index === activities.length - 1
+      });
+    }).filter(activity => activity.name || activity.id || activity.actor),
+    suppliers_inputs: suppliersInputs,
+    outputs_customers: outputsCustomers,
+    additional_information: safeArray(process.additional_information || source.additional_information),
+    sipoc: {
+      suppliers: dedupeCatalog([sipoc.suppliers, suppliersInputs.map(row => row.supplier)]),
+      inputs: dedupeCatalog([sipoc.inputs, suppliersInputs.flatMap(row => row.inputs)]),
+      outputs: dedupeCatalog([sipoc.outputs, outputsCustomers.map(row => row.output)]),
+      customers: dedupeCatalog([sipoc.customers, outputsCustomers.flatMap(row => row.customers)]),
+      actors: dedupeCatalog([sipoc.actors, activities.map(a => a.actor)]),
+      documents: dedupeCatalog([sipoc.documents, sipoc.documentsSystems, activities.map(a => a.document)])
+    },
+    validation: Object.assign({}, source.validation || {})
+  };
+}
+
+const LMP_B1_WARNING_TAXONOMY = Object.freeze({
+  activity_completeness: {
+    label: 'Actividades incompletas',
+    description: 'Campos mínimos faltantes en actividades AS IS.',
+    types: ['as_is_without_activities','activity_without_name','activity_without_actor','activity_without_type']
+  },
+  flow_relations: {
+    label: 'Relaciones rotas',
+    description: 'Continuidad previous/next, entradas y salidas de actividad incompletas o no resolubles.',
+    types: ['activity_without_input_connection','activity_without_output_connection','previous_activity_not_found','next_activity_not_found','possible_input_in_previous','possible_output_in_next']
+  },
+  sipoc_completeness: {
+    label: 'SIPOC incompleto',
+    description: 'Proveedores, entradas, salidas o clientes faltantes o sin vínculo operativo.',
+    types: ['supplier_without_name','supplier_without_input','input_without_activity_connection','output_without_name','output_without_activity_connection','output_without_customer']
+  },
+  decision_logic: {
+    label: 'Decisiones incompletas',
+    description: 'Bifurcaciones o condiciones de decisión insuficientes.',
+    types: ['decision_without_two_outputs']
+  },
+  granularity: {
+    label: 'Pérdida de granularidad',
+    description: 'El AS IS conserva menos actividades de las esperadas desde la fuente estructural.',
+    types: ['activity_granularity_loss','source_activity_missing']
+  },
+  catalog_consistency: {
+    label: 'Inconsistencias de catálogo',
+    description: 'Entradas, salidas, actores o documentos usados no coinciden con catálogos SIPOC.',
+    types: ['activity_input_not_registered','activity_output_not_registered','actor_not_in_catalog','document_not_in_catalog']
+  }
+});
+
+function lmpB1TaxonomyCategory(type){
+  const issueType = String(type || '');
+  const hit = Object.keys(LMP_B1_WARNING_TAXONOMY).find(category => {
+    return LMP_B1_WARNING_TAXONOMY[category].types.includes(issueType);
+  });
+  return hit || 'catalog_consistency';
+}
+
+function lmpB1TaxonomySummary(issues){
+  const normalizedIssues = safeArray(issues);
+  const byCategory = {};
+  Object.keys(LMP_B1_WARNING_TAXONOMY).forEach(category => {
+    const meta = LMP_B1_WARNING_TAXONOMY[category];
+    const categoryIssues = normalizedIssues.filter(issue => (issue.taxonomy_category || issue.category) === category || meta.types.includes(issue.type));
+    byCategory[category] = {
+      label: meta.label,
+      description: meta.description,
+      count: categoryIssues.length,
+      critical_count: categoryIssues.filter(issue => issue.level === 'critical').length,
+      warning_count: categoryIssues.filter(issue => issue.level !== 'critical').length,
+      types: meta.types
+    };
+  });
+  return {
+    categories: LMP_B1_WARNING_TAXONOMY,
+    by_category: byCategory,
+    critical: normalizedIssues.filter(issue => issue.level === 'critical').map(issue => issue.type),
+    warning: normalizedIssues.filter(issue => issue.level !== 'critical').map(issue => issue.type)
+  };
+}
+
+function lmpStructuralIssue(type, level, field, message, suggestion, extra){
+  const taxonomyCategory = lmpB1TaxonomyCategory(type);
+  return Object.assign({
+    type,
+    level,
+    field,
+    where: field,
+    message,
+    suggestion: suggestion || 'Revisar y completar el dato en AS IS.',
+    stage: 'B1',
+    category: taxonomyCategory,
+    taxonomy_category: taxonomyCategory
+  }, extra || {});
+}
+
+function lmpStructuralLifecycle(blockingCount, warningCount, score){
+  if(blockingCount > 0) return 'blocked';
+  if(score < 70 || warningCount > 6) return 'incomplete';
+  if(score < 90 || warningCount > 0) return 'draft';
+  return 'validated';
+}
+
+const LMP_B1_STRUCTURAL_CONTRACT = Object.freeze({
+  contract: 'LMP_B1_STRUCTURAL_VALIDATION',
+  contract_version: '1.0.0',
+  stage: 'B1',
+  analysis_type: 'lmp_b1_structural_validation',
+  method: 'deterministic_validator_plus_contextual_ai',
+  lifecycle_values: ['blocked','incomplete','draft','validated']
+});
+
+function lmpB1NormalizeIssue(issue, index){
+  const item = issue || {};
+  const level = item.level === 'critical' ? 'critical' : 'warning';
+  return {
+    id: item.id || ('B1-GAP-' + String(index + 1).padStart(3, '0')),
+    type: item.type || 'structural_gap',
+    category: item.category || lmpB1TaxonomyCategory(item.type),
+    taxonomy_category: item.taxonomy_category || item.category || lmpB1TaxonomyCategory(item.type),
+    level,
+    severity: level === 'critical' ? 'blocking' : 'warning',
+    field: item.field || item.where || 'as_is_process',
+    where: item.where || item.field || 'as_is_process',
+    message: item.message || 'Vacío estructural detectado.',
+    affectedValue: item.affectedValue || '',
+    searchHint: item.searchHint || '',
+    suggestion: item.suggestion || 'Revisar y completar el dato en AS IS.',
+    autoFix: item.autoFix || null,
+    stage: 'B1'
+  };
+}
+
+function lmpB1ContextualEnrichment(aiPayload){
+  const ai = aiPayload && typeof aiPayload === 'object' ? aiPayload : {};
+  const source = ai.contextual_enrichment || ai.contextualEnrichment || {};
+  return {
+    structural_observations: safeArray(source.structural_observations || source.structuralObservations || ai.structural_observations),
+    traceability_notes: safeArray(source.traceability_notes || source.traceabilityNotes || ai.traceability_notes),
+    questions_for_validation: safeArray(source.questions_for_validation || source.questionsForValidation || ai.questions_for_validation)
+  };
+}
+
+function lmpBuildB1StructuralContract(deterministicResult, aiPayload, activitiesOverride){
+  const det = deterministicResult || {};
+  const normalized = det.normalized || {};
+  const activities = safeArray(activitiesOverride || normalized.as_is?.activities);
+  const gaps = safeArray(det.gaps).map(lmpB1NormalizeIssue);
+  const blockingIssues = gaps.filter(issue => issue.level === 'critical');
+  const warnings = gaps.filter(issue => issue.level !== 'critical');
+  const completeness = Object.assign({
+    score: 0,
+    activity_count: activities.length,
+    blocking_count: blockingIssues.length,
+    warning_count: warnings.length,
+    supplier_input_count: safeArray(normalized.as_is_process?.suppliers_inputs).length,
+    output_customer_count: safeArray(normalized.as_is_process?.outputs_customers).length
+  }, det.completeness || {});
+  const lifecycle = det.lifecycle || lmpStructuralLifecycle(blockingIssues.length, warnings.length, Number(completeness.score || 0));
+
+  return {
+    contract: LMP_B1_STRUCTURAL_CONTRACT.contract,
+    contract_version: LMP_B1_STRUCTURAL_CONTRACT.contract_version,
+    stage: LMP_B1_STRUCTURAL_CONTRACT.stage,
+    analysis_type: LMP_B1_STRUCTURAL_CONTRACT.analysis_type,
+    method: LMP_B1_STRUCTURAL_CONTRACT.method,
+    lifecycle,
+    operational_state: {
+      valid: blockingIssues.length === 0,
+      lifecycle,
+      can_proceed_to_ai: activities.length > 0,
+      can_proceed_to_b2: lifecycle !== 'blocked',
+      requires_manual_review: lifecycle === 'blocked' || lifecycle === 'incomplete'
+    },
+    completeness,
+    as_is: {
+      activities
+    },
+    as_is_process: {
+      activities,
+      suppliers_inputs: safeArray(normalized.as_is_process?.suppliers_inputs),
+      outputs_customers: safeArray(normalized.as_is_process?.outputs_customers),
+      additional_information: safeArray(normalized.as_is_process?.additional_information)
+    },
+    sipoc: Object.assign({
+      suppliers: [],
+      inputs: [],
+      outputs: [],
+      customers: [],
+      actors: [],
+      documents: []
+    }, normalized.sipoc || {}),
+    validation: {
+      valid: blockingIssues.length === 0,
+      lifecycle,
+      completeness,
+      gaps,
+      warnings,
+      blockingIssues,
+      taxonomy: lmpB1TaxonomySummary(gaps),
+      deterministic_engine: det.engine || 'lmp_b1_structural_validator',
+      prohibited_outputs_removed: true
+    },
+    contextual_enrichment: lmpB1ContextualEnrichment(aiPayload),
+    traceability: Object.assign({
+      deterministic: true,
+      side_effect_free: true,
+      parser: 'lmpStructuralParser',
+      source_activity_count: 0,
+      normalized_activity_count: activities.length,
+      ai_contextual_enrichment_used: !!aiPayload
+    }, det.traceability || {})
+  };
+}
+
+function lmpStructuralValidator(input, options = {}){
+  const model = lmpStructuralParser(input);
+  const issues = [];
+  const activityNames = new Set(model.activities.map(a => lmpStructuralKey(a.name)).filter(Boolean));
+  const registeredInputs = new Set(model.suppliers_inputs.flatMap(row => row.inputs).map(lmpStructuralKey));
+  const registeredOutputs = new Set(model.outputs_customers.map(row => row.output).map(lmpStructuralKey));
+  const usedInputs = new Set();
+  const generatedOutputs = new Set();
+
+  if(!model.activities.length){
+    issues.push(lmpStructuralIssue('as_is_without_activities', 'critical', 'as_is_process.activities', 'No se detectaron actividades AS IS.', 'Carga o valida actividades antes de continuar.'));
+  }
+  const sourceActivityCount = lmpNormalizeStructuralActivities(input?.source_activities || []).length;
+  if(sourceActivityCount >= 5 && model.activities.length < sourceActivityCount){
+    issues.push(lmpStructuralIssue(
+      'activity_granularity_loss',
+      'critical',
+      'as_is_process.activities',
+      `Pérdida de granularidad: fuente=${sourceActivityCount}, AS IS=${model.activities.length}.`,
+      'B1 debe conservar todas las actividades estructurales detectadas en la fuente.',
+      { affectedValue: String(model.activities.length), searchHint: String(sourceActivityCount) }
+    ));
+  }
+
+  model.activities.forEach((activity, index) => {
+    const base = `as_is_process.activities[${index}]`;
+    const nameLabel = activity.name ? `: ${activity.name}` : '';
+    const inputs = lmpStructuralList(activity.inputs_used || activity.ext_inputs);
+    const outputs = lmpStructuralList(activity.outputs_generated || activity.ext_outputs);
+    inputs.forEach(inputName => usedInputs.add(lmpStructuralKey(inputName)));
+    outputs.forEach(outputName => generatedOutputs.add(lmpStructuralKey(outputName)));
+    if(model.sipoc.actors.length && activity.actor && !model.sipoc.actors.map(lmpStructuralKey).includes(lmpStructuralKey(activity.actor))){
+      issues.push(lmpStructuralIssue('actor_not_in_catalog', 'warning', `${base}.actor`, `Actor no registrado en catálogo SIPOC${nameLabel}: ${activity.actor}`, 'Agrega el actor al catálogo SIPOC o corrige el responsable.', { affectedValue: activity.actor, searchHint: activity.name || activity.actor }));
+    }
+
+    if(lmpStructuralIsPending(activity.name)){
+      issues.push(lmpStructuralIssue('activity_without_name', 'critical', `${base}.name`, 'Actividad sin nombre.', 'Completa el nombre de la actividad.', { searchHint: activity.id || '' }));
+    }
+    if(lmpStructuralIsPending(activity.actor)){
+      issues.push(lmpStructuralIssue('activity_without_actor', 'critical', `${base}.actor`, `Actividad sin actor${nameLabel}`, 'Completa el actor responsable.', { searchHint: activity.name || activity.id || '' }));
+    }
+    if(lmpStructuralIsPending(activity.type)){
+      issues.push(lmpStructuralIssue('activity_without_type', 'critical', `${base}.type`, `Actividad sin tipo${nameLabel}`, 'Define si corresponde a operation, decision, control, document o end.', { searchHint: activity.name || '' }));
+    }
+
+    const hasInputConnection = index === 0 || lmpStructuralList(activity.previous).length || inputs.length;
+    const hasOutputConnection = index === model.activities.length - 1 || lmpStructuralList(activity.next).length || outputs.length;
+    if(!hasInputConnection){
+      issues.push(lmpStructuralIssue('activity_without_input_connection', 'critical', `${base}.previous / ${base}.inputs_used`, `Actividad sin conexión de entrada${nameLabel}`, 'Debe tener actividad previa o entrada usada.', { searchHint: activity.name || '' }));
+    }
+    if(!hasOutputConnection){
+      issues.push(lmpStructuralIssue('activity_without_output_connection', 'critical', `${base}.next / ${base}.outputs_generated`, `Actividad sin conexión de salida${nameLabel}`, 'Debe tener actividad siguiente o salida generada.', { searchHint: activity.name || '' }));
+    }
+
+    lmpStructuralList(activity.previous).forEach((prev, prevIndex) => {
+      const key = lmpStructuralKey(prev);
+      if(!activityNames.has(key)){
+        const matchesInput = registeredInputs.has(key);
+        issues.push(lmpStructuralIssue(
+          matchesInput ? 'possible_input_in_previous' : 'previous_activity_not_found',
+          'warning',
+          `${base}.previous[${prevIndex}]`,
+          matchesInput ? `Entrada ubicada como actividad previa${nameLabel}: ${prev}` : `previous[] no coincide con actividad existente${nameLabel}: ${prev}`,
+          matchesInput ? 'Mover a inputs_used[].' : 'previous[] debe referenciar actividades existentes.',
+          { affectedValue: prev, searchHint: activity.name || prev }
+        ));
+      }
+    });
+
+    lmpStructuralList(activity.next).forEach((next, nextIndex) => {
+      const key = lmpStructuralKey(next);
+      if(!activityNames.has(key)){
+        const matchesOutput = registeredOutputs.has(key);
+        issues.push(lmpStructuralIssue(
+          matchesOutput ? 'possible_output_in_next' : 'next_activity_not_found',
+          'warning',
+          `${base}.next[${nextIndex}]`,
+          matchesOutput ? `Salida ubicada como actividad siguiente${nameLabel}: ${next}` : `next[] no coincide con actividad existente${nameLabel}: ${next}`,
+          matchesOutput ? 'Mover a outputs_generated[].' : 'next[] debe referenciar actividades existentes.',
+          { affectedValue: next, searchHint: activity.name || next }
+        ));
+      }
+    });
+
+    inputs.forEach((inputName, inputIndex) => {
+      if(registeredInputs.size && !registeredInputs.has(lmpStructuralKey(inputName))){
+        issues.push(lmpStructuralIssue('activity_input_not_registered', 'warning', `${base}.inputs_used[${inputIndex}]`, `Entrada usada no registrada${nameLabel}: ${inputName}`, 'Registra esta entrada en proveedores/entradas o corrige el nombre.', { affectedValue: inputName }));
+      }
+    });
+    outputs.forEach((outputName, outputIndex) => {
+      if(registeredOutputs.size && !registeredOutputs.has(lmpStructuralKey(outputName))){
+        issues.push(lmpStructuralIssue('activity_output_not_registered', 'warning', `${base}.outputs_generated[${outputIndex}]`, `Salida generada no registrada${nameLabel}: ${outputName}`, 'Registra esta salida en salidas/clientes o corrige el nombre.', { affectedValue: outputName }));
+      }
+    });
+
+    if(canonicalActivityType(activity.type) === 'decision' && lmpStructuralList(activity.next).length + outputs.length < 2){
+      issues.push(lmpStructuralIssue('decision_without_two_outputs', 'warning', `${base}.next / ${base}.outputs_generated`, `Decisión con bifurcación incompleta${nameLabel}`, 'Una decisión debe tener al menos dos rutas de salida.', { searchHint: activity.name || '' }));
+    }
+  });
+
+  model.suppliers_inputs.forEach((row, index) => {
+    const base = `as_is_process.suppliers_inputs[${index}]`;
+    if(lmpStructuralIsPending(row.supplier)){
+      issues.push(lmpStructuralIssue('supplier_without_name', 'critical', `${base}.supplier`, 'Entrada con proveedor pendiente.', 'Completa el proveedor asociado.'));
+    }
+    if(!row.inputs.length){
+      issues.push(lmpStructuralIssue('supplier_without_input', 'critical', `${base}.inputs`, 'Proveedor sin entrada asociada.', 'Agrega al menos una entrada.'));
+    }
+    row.inputs.forEach((inputName, inputIndex) => {
+      if(!usedInputs.has(lmpStructuralKey(inputName))){
+        issues.push(lmpStructuralIssue('input_without_activity_connection', 'critical', `${base}.inputs[${inputIndex}]`, `Entrada sin conexión con actividad: ${inputName}`, 'La entrada debe alimentar al menos una actividad.', { affectedValue: inputName }));
+      }
+    });
+  });
+
+  model.outputs_customers.forEach((row, index) => {
+    const base = `as_is_process.outputs_customers[${index}]`;
+    if(lmpStructuralIsPending(row.output)){
+      issues.push(lmpStructuralIssue('output_without_name', 'critical', `${base}.output`, 'Cliente con salida pendiente.', 'Completa la salida asociada al cliente.'));
+    }else if(!generatedOutputs.has(lmpStructuralKey(row.output))){
+      issues.push(lmpStructuralIssue('output_without_activity_connection', 'critical', `${base}.output`, `Salida sin conexión desde actividad: ${row.output}`, 'La salida debe ser generada por al menos una actividad.', { affectedValue: row.output }));
+    }
+    if(!row.customers.length){
+      issues.push(lmpStructuralIssue('output_without_customer', 'critical', `${base}.customers`, 'Salida sin cliente asociado.', 'Agrega al menos un cliente o receptor.'));
+    }
+  });
+
+  const blockingIssues = issues.filter(issue => issue.level === 'critical');
+  const warnings = issues.filter(issue => issue.level !== 'critical');
+  const totalChecks = Math.max(1, model.activities.length * 5 + model.suppliers_inputs.length * 2 + model.outputs_customers.length * 2);
+  const penalty = blockingIssues.length * 12 + warnings.length * 4;
+  const score = Math.max(0, Math.min(100, Math.round(((totalChecks * 10 - penalty) / (totalChecks * 10)) * 100)));
+  const lifecycle = lmpStructuralLifecycle(blockingIssues.length, warnings.length, score);
+
+  const result = {
+    engine: 'lmp_b1_structural_validator',
+    version: '1.0.0',
+    stage: 'B1',
+    valid: blockingIssues.length === 0,
+    lifecycle,
+    can_proceed_to_ai: model.activities.length > 0,
+    completeness: {
+      score,
+      activity_count: model.activities.length,
+      blocking_count: blockingIssues.length,
+      warning_count: warnings.length,
+      supplier_input_count: model.suppliers_inputs.length,
+      output_customer_count: model.outputs_customers.length
+    },
+    taxonomy: lmpB1TaxonomySummary(issues),
+    gaps: issues,
+    blockingIssues,
+    warnings,
+    normalized: {
+      as_is: { activities: model.activities },
+      as_is_process: {
+        activities: model.activities,
+        suppliers_inputs: model.suppliers_inputs,
+        outputs_customers: model.outputs_customers,
+        additional_information: model.additional_information
+      },
+      sipoc: model.sipoc
+    },
+    traceability: {
+      parser: 'lmpStructuralParser',
+      deterministic: true,
+      side_effect_free: true,
+      source_activity_count: safeArray(input?.source_activities).length,
+      normalized_activity_count: model.activities.length
+    }
+  };
+  const contract = lmpBuildB1StructuralContract(result, null, model.activities);
+  return Object.assign({}, contract, result, {
+    operational_state: contract.operational_state,
+    validation: contract.validation,
+    as_is: contract.as_is,
+    as_is_process: contract.as_is_process,
+    sipoc: contract.sipoc,
+    contextual_enrichment: contract.contextual_enrichment
+  });
+}
+
+function lmpConsolidateB1WithAi(deterministicResult, aiPayload){
+  const det = deterministicResult || lmpStructuralValidator({});
+  const ai = (aiPayload && typeof aiPayload === 'object') ? JSON.parse(JSON.stringify(aiPayload)) : {};
+  delete ai.ava;
+  delete ai.improvements;
+  delete ai.quickWins;
+  delete ai.quick_wins;
+  delete ai.to_be;
+  delete ai.toBe;
+  delete ai.findings;
+
+  const aiActivities = sgmpCanonicalizeActivityList(ai.as_is?.activities || ai.activities);
+  const detActivities = safeArray(det.normalized?.as_is?.activities);
+  const activities = detActivities.length >= aiActivities.length ? detActivities : aiActivities;
+  const contract = lmpBuildB1StructuralContract(det, ai, activities);
+
+  return Object.assign({}, ai, contract, {
+    as_is: Object.assign({}, contract.as_is, ai.as_is || {}, { activities }),
+    validation: Object.assign({}, contract.validation, ai.validation || {}, {
+      valid: contract.validation.valid,
+      lifecycle: contract.validation.lifecycle,
+      completeness: contract.validation.completeness,
+      warnings: contract.validation.warnings,
+      blockingIssues: contract.validation.blockingIssues,
+      gaps: contract.validation.gaps,
+      deterministic_engine: contract.validation.deterministic_engine,
+      prohibited_outputs_removed: true
+    }),
+    operational_state: contract.operational_state,
+    completeness: contract.completeness,
+    contextual_enrichment: contract.contextual_enrichment,
+    traceability: contract.traceability,
+    structural_validation: det
+  });
+}
+
+function renderLmpB1StructuralStatus(){
+  if(typeof qs !== 'function') return null;
+  const list = qs('asisStructuralIssuesList');
+  const kpi = qs('asisStructuralIssuesKpi');
+  if(!list && !kpi) return null;
+
+  const result = lmpStructuralValidator(lmpBuildB1StructuralInput());
+  const issues = safeArray(result.gaps);
+  const signature = JSON.stringify({
+    lifecycle: result.lifecycle,
+    score: result.completeness.score,
+    issues: issues.map(issue => [issue.type, issue.level, issue.field, issue.message, issue.affectedValue || ''])
+  });
+
+  if(window.__LMP_B1_STRUCTURAL_STATUS_SIGNATURE__ === signature) return result;
+  window.__LMP_B1_STRUCTURAL_STATUS_SIGNATURE__ = signature;
+
+  if(kpi) kpi.textContent = issues.length;
+  if(list){
+    if(!issues.length){
+      list.innerHTML = '<div class="brief-empty-state">Sin vacíos estructurales detectados.</div>';
+    }else{
+      list.innerHTML = '<div class="asis-issue-list">' + issues.map((issue, index) => {
+        const target = issue.affectedValue || issue.searchHint || '';
+        return `
+          <div class="asis-issue-row">
+            <div class="asis-issue-index">${index + 1}</div>
+            <div class="asis-issue-content">
+              <strong>${escapeHtml(issue.message || 'Vacío estructural')}</strong>
+              ${target ? `<span><b>Elemento afectado:</b> ${escapeHtml(target)}</span>` : ''}
+              <span><b>Ubicación:</b> ${escapeHtml(issue.where || issue.field || 'AS IS')}</span>
+              <span><b>Sugerencia:</b> ${escapeHtml(issue.suggestion || 'Revisar estructura AS IS.')}</span>
+            </div>
+            <div class="asis-issue-action">
+              <button type="button" class="brief-mini-btn primary" onclick="showMsg('asisBuilderMsg','warn','Ubicación del vacío: ${escapeHtml(String(issue.where || issue.field || 'AS IS')).replace(/'/g, '&#39;')}')">
+                Ver ubicación
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('') + '</div>';
+    }
+  }
+  return result;
 }
 
 function sgmpEnsureBriefHasSourceActivities(brief){
@@ -10886,23 +11507,96 @@ function sgmpEnrichAnalysisModel(data){
 
 function sgmpGetAnalysisStageDefinitions(){
   const p = (key, fallback) => (typeof sgmpPrompt === 'function' ? sgmpPrompt(key, fallback) : fallback);
-  const fallbackB1 = `ACTÚA COMO consultor senior en procesos y modelador AS IS.
+  const fallbackB1 = `ACTÚA COMO auditor estructural SGMP para B1 · Validación AS IS.
 
 OBJETIVO B1:
-Validar, limpiar y estructurar el AS IS usando como fuente principal source_activities.
+Validar la estructura AS IS usando como fuente principal deterministic_validation.normalized.as_is.activities y source_activities.
+B1 es un motor de validación estructural, no un análisis de mejora.
 
 REGLAS:
-- No hagas análisis de mejoras todavía.
-- No hagas AVA todavía.
+- No generes mejoras, quick wins, TO BE, rediseños, soluciones ni recomendaciones de implementación.
+- No hagas AVA ni clasifiques VA/NNVA/NVA.
+- No generes desperdicios, restricciones ni problemas nuevos.
 - No reduzcas ni agrupes actividades.
 - Conserva todas las actividades estructurales.
-- Corrige continuidad previous/next si hay vacíos.
-- Marca una sola actividad inicial y una sola final.
+- No inventes datos faltantes; registra gaps/warnings con ubicación exacta.
+- Usa deterministic_validation como baseline obligatorio.
+- La IA solo puede enriquecer contexto, explicar inconsistencias y proponer preguntas de validación.
 
 SALIDA JSON ESTRICTA:
 {
+  "contract": "LMP_B1_STRUCTURAL_VALIDATION",
+  "contract_version": "1.0.0",
+  "stage": "B1",
+  "analysis_type": "lmp_b1_structural_validation",
+  "method": "deterministic_validator_plus_contextual_ai",
+  "lifecycle": "blocked|incomplete|draft|validated",
+  "operational_state": {
+    "valid": true,
+    "lifecycle": "blocked|incomplete|draft|validated",
+    "can_proceed_to_ai": true,
+    "can_proceed_to_b2": false,
+    "requires_manual_review": true
+  },
+  "completeness": {
+    "score": 0,
+    "activity_count": 0,
+    "blocking_count": 0,
+    "warning_count": 0,
+    "supplier_input_count": 0,
+    "output_customer_count": 0
+  },
   "as_is": {"activities": []},
-  "validation": {"valid": true, "activity_count": 0, "warnings": [], "blockingIssues": []}
+  "as_is_process": {
+    "activities": [],
+    "suppliers_inputs": [],
+    "outputs_customers": [],
+    "additional_information": []
+  },
+  "sipoc": {
+    "suppliers": [],
+    "inputs": [],
+    "outputs": [],
+    "customers": [],
+    "actors": [],
+    "documents": []
+  },
+  "validation": {
+    "valid": true,
+    "lifecycle": "blocked|incomplete|draft|validated",
+    "completeness": {"score": 0, "activity_count": 0, "blocking_count": 0, "warning_count": 0},
+    "warnings": [],
+    "blockingIssues": [],
+    "gaps": [],
+    "taxonomy": {
+      "categories": {
+        "activity_completeness": {"label": "Actividades incompletas", "types": []},
+        "flow_relations": {"label": "Relaciones rotas", "types": []},
+        "sipoc_completeness": {"label": "SIPOC incompleto", "types": []},
+        "decision_logic": {"label": "Decisiones incompletas", "types": []},
+        "granularity": {"label": "Pérdida de granularidad", "types": []},
+        "catalog_consistency": {"label": "Inconsistencias de catálogo", "types": []}
+      },
+      "by_category": {},
+      "critical": [],
+      "warning": []
+    },
+    "deterministic_engine": "lmp_b1_structural_validator",
+    "prohibited_outputs_removed": true
+  },
+  "contextual_enrichment": {
+    "structural_observations": [],
+    "traceability_notes": [],
+    "questions_for_validation": []
+  },
+  "traceability": {
+    "deterministic": true,
+    "side_effect_free": true,
+    "parser": "lmpStructuralParser",
+    "source_activity_count": 0,
+    "normalized_activity_count": 0,
+    "ai_contextual_enrichment_used": true
+  }
 }`;
 
   const fallbackB2 = `ACTÚA COMO especialista Lean Six Sigma.
@@ -11142,6 +11836,9 @@ function sgmpBuildAnalysisStagePrompt(stageKey){
     brief.activities_preliminary ||
     sgmpGetStructuralSourceActivities()
   );
+  const deterministicValidation = stageKey === 'B1'
+    ? lmpStructuralValidator(lmpBuildB1StructuralInput({ source_activities: baseActivities }))
+    : null;
   const evidencePack = {
     context: c,
     brief,
@@ -11149,9 +11846,13 @@ function sgmpBuildAnalysisStagePrompt(stageKey){
     previous_stage_results: stageResults,
     master_sipoc: master.sipoc || {},
     source_activity_count: baseActivities.length,
-    source_activities: baseActivities
+    source_activities: baseActivities,
+    deterministic_validation: deterministicValidation
   };
-  return `${def.instruction}\n\nREGLAS GLOBALES SGMP:\n- Responde SOLO JSON válido.\n- No uses markdown.\n- No inventes evidencia.\n- Si falta información, registra warnings o dataGaps.\n- Mantén nombres de campos exactamente como se solicita.\n\nINSUMOS:\n${JSON.stringify(evidencePack, null, 2)}`;
+  const stagePolicy = stageKey === 'B1'
+    ? '\n\nPOLÍTICA OBLIGATORIA B1:\n- B1 solo valida estructura AS IS.\n- B1 no genera AVA, mejoras, quick wins, TO BE, desperdicios, restricciones ni soluciones.\n- Usa deterministic_validation como baseline y conserva sus gaps, warnings, lifecycle y score.\n'
+    : '';
+  return `${def.instruction}${stagePolicy}\n\nREGLAS GLOBALES SGMP:\n- Responde SOLO JSON válido.\n- No uses markdown.\n- No inventes evidencia.\n- Si falta información, registra warnings o dataGaps.\n- Mantén nombres de campos exactamente como se solicita.\n\nINSUMOS:\n${JSON.stringify(evidencePack, null, 2)}`;
 }
 
 function generateAnalysisStagePrompt(stageKey){
@@ -11175,6 +11876,27 @@ function sgmpAssembleStagedAnalysisPayload(){
   const b5 = results.B5 || {};
   const b6 = results.B6 || {};
   let activities = safeArray(b2.as_is?.activities || b1.as_is?.activities || state.asis?.activities || state.briefReview?.raw?.as_is?.activities || state.briefReview?.raw?.activities_preliminary).map(a => ({...a}));
+  const completedStages = Object.keys(results).filter(key => results[key]);
+  if(completedStages.length === 1 && completedStages[0] === 'B1'){
+    return {
+      contract: b1.contract || LMP_B1_STRUCTURAL_CONTRACT.contract,
+      contract_version: b1.contract_version || LMP_B1_STRUCTURAL_CONTRACT.contract_version,
+      stage: 'B1',
+      analysis_type: b1.analysis_type || LMP_B1_STRUCTURAL_CONTRACT.analysis_type,
+      method: b1.method || LMP_B1_STRUCTURAL_CONTRACT.method,
+      lifecycle: b1.lifecycle || b1.validation?.lifecycle || '',
+      operational_state: b1.operational_state || {},
+      completeness: b1.completeness || b1.validation?.completeness || {},
+      context: state.context || state.master?.context || {},
+      as_is: { activities },
+      as_is_process: b1.as_is_process || {},
+      sipoc: b1.sipoc || {},
+      validation: b1.validation || {},
+      contextual_enrichment: b1.contextual_enrichment || {},
+      traceability: b1.traceability || {},
+      structural_validation: b1.structural_validation || null
+    };
+  }
   const avaActivityAnalysis = safeArray(b2.ava?.activityAnalysis || b2.ava?.activities || b2.activityAnalysis);
   if(avaActivityAnalysis.length && activities.length){
     activities = activities.map(a => {
@@ -11206,9 +11928,13 @@ function processAnalysisStageResponse(){
   }
 
   try{
-    const parsed = extractJsonFromText(raw);
+    let parsed = extractJsonFromText(raw);
     state.analysisStages = state.analysisStages || { current:'B1', results:{} };
     const key = state.analysisStages.current || 'B1';
+    if(key === 'B1'){
+      const deterministic = lmpStructuralValidator(lmpBuildB1StructuralInput(parsed));
+      parsed = lmpConsolidateB1WithAi(deterministic, parsed);
+    }
     state.analysisStages.results[key] = parsed;
 
     const assembled = sgmpAssembleStagedAnalysisPayload();
@@ -12531,8 +13257,14 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
     const brief = (typeof normalizeBriefPayload === 'function') ? normalizeBriefPayload(state.briefReview?.raw || state.brief || {}) : (state.briefReview?.raw || state.brief || {});
     const results = state.analysisStages?.results || {};
     const sourceActivities = stageKey === 'B1' ? window.sgmpGetBestAnalysisSourceActivities() : cleanActivities(results.B1?.as_is?.activities || window.sgmpGetBestAnalysisSourceActivities());
-    const payload = { context: Object.assign({}, state.context || {}, master.context || {}), brief, current_stage: stageKey, previous_stage_results: results, source_activity_count: sourceActivities.length, source_activities: sourceActivities, master_sipoc: master.sipoc || {}, rules: { source_activities_are_mandatory: true, do_not_reduce_activities: true, return_only_valid_json: true } };
-    return def.instruction + '\n\nREGLAS GLOBALES SGMP:\n- Responde SOLO JSON válido.\n- No uses markdown.\n- No inventes evidencia.\n- Si falta información, registra warnings o dataGaps.\n- Mantén nombres de campos exactamente como se solicita.\n\nINSUMOS:\n' + JSON.stringify(payload, null, 2);
+    const deterministicValidation = stageKey === 'B1' && typeof lmpStructuralValidator === 'function'
+      ? lmpStructuralValidator(lmpBuildB1StructuralInput({ source_activities: sourceActivities }))
+      : null;
+    const payload = { context: Object.assign({}, state.context || {}, master.context || {}), brief, current_stage: stageKey, previous_stage_results: results, source_activity_count: sourceActivities.length, source_activities: sourceActivities, deterministic_validation: deterministicValidation, master_sipoc: master.sipoc || {}, rules: { source_activities_are_mandatory: true, do_not_reduce_activities: true, return_only_valid_json: true, b1_no_ava_no_improvements_no_to_be: stageKey === 'B1' } };
+    const stagePolicy = stageKey === 'B1'
+      ? '\n\nPOLÍTICA OBLIGATORIA B1:\n- B1 solo valida estructura AS IS.\n- B1 no genera AVA, mejoras, quick wins, TO BE, desperdicios, restricciones ni soluciones.\n- Usa deterministic_validation como baseline y conserva sus gaps, warnings, lifecycle y score.\n'
+      : '';
+    return def.instruction + stagePolicy + '\n\nREGLAS GLOBALES SGMP:\n- Responde SOLO JSON válido.\n- No uses markdown.\n- No inventes evidencia.\n- Si falta información, registra warnings o dataGaps.\n- Mantén nombres de campos exactamente como se solicita.\n\nINSUMOS:\n' + JSON.stringify(payload, null, 2);
   };
   window.generateAnalysisScreenPrompt = function(stageKey){
     if(!(state.briefReview && state.briefReview.approved)){ if(typeof showMsg === 'function') showMsg('analysisMsg_' + stageKey,'warn','Debes aprobar primero el Brief.'); return; }
@@ -12565,11 +13297,17 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
     const raw = responseBox ? responseBox.value.trim() : '';
     if(!raw){ if(typeof showMsg === 'function') showMsg(msgId,'warn','No hay respuesta para procesar.'); return; }
     try{
-      const parsed = (typeof extractJsonFromText === 'function') ? extractJsonFromText(raw) : JSON.parse(raw);
+      let parsed = (typeof extractJsonFromText === 'function') ? extractJsonFromText(raw) : JSON.parse(raw);
+      if(stageKey === 'B1' && typeof lmpStructuralValidator === 'function' && typeof lmpConsolidateB1WithAi === 'function'){
+        const deterministic = lmpStructuralValidator(lmpBuildB1StructuralInput(parsed));
+        parsed = lmpConsolidateB1WithAi(deterministic, parsed);
+      }
       state.analysisStages = state.analysisStages || { current:'B1', results:{} }; state.analysisStages.current = stageKey; state.analysisStages.results[stageKey] = parsed;
       const resultBox = el('analysisResult_' + stageKey); if(resultBox) resultBox.value = JSON.stringify(parsed, null, 2);
       if(stageKey === 'B1'){
-        const acts = cleanActivities(parsed?.as_is?.activities || parsed?.activities);
+        const acts = (typeof lmpNormalizeStructuralActivities === 'function')
+          ? lmpNormalizeStructuralActivities(parsed?.as_is?.activities || parsed?.activities)
+          : cleanActivities(parsed?.as_is?.activities || parsed?.activities);
         if(acts.length){ state.asis = state.asis || {}; state.asis.activities = acts; if(typeof renderAsIsActivities === 'function') renderAsIsActivities(); }
       }
       const assembled = window.sgmpAssembleStagedAnalysisPayload ? window.sgmpAssembleStagedAnalysisPayload() : {};
@@ -12592,7 +13330,30 @@ setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
   window.sgmpAssembleStagedAnalysisPayload = function(){
     const results = state.analysisStages?.results || {}, b1 = results.B1 || {}, b2 = results.B2 || {}, b3 = results.B3 || {}, b4 = results.B4 || {}, b5 = results.B5 || {}, b6 = results.B6 || {};
-    let activities = cleanActivities(b2.as_is?.activities || b1.as_is?.activities || window.sgmpGetBestAnalysisSourceActivities());
+    const completedStages = Object.keys(results).filter(key => results[key]);
+    let activities = completedStages.length === 1 && completedStages[0] === 'B1' && typeof lmpNormalizeStructuralActivities === 'function'
+      ? lmpNormalizeStructuralActivities(b1.as_is?.activities || window.sgmpGetBestAnalysisSourceActivities())
+      : cleanActivities(b2.as_is?.activities || b1.as_is?.activities || window.sgmpGetBestAnalysisSourceActivities());
+    if(completedStages.length === 1 && completedStages[0] === 'B1'){
+      return {
+        contract: b1.contract || 'LMP_B1_STRUCTURAL_VALIDATION',
+        contract_version: b1.contract_version || '1.0.0',
+        stage: 'B1',
+        analysis_type: b1.analysis_type || 'lmp_b1_structural_validation',
+        method: b1.method || 'deterministic_validator_plus_contextual_ai',
+        lifecycle: b1.lifecycle || b1.validation?.lifecycle || '',
+        operational_state: b1.operational_state || {},
+        completeness: b1.completeness || b1.validation?.completeness || {},
+        context: state.context || state.master?.context || {},
+        as_is: { activities },
+        as_is_process: b1.as_is_process || {},
+        sipoc: b1.sipoc || {},
+        validation: b1.validation || {},
+        contextual_enrichment: b1.contextual_enrichment || {},
+        traceability: b1.traceability || {},
+        structural_validation: b1.structural_validation || null
+      };
+    }
     const avaItems = arr(b2.ava?.activityAnalysis || b2.ava?.activities || b2.activityAnalysis);
     if(avaItems.length && activities.length){
       activities = activities.map(a => { const hit = avaItems.find(x => String(x.id || '').trim() === String(a.id || '').trim() || String(x.name || '').trim().toLowerCase() === String(a.name || '').trim().toLowerCase()); return hit ? Object.assign({}, a, { ava_classification: hit.ava_classification || hit.avaClassification || hit.ava || hit.classification || a.ava_classification || a.ava, ava_reason: hit.reason || hit.evidence || hit.justification || a.ava_reason }) : a; });
