@@ -5625,7 +5625,7 @@ function selectRoute(route){
 /* =========================
    EXTRACTOR SIPOC EXTERNO · CONTRATO LMP
 ========================= */
-const SIPOC_EXTRACTOR_MODULE_URL = window.SIPOC_EXTRACTOR_MODULE_URL || '';
+const SIPOC_EXTRACTOR_MODULE_URL = window.SIPOC_EXTRACTOR_MODULE_URL || 'https://enginesgmp.github.io/sgmp/SX.html';
 
 function openSipocExtractorModule(){
   if(SIPOC_EXTRACTOR_MODULE_URL && !/PENDIENTE/i.test(SIPOC_EXTRACTOR_MODULE_URL)){
@@ -5637,7 +5637,7 @@ function openSipocExtractorModule(){
   showMsg(
     'openExtractorMsg',
     'warn',
-    'La URL del módulo Extractor SIPOC aún no está configurada en este HTML. Define window.SIPOC_EXTRACTOR_MODULE_URL o reemplaza la constante SIPOC_EXTRACTOR_MODULE_URL cuando tengas la URL publicada.'
+    'No se pudo abrir el Extractor SIPOC. Verifica la URL configurada en SIPOC_EXTRACTOR_MODULE_URL.'
   );
 }
 
