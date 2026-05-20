@@ -3068,7 +3068,7 @@ body .app .layout > aside.sidebar .step-list::-webkit-scrollbar-thumb:hover{
 
     <div class="card half">
       <h3>Cargar JSON del Extractor</h3>
-      <p>Carga el JSON generado por el Extractor SIPOC. El LMP validará el contrato antes de incorporarlo como insumo del proceso.</p>
+      <p>Carga el JSON generado por el Extractor SIPOC. El LMP acepta el formato actual del extractor y también el contrato formal SIPOC_EXTRACTOR_TO_LMP.</p>
       <div class="field-grid">
         <div class="field w-12">
           <label>JSON generado por Extractor SIPOC</label>
@@ -3091,8 +3091,33 @@ body .app .layout > aside.sidebar .step-list::-webkit-scrollbar-thumb:hover{
 
     <div class="card">
       <h3>Contrato esperado</h3>
-      <p>El LMP aceptará el JSON si cumple el contrato <strong>SIPOC_EXTRACTOR_TO_LMP</strong> o si contiene una estructura equivalente con <strong>sipoc_extraction</strong>.</p>
-      <pre class="pre" style="min-height:180px;max-height:320px">{
+      <p>El LMP aceptará dos formatos: <strong>formato actual del Extractor</strong> (<code>source_type: existing_process_extractor</code>) y contrato formal <strong>SIPOC_EXTRACTOR_TO_LMP</strong>. Internamente lo adaptará sin cambiar el extractor.</p>
+      <pre class="pre" style="min-height:180px;max-height:320px">FORMATO ACTUAL ACEPTADO DEL EXTRACTOR:
+{
+  "source_type": "existing_process_extractor",
+  "catalogs": {
+    "suppliers": [],
+    "inputs": [],
+    "outputs": [],
+    "customers": [],
+    "actors": [],
+    "documents_systems": []
+  },
+  "as_is_flow": {
+    "activities": [],
+    "decisions": [],
+    "relations": [],
+    "notes": []
+  },
+  "validation": {
+    "pending_validation": [],
+    "duplicates_resolved": [],
+    "unresolved_connectors": []
+  }
+}
+
+CONTRATO FORMAL TAMBIÉN ACEPTADO:
+{
   "contract": "SIPOC_EXTRACTOR_TO_LMP",
   "source_module": "SIPOC_EXTRACTOR",
   "target_module": "LMP",
@@ -5635,76 +5660,219 @@ function isSipocExtractorContract(parsed){
   if(!parsed || typeof parsed !== 'object') return false;
   const contract = String(parsed.contract || parsed.contract_code || '').trim().toUpperCase();
   const sourceModule = String(parsed.source_module || parsed.sourceModule || '').trim().toUpperCase();
+  const sourceType = String(parsed.source_type || parsed.sourceType || '').trim().toLowerCase();
+
   return contract === 'SIPOC_EXTRACTOR_TO_LMP'
     || sourceModule === 'SIPOC_EXTRACTOR'
-    || !!parsed.sipoc_extraction;
+    || sourceType === 'existing_process_extractor'
+    || !!parsed.sipoc_extraction
+    || !!(parsed.catalogs && parsed.as_is_flow && parsed.validation);
+}
+
+function normalizeExtractorActivity_(a, idx){
+  const fallbackId = 'A' + String(idx + 1).padStart(2,'0');
+
+  if(typeof a === 'string'){
+    return {
+      id: fallbackId,
+      name: a,
+      actor: '',
+      type: 'activity',
+      previous: [],
+      next: [],
+      inputs: [],
+      outputs: [],
+      notes: ''
+    };
+  }
+
+  const inputsReceived = safeArray(a.inputs_received || a.inputsReceived);
+  const outputsDelivered = safeArray(a.outputs_delivered || a.outputsDelivered);
+
+  const inputNames = safeArray(a.inputs || a.input_refs || a.ext_inputs)
+    .concat(inputsReceived.map(x => typeof x === 'string' ? x : (x.input || x.name || x.label || '')))
+    .filter(Boolean);
+
+  const outputNames = safeArray(a.outputs || a.output_refs || a.ext_outputs)
+    .concat(outputsDelivered.map(x => typeof x === 'string' ? x : (x.output || x.name || x.label || '')))
+    .filter(Boolean);
+
+  return Object.assign({}, a, {
+    id: a.id || a.activity_id || a.code || fallbackId,
+    name: a.name || a.activity_name || a.label || a.description || '',
+    actor: a.actor || a.responsible || a.owner || '',
+    type: a.type || 'activity',
+    previous: safeArray(a.previous || a.prev || a.connector_in),
+    next: safeArray(a.next || a.connector_out),
+    inputs: inputNames,
+    outputs: outputNames,
+    inputs_received: inputsReceived,
+    outputs_delivered: outputsDelivered,
+    notes: a.notes || a.observations || ''
+  });
+}
+
+function convertExistingProcessExtractorToContract(parsed){
+  const catalogs = parsed.catalogs || {};
+  const flow = parsed.as_is_flow || {};
+  const validation = parsed.validation || {};
+
+  const rawActivities = safeArray(flow.activities);
+  const activities = rawActivities.map(normalizeExtractorActivity_);
+
+  const derivedInputs = [];
+  const derivedOutputs = [];
+  const derivedSuppliers = [];
+  const derivedCustomers = [];
+  const derivedActors = [];
+
+  activities.forEach(function(a){
+    if(a.actor) uniquePush(derivedActors, a.actor);
+    safeArray(a.inputs).forEach(v => uniquePush(derivedInputs, v));
+    safeArray(a.outputs).forEach(v => uniquePush(derivedOutputs, v));
+
+    safeArray(a.inputs_received).forEach(function(x){
+      if(typeof x === 'string'){
+        uniquePush(derivedInputs, x);
+      }else{
+        uniquePush(derivedInputs, x.input || x.name || x.label || '');
+        uniquePush(derivedSuppliers, x.provided_by || x.supplier || '');
+      }
+    });
+
+    safeArray(a.outputs_delivered).forEach(function(x){
+      if(typeof x === 'string'){
+        uniquePush(derivedOutputs, x);
+      }else{
+        uniquePush(derivedOutputs, x.output || x.name || x.label || '');
+        uniquePush(derivedCustomers, x.received_by || x.customer || '');
+      }
+    });
+  });
+
+  const traceability = {
+    segments_used: safeArray(parsed.segments_used || parsed.segment_ids),
+    visual_uncertainties: safeArray(validation.unresolved_connectors || validation.visual_uncertainties),
+    manual_validation_required: safeArray(validation.pending_validation || validation.manual_validation_required),
+    assumptions: safeArray(validation.assumptions)
+  };
+
+  const blockingGaps = [];
+  if(!activities.length) blockingGaps.push('No se detectaron actividades en as_is_flow.activities.');
+
+  const converted = {
+    contract: 'SIPOC_EXTRACTOR_TO_LMP',
+    contract_version: '1.0-adapter',
+    source_module: 'SIPOC_EXTRACTOR',
+    target_module: 'LMP',
+    source_type: parsed.source_type || 'existing_process_extractor',
+    generated_at: parsed.generated_at || parsed.generatedAt || new Date().toISOString(),
+    process: parsed.process || {},
+    sipoc_extraction: {
+      suppliers: safeArray(catalogs.suppliers).concat(derivedSuppliers).filter(Boolean),
+      inputs: safeArray(catalogs.inputs).concat(derivedInputs).filter(Boolean),
+      actors: safeArray(catalogs.actors).concat(derivedActors).filter(Boolean),
+      activities: activities,
+      outputs: safeArray(catalogs.outputs).concat(derivedOutputs).filter(Boolean),
+      customers: safeArray(catalogs.customers).concat(derivedCustomers).filter(Boolean),
+      documents: safeArray(catalogs.documents || catalogs.documents_systems || catalogs.documentsSystems),
+      connectors: safeArray(flow.relations || flow.connectors),
+      decisions: safeArray(flow.decisions),
+      notes: safeArray(flow.notes).concat(safeArray(parsed.manual_plain_text_notes?.raw_text)).filter(Boolean),
+      traceability: traceability
+    },
+    lmp_ready: blockingGaps.length === 0,
+    blocking_gaps: blockingGaps,
+    recommended_next_action: blockingGaps.length ? 'Completar actividades en el Extractor antes de cargar al LMP.' : 'Continuar con Carga y consolidación en LMP.',
+    raw_extractor_payload: parsed
+  };
+
+  // Deduplicación defensiva sin alterar objetos de actividades
+  ['suppliers','inputs','actors','outputs','customers','documents','connectors','notes'].forEach(function(key){
+    converted.sipoc_extraction[key] = dedupeCatalog(converted.sipoc_extraction[key]);
+  });
+
+  return converted;
+}
+
+function ensureSipocExtractorContract(parsed){
+  if(!parsed || typeof parsed !== 'object') return parsed;
+  const sourceType = String(parsed.source_type || parsed.sourceType || '').trim().toLowerCase();
+  if(sourceType === 'existing_process_extractor' || (parsed.catalogs && parsed.as_is_flow && parsed.validation)){
+    return convertExistingProcessExtractorToContract(parsed);
+  }
+  return parsed;
 }
 
 function validateSipocExtractorContract(parsed){
+  const normalized = ensureSipocExtractorContract(parsed);
   const errors = [];
   const warnings = [];
 
-  if(!isSipocExtractorContract(parsed)){
-    errors.push('El JSON no corresponde al contrato SIPOC_EXTRACTOR_TO_LMP ni contiene sipoc_extraction.');
+  if(!isSipocExtractorContract(normalized)){
+    errors.push('El JSON no corresponde al contrato SIPOC_EXTRACTOR_TO_LMP ni al formato real del Extractor actual.');
   }
 
-  const sx = parsed && parsed.sipoc_extraction ? parsed.sipoc_extraction : {};
+  const sx = normalized && normalized.sipoc_extraction ? normalized.sipoc_extraction : {};
   if(!sx || typeof sx !== 'object'){
-    errors.push('Falta el objeto sipoc_extraction.');
+    errors.push('Falta el objeto sipoc_extraction o no se pudo adaptar desde catalogs/as_is_flow.');
   }
 
-  const requiredArrays = ['suppliers','inputs','actors','activities','outputs','customers'];
-  requiredArrays.forEach(function(key){
+  const recommendedArrays = ['suppliers','inputs','actors','activities','outputs','customers'];
+  recommendedArrays.forEach(function(key){
     if(!Array.isArray(sx[key])) warnings.push('sipoc_extraction.' + key + ' no viene como arreglo.');
   });
 
   if(!Array.isArray(sx.activities) || !sx.activities.length){
-    errors.push('No se detectaron actividades en sipoc_extraction.activities.');
+    errors.push('No se detectaron actividades en sipoc_extraction.activities ni en as_is_flow.activities.');
   }
 
-  if(parsed.lmp_ready === false){
-    const gaps = safeArray(parsed.blocking_gaps);
-    errors.push('El Extractor marcó lmp_ready=false. Brechas bloqueantes: ' + (gaps.length ? gaps.join(' | ') : 'sin detalle'));
+  safeArray(sx.activities).forEach(function(a, idx){
+    const ref = 'activities[' + idx + ']';
+    if(!String(a.name || a.activity_name || '').trim()) warnings.push(ref + ' no tiene nombre de actividad.');
+    if(!String(a.actor || '').trim()) warnings.push(ref + ' no tiene actor/responsable.');
+    const hasInputs = safeArray(a.inputs || a.input_refs || a.inputs_received).length > 0;
+    const hasOutputs = safeArray(a.outputs || a.output_refs || a.outputs_delivered).length > 0;
+    if(!hasInputs) warnings.push(ref + ' no tiene entradas asociadas.');
+    if(!hasOutputs) warnings.push(ref + ' no tiene salidas asociadas.');
+  });
+
+  if(normalized.lmp_ready === false){
+    const gaps = safeArray(normalized.blocking_gaps);
+    if(gaps.length){
+      errors.push('El Extractor marcó lmp_ready=false. Brechas bloqueantes: ' + gaps.join(' | '));
+    }else{
+      warnings.push('El Extractor marcó lmp_ready=false sin detallar brechas. Se permite revisar manualmente si existen actividades.');
+    }
   }
 
-  return { ok: errors.length === 0, errors, warnings };
+  return { ok: errors.length === 0, errors, warnings, normalized };
 }
 
 function normalizeSipocExtractorToLmpInstrument(parsed){
-  const sx = parsed.sipoc_extraction || {};
-  const process = parsed.process || parsed.context || {};
-  const traceability = sx.traceability || parsed.traceability || {};
+  const normalizedContract = ensureSipocExtractorContract(parsed);
+  const sx = normalizedContract.sipoc_extraction || {};
+  const process = normalizedContract.process || normalizedContract.context || {};
+  const traceability = sx.traceability || normalizedContract.traceability || {};
 
-  const activities = safeArray(sx.activities).map(function(a, idx){
-    if(typeof a === 'string'){
-      return { id: 'A' + String(idx + 1).padStart(2,'0'), name: a, actor: '', inputs: [], outputs: [], notes: '' };
-    }
-
-    return Object.assign({}, a, {
-      id: a.id || a.activity_id || a.code || ('A' + String(idx + 1).padStart(2,'0')),
-      name: a.name || a.activity_name || a.label || a.description || '',
-      actor: a.actor || a.responsible || a.owner || '',
-      inputs: safeArray(a.inputs || a.input_refs || a.ext_inputs),
-      outputs: safeArray(a.outputs || a.output_refs || a.ext_outputs),
-      notes: a.notes || a.observations || ''
-    });
-  });
+  const activities = safeArray(sx.activities).map(normalizeExtractorActivity_);
 
   return {
     instrument: 'interview',
     source_type: 'sipoc_extractor_to_lmp',
-    contract: parsed.contract || 'SIPOC_EXTRACTOR_TO_LMP',
+    contract: normalizedContract.contract || 'SIPOC_EXTRACTOR_TO_LMP',
+    original_source_type: normalizedContract.source_type || parsed.source_type || '',
     context: {
       processName: process.process_name || process.processName || state.context.processName || '',
       processCode: process.process_code || process.processCode || state.context.processCode || '',
       purpose: process.purpose || state.context.purpose || ''
     },
     sipocStructured: {
-      suppliers: safeArray(sx.suppliers),
+      suppliers: safeArray(sx.suppliers).map(item => typeof item === 'string' ? { name:item, input:'' } : item),
       inputs: safeArray(sx.inputs),
       internalActors: safeArray(sx.actors),
       outputs: safeArray(sx.outputs),
-      customers: safeArray(sx.customers)
+      customers: safeArray(sx.customers).map(item => typeof item === 'string' ? { name:item, output:'' } : item)
     },
     lmpSipocDraft: {
       suppliers: safeArray(sx.suppliers),
@@ -5715,14 +5883,20 @@ function normalizeSipocExtractorToLmpInstrument(parsed){
       customers: safeArray(sx.customers),
       documents: safeArray(sx.documents),
       connectors: safeArray(sx.connectors),
+      decisions: safeArray(sx.decisions),
       notes: safeArray(sx.notes),
       traceability: traceability
     },
     activities: activities,
     documents: safeArray(sx.documents),
     traceability: traceability,
-    blocking_gaps: safeArray(parsed.blocking_gaps),
-    recommended_next_action: parsed.recommended_next_action || ''
+    validation: {
+      blocking_gaps: safeArray(normalizedContract.blocking_gaps),
+      manual_validation_required: safeArray(traceability.manual_validation_required),
+      visual_uncertainties: safeArray(traceability.visual_uncertainties)
+    },
+    blocking_gaps: safeArray(normalizedContract.blocking_gaps),
+    recommended_next_action: normalizedContract.recommended_next_action || ''
   };
 }
 
@@ -5733,7 +5907,8 @@ function applySipocExtractorJson(parsed){
     return 0;
   }
 
-  const normalized = normalizeSipocExtractorToLmpInstrument(parsed);
+  const normalizedContract = validation.normalized || ensureSipocExtractorContract(parsed);
+  const normalized = normalizeSipocExtractorToLmpInstrument(normalizedContract);
   state.metadata.route = 'doc';
   state.metadata.currentStage = 'carga';
   state.loads = state.loads || { pre:[], interview:[], brief:[], docs:[] };
@@ -5741,9 +5916,11 @@ function applySipocExtractorJson(parsed){
 
   state.extractorSipoc = {
     source: 'external_module',
-    contract: parsed.contract || 'SIPOC_EXTRACTOR_TO_LMP',
+    contract: normalizedContract.contract || 'SIPOC_EXTRACTOR_TO_LMP',
+    original_source_type: parsed.source_type || '',
     loadedAt: new Date().toISOString(),
     raw: parsed,
+    normalized_contract: normalizedContract,
     validation: validation
   };
 
@@ -5756,8 +5933,9 @@ function applySipocExtractorJson(parsed){
   refreshCargaFlowState();
 
   const warningText = validation.warnings.length ? ' Advertencias: ' + validation.warnings.join(' | ') : '';
-  showMsg('docSipocMsg','ok','JSON del Extractor cargado correctamente en LMP. Actividades detectadas: ' + (normalized.activities.length || 0) + '.' + warningText);
-  showMsg('docExistingMsg','ok','Contrato SIPOC_EXTRACTOR_TO_LMP validado. Puedes continuar a Carga y consolidación.');
+  const sourceLabel = String(parsed.source_type || '').trim() === 'existing_process_extractor' ? 'formato actual del Extractor' : 'contrato SIPOC_EXTRACTOR_TO_LMP';
+  showMsg('docSipocMsg','ok','JSON del Extractor cargado correctamente en LMP (' + sourceLabel + '). Actividades detectadas: ' + (normalized.activities.length || 0) + '.' + warningText);
+  showMsg('docExistingMsg','ok','JSON del Extractor validado y adaptado. Puedes continuar a Carga y consolidación.');
   return normalized.activities.length || 0;
 }
 
@@ -5794,7 +5972,11 @@ function detectLmpImportType(parsed){
   const hasQuestionnaire = !!(parsed.cuestionario || parsed.questionnaire || parsed.preguntas);
   if(hasQuestionnaire) return 'CUESTIONARIO_JSON';
 
-  const hasExtractorContract = !!(parsed.sipoc_extraction || String(parsed.contract || '').trim().toUpperCase() === 'SIPOC_EXTRACTOR_TO_LMP' || String(parsed.source_module || '').trim().toUpperCase() === 'SIPOC_EXTRACTOR');
+  const hasExtractorContract = !!(parsed.sipoc_extraction
+    || String(parsed.contract || '').trim().toUpperCase() === 'SIPOC_EXTRACTOR_TO_LMP'
+    || String(parsed.source_module || '').trim().toUpperCase() === 'SIPOC_EXTRACTOR'
+    || String(parsed.source_type || '').trim().toLowerCase() === 'existing_process_extractor'
+    || (parsed.catalogs && parsed.as_is_flow && parsed.validation));
   if(hasExtractorContract) return 'SIPOC_EXTRACTOR_JSON';
 
   const hasSipoc = !!(parsed.sipoc_input || parsed.sipoc || parsed.lmpSipocDraft || parsed.sipocDraft);
